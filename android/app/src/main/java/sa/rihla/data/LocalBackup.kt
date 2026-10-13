@@ -20,13 +20,15 @@ class LocalBackup(private val database: JourneyDatabase) {
                 "active_slot",
                 "imported_sms",
                 "trip_details",
+                "merchant_rules",
+                "recurring_expenses",
             )
         const val maxBytes = 100 * 1024 * 1024
 
         fun preview(text: String): BackupPreview {
             val json = JSONObject(text)
             require(json.getString("format") == "RIHLA_BACKUP" && json.getInt("formatVersion") == 1)
-            require(json.getInt("schemaVersion") in 1..5)
+            require(json.getInt("schemaVersion") in 1..6)
             val data = json.getJSONObject("tables")
             require(data.has("outings") && data.has("expenses") && data.has("points"))
             return BackupPreview(
@@ -65,7 +67,7 @@ class LocalBackup(private val database: JourneyDatabase) {
         JSONObject()
             .put("format", "RIHLA_BACKUP")
             .put("formatVersion", 1)
-            .put("schemaVersion", 5)
+            .put("schemaVersion", 6)
             .put("exportedAt", System.currentTimeMillis())
             .put("tables", data)
             .toString()
@@ -97,6 +99,23 @@ class LocalBackup(private val database: JourneyDatabase) {
                 for (i in 0 until rows.length()) {
                     val row = rows.getJSONObject(i)
                     when (table) {
+                        "merchant_rules" ->
+                            require(
+                                row.getString("pattern").isNotBlank() &&
+                                    row.getString("category") in listOf("FUEL", "FOOD", "OTHER")
+                            )
+                        "recurring_expenses" ->
+                            require(
+                                row.getLong("amountHalala") > 0 &&
+                                    row.getInt("dayOfMonth") in 1..31 &&
+                                    row.getString("title").isNotBlank() &&
+                                    row.getString("category") in listOf("FUEL", "FOOD", "OTHER")
+                            )
+                        "fuel" ->
+                            require(
+                                row.isNull("odometerMeters") ||
+                                    row.getDouble("odometerMeters") in 0.0..1e10
+                            )
                         "expenses" ->
                             require(
                                 row.getLong("amountHalala") > 0 &&

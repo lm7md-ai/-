@@ -132,8 +132,12 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
             }
         }
         BudgetSettings(vm, data)
+        Button(onClick = { navigate("map") }, modifier = Modifier.fillMaxWidth()) {
+            Text("خريطة السعودية وأدوات المسار")
+        }
         DataTools(vm, data)
         DeviceReadiness(data)
+        TrackingOptions(vm, data)
         Heading("theme")
         Row {
             listOf("SYSTEM", "LIGHT", "DARK").forEach { v ->
@@ -149,7 +153,8 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                 enabled =
                     data.settings.auto ||
                         (TrackingService.backgroundAllowed(LocalContext.current) &&
-                            Detection.available(LocalContext.current)),
+                            (Detection.available(LocalContext.current) ||
+                                data.settings.bluetoothAddress.isNotBlank())),
             )
             Text(tr("auto_tracking"))
         }

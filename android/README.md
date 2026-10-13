@@ -2,17 +2,22 @@
 
 A native, Arabic-first, local-first personal driving journal for one Mitsubishi Lancer 2016. The existing website in the repository root is independent of this Android project.
 
-Version 2.0 rebuilds the Arabic interface with blue/mint light and dark themes,
+Version 3.0 adds whole-Saudi offline roads/settlements, searchable places, map layers,
+speed coloring, distance measurements, bookmarks and point sharing; odometer-based
+full-tank economy; merchant rules, category budgets and confirmed recurring payments;
+route corridor comparisons, transactional ended-trip split/merge; and car Bluetooth
+motion checks plus fresh-fix filtering and GPS fallback. [User guide](docs/VERSION_3.md).
+Version 2.0 introduced the Arabic interface with blue/mint light and dark themes,
 a trip dashboard, compact metric grids, interactive daily spending, monthly budgets,
 search/sorting, trip titles/notes/favorites, route timeline scrubbing, GPX/CSV exports,
 local backup/restore, and device readiness checks. Offline maps and SMS purchase
 import remain available. [Download the APK and view screenshots](../releases/README.md).
 
-The main **مشواري** download (`app-v2.0.apk`, `sa.rihla`) updates the published 1.3
+The main **مشواري** download (`app-v3.0.apk`, `sa.rihla`) updates the published 1.3 and 2.0
 APK in place with the same verified certificate and explicit Room migrations.
 The user has already moved historical data into 1.3; no cross-package transfer is
 needed for this update. Finish the active outing and install over 1.3 without uninstalling.
-An alternative `app-v2.0-independent.apk` uses `sa.rihla.next` for installations
+An alternative `app-v3.0-independent.apk` uses `sa.rihla.next` for installations
 still blocked by the original 1.0 signature conflict. That alternative installs
 separately and needs explicit local transfer. [Windows USB instructions](docs/WINDOWS_MIGRATION.md)
 and a ready-to-run ZIP include Python/ADB and keep verified backups; a
@@ -36,7 +41,7 @@ The optional secure file variable `RIHLA_SIGNING_KEYSTORE` selects an existing k
 `RIHLA_STORE_PASSWORD`, `RIHLA_KEY_ALIAS`, and `RIHLA_KEY_PASSWORD` configure it.
 Android debug-key defaults apply when those three variables are absent. Keep the
 private key securely outside Git. `tools/verify_release.py` requires an explicit
-`--edition classic --previous ../releases/app-v1.3.apk` or `--edition next`.
+`--edition classic --previous ../releases/app-v2.0.apk` or `--edition next`.
 It rejects a changed certificate, wrong package, and incompatible classic baseline.
 Future updates must retain the same key; an arbitrary regenerated debug key is incompatible.
 
@@ -54,7 +59,7 @@ Settings support light, dark, and system themes. RTL is explicit. User text come
 
 ## Tracking
 
-Automatic mode registers IN_VEHICLE transitions plus low-power activity updates to detect a device that is already driving. Background start requires precise/background location and activity recognition. A transition is only a candidate: two sufficiently accurate positions must show at least 60 meters of travel over at least eight seconds and reported driving speed before an outing is created. A failed candidate expires in 150 seconds. Android cannot identify a private car versus a bus or taxi; incorrect recordings can be deleted.
+Automatic mode registers IN_VEHICLE transitions plus low-power activity updates to detect a device that is already driving. A configured car Bluetooth connection can trigger the same motion check without activity-recognition permission. Background start requires precise/background location and the relevant recognition/Bluetooth permission. A trigger is only a candidate: two sufficiently accurate positions must show driving evidence before an outing is created. A failed candidate expires in 150 seconds. Activity recognition cannot identify a private car versus a bus or taxi; incorrect recordings can be reviewed, merged/split or deleted.
 
 Manual start is available from the foreground with precise location. GPS samples arrive approximately every five seconds during driving, and every thirty seconds after a confirmed stop. An ongoing system notification opens the app or ends the outing. No other notifications are scheduled.
 
@@ -89,7 +94,7 @@ The documentation website was blocked by this cloud instance's egress policy; th
 
 ## Maps, policies, and offline use
 
-The map renders actual recorded points, start/end/current-last-fix markers, stop markers, and saved circle/polygon boundaries. Version 1.1 includes a **54 MiB raster MBTiles basemap** covering Jeddah, Makkah, Al-Abdiyyah and the connecting region (20,321 PNG tiles). It is copied from the APK to private storage on first use without a connection. See [map source, coverage, licensing and rebuild instructions](maps/README.md). No route coordinates are uploaded.
+The map renders recorded points, start/end/last-fix markers, stops and saved circle/polygon areas. Version 3.0 ships a searchable national road/coast/settlement database in a compressed pack, prepared locally without a connection. The older 54 MiB Jeddah–Makkah raster package remains available in the repository and in prepared phone caches. See [map source, coverage, licensing and rebuild instructions](maps/README.md). No route coordinates are uploaded; sharing a selected point requires the user's explicit share action.
 
 Online maps are **off by default**. Core tracking, maps within this region, calculations, settings, expenses, and history function offline from first launch. Imported user maps take priority, followed by the bundled map (including parent-tile overzoom), then cache. Only an explicit online-map setting enables interactive network tile requests outside local coverage. The renderer respects screen density for readable map labels and fits the route to the real viewport.
 
@@ -107,7 +112,7 @@ Room tables: outings (persistent reducer state), active_slot, route points (inde
 
 Outing deletion cascades route/events and clears expense links, preserving actual money spent. Fuel estimates that predate a deletion are invalidated, preventing a changed distance baseline from producing plausible but incorrect results. Full deletion stops tracking/detection, removes all Room data, resets preferences, and deletes imported tiles/cache. There is no coordinate logging or backup/sync integration. Android backup is disabled, and Android 12+ extraction rules exclude app data from cloud backup and device transfer.
 
-Exported Room schemas 1–5 are retained in `app/schemas`. The explicit 1→2 migration adds the outing end-time index and GPS uncertainty flag. The 2→3 migration adds archived cost fields and the stationary-time credit counter. The 3→4 migration adds expense import metadata and SMS receipt fingerprints. The 4→5 migration adds trip titles, notes and favorites through a separate cascading table. No migration deletes historical rows or uses a destructive fallback.
+Exported Room schemas 1–6 are retained in `app/schemas`. Migrations add the end-time/GPS uncertainty fields, archived fuel costs and stationary-time credit, SMS metadata/receipt fingerprints, trip annotations, and finally nullable odometers plus merchant-rule/recurring-payment tables. No migration deletes historical rows or uses a destructive fallback.
 
 Local JSON backups contain database records, including saved places, GPS points,
 events, fuel links and annotations. Restore is atomic and accepts only an empty
@@ -151,4 +156,4 @@ Outing metrics belong to the outing's **start date**; expenses belong to their o
 
 ## Verification
 
-Unit tests cover tracking transitions, GPS filtering, fuel formulas, duration carries, Saudi prices, cost rounding, archived cost stability, and the stop-after-GPS-gap regression. Robolectric tests exercise actual Room migrations from schemas 1–3 and Android map tapping. SQLite checks verify migrations and deletion integrity. The safe-update tests reject wrong signatures and verify backups including uncheckpointed WAL records. Offline-map checks validate all 20,321 PNG tiles and representative regional coverage without network access. Build/lint results and remaining device checks are recorded in `VERIFICATION.md`.
+Tests cover tracking, fuel/odometer formulas, wallet rules and confirmed recurring payments, transactional recursive trip edits, actual Room migrations from schemas 1–5, backup preservation and native UI restoration/map interaction. Country data checks verify source hashes, portable SQLite queries, road samples across Saudi Arabia and loaded rendering without network access. Signature/update tests reject incompatible publication and preserve WAL backups. See `VERIFICATION.md` for counts and the remaining physical-device checks.

@@ -21,6 +21,11 @@ data class Preferences(
     val smsImport: Boolean = false,
     val smsImportSince: Long = 0,
     val monthlyBudgetHalala: Long = 0,
+    val bluetoothAddress: String = "",
+    val preciseTracking: Boolean = false,
+    val fuelBudget: Long = 0,
+    val foodBudget: Long = 0,
+    val otherBudget: Long = 0,
 )
 
 class Settings(private val context: Context) {
@@ -40,6 +45,11 @@ class Settings(private val context: Context) {
                 it[booleanPreferencesKey("sms_import")] ?: false,
                 it[longPreferencesKey("sms_import_since")] ?: 0,
                 it[longPreferencesKey("monthly_budget")] ?: 0,
+                it[stringPreferencesKey("bluetooth_address")] ?: "",
+                it[booleanPreferencesKey("precise_tracking")] ?: false,
+                it[longPreferencesKey("fuel_budget")] ?: 0,
+                it[longPreferencesKey("food_budget")] ?: 0,
+                it[longPreferencesKey("other_budget")] ?: 0,
             )
         }
 
@@ -96,5 +106,21 @@ class Settings(private val context: Context) {
     suspend fun budget(value: Long) {
         require(value in 0..100_000_000)
         context.store.edit { it[longPreferencesKey("monthly_budget")] = value }
+    }
+
+    suspend fun bluetooth(address: String) {
+        require(
+            address.isEmpty() || android.bluetooth.BluetoothAdapter.checkBluetoothAddress(address)
+        )
+        context.store.edit { it[stringPreferencesKey("bluetooth_address")] = address }
+    }
+
+    suspend fun precise(enabled: Boolean) {
+        context.store.edit { it[booleanPreferencesKey("precise_tracking")] = enabled }
+    }
+
+    suspend fun categoryBudget(category: String, value: Long) {
+        require(category in listOf("FUEL", "FOOD", "OTHER") && value in 0..100_000_000)
+        context.store.edit { it[longPreferencesKey(category.lowercase() + "_budget")] = value }
     }
 }

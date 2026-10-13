@@ -11,6 +11,12 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
     private val engine = TrackingEngine()
     private val lock = Mutex()
 
+    suspend fun mergeTrips(first: Long, second: Long) = lock.withLock {
+        TripEditor(db).merge(first, second)
+    }
+
+    suspend fun splitTrip(id: Long, time: Long) = lock.withLock { TripEditor(db).split(id, time) }
+
     suspend fun updateDetails(
         id: Long,
         title: String? = null,
@@ -63,6 +69,7 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                                 f.full,
                                 f.trackedMeters,
                                 f.reliable,
+                                f.odometerMeters,
                             )
                         }
                     }
@@ -182,9 +189,28 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
         full: Boolean,
         time: Long,
         outingId: Long?,
+        odometerMeters: Double? = null,
     ) = lock.withLock {
         db.withTransaction {
             require(amount > 0)
+            require(category in listOf("FUEL", "FOOD", "OTHER"))
+            if (odometerMeters != null) {
+                require(odometerMeters.isFinite() && odometerMeters in 0.0..1e10)
+                val records = dao.fuelRecords().filter { it.odometerMeters != null }
+                require(
+                    records
+                        .lastOrNull { it.createdAt < time }
+                        ?.odometerMeters
+                        ?.let { it < odometerMeters } != false
+                )
+                require(
+                    records
+                        .firstOrNull { it.createdAt > time }
+                        ?.odometerMeters
+                        ?.let { it > odometerMeters } != false
+                )
+                require(records.none { it.createdAt == time })
+            }
             val previousFill = dao.lastFuelTime(time)
             val id =
                 dao.expense(
@@ -206,6 +232,7 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                         full = full,
                         trackedMeters = dao.trackedAt(time),
                         reliable = previousFill == null || !dao.uncertainGap(previousFill, time),
+                        odometerMeters = odometerMeters,
                     )
                 )
             }
@@ -225,6 +252,30 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
             dao.clearExpenses()
             dao.clearImportedSms()
             dao.clearPlaces()
+            dao.clearRules()
+            dao.clearRecurring()
+        }
+    }
+
+    suspend fun payRecurring(
+        id: Long,
+        today: java.time.LocalDate = java.time.LocalDate.now(SaudiZone),
+    ): Boolean = lock.withLock {
+        db.withTransaction {
+            val rule = dao.recurring(id) ?: return@withTransaction false
+            val month = java.time.YearMonth.from(today)
+            val due = recurringDate(rule, month)
+            require(!today.isBefore(due))
+            dao.importExpense(
+                Expense(
+                    category = rule.category,
+                    amountHalala = rule.amountHalala,
+                    createdAt = System.currentTimeMillis(),
+                    source = "RECURRING",
+                    merchant = rule.title,
+                    importKey = recurringKey(id, month),
+                )
+            ) != -1L
         }
     }
 }

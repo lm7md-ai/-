@@ -58,3 +58,4 @@ if [ ! -f local.properties ]; then printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local
 
 python3 tools/verify_schema.py
 python3 tools/verify_offline_map.py
+python3 tools/verify_country_map.py

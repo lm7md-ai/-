@@ -241,6 +241,14 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                 }
                                 IconButton(
                                     onClick = {
+                                        page = "map"
+                                        selected = null
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Map, "الخريطة")
+                                }
+                                IconButton(
+                                    onClick = {
                                         page = "settings"
                                         selected = null
                                     }
@@ -299,7 +307,8 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                         )
                                     "history" -> History(data) { selected = it }
                                     "calendar" -> CalendarScreen(data) { selected = it }
-                                    "statistics" -> StatisticsScreen(data)
+                                    "map" -> sa.rihla.map.MapScreen(vm, data)
+                                    "statistics" -> StatisticsScreen(data, vm) { selected = it }
                                     "vehicle" -> VehicleScreen(data)
                                     "expenses" ->
                                         ExpensesScreen(data, vm) {

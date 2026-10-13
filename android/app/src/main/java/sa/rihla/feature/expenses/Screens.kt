@@ -86,6 +86,7 @@ fun ExpensesScreen(data: ScreenData, vm: JourneyViewModel, onAdd: () -> Unit) {
                 expensesCsv(visible)
             }
             SpendingChart(data.expenses, day(data.now))
+            sa.rihla.ui.WalletPro(vm, data)
             Action("add_expense", click = onAdd)
             Metric(
                 "total_spending",
@@ -108,6 +109,7 @@ fun ExpensesScreen(data: ScreenData, vm: JourneyViewModel, onAdd: () -> Unit) {
                     )
                     Text(num(e.amountHalala / 100.0, 2) + " " + tr("sar"))
                     Text(stamp(e.createdAt))
+                    if (e.source == "RECURRING") Text("مصروف متكرر · " + e.merchant)
                     if (e.source == "SMS_NOTIFICATION") {
                         Text(tr("sms_imported"), style = MaterialTheme.typography.labelMedium)
                         if (e.merchant.isNotBlank()) Text(e.merchant)
@@ -158,6 +160,7 @@ fun ExpenseDialog(
     }
     var grade by rememberSaveable { mutableStateOf(data.settings.fuelGrade) }
     var full by rememberSaveable { mutableStateOf(false) }
+    var odometer by rememberSaveable { mutableStateOf("") }
     var time by rememberSaveable { mutableLongStateOf(System.currentTimeMillis()) }
     var outing by rememberSaveable { mutableStateOf(initialOuting) }
     var invalid by remember { mutableStateOf(false) }
@@ -179,6 +182,20 @@ fun ExpenseDialog(
                 }
                 FormField("amount", amount, { amount = it })
                 if (category == "FUEL") {
+                    OutlinedTextField(
+                        odometer,
+                        { odometer = it },
+                        singleLine = true,
+                        label = { Text("قراءة عداد السيارة بالكيلومتر — اختياري") },
+                        keyboardOptions =
+                            androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                            ),
+                    )
+                    Text(
+                        "للاستهلاك الفعلي: سجّل العداد وحدّد خزان كامل في تعبئتين، وسجّل أي تعبئة بينهما.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                     Row {
                         listOf("91", "95").forEach { g ->
                             FilterChip(
@@ -246,7 +263,8 @@ fun ExpenseDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (vm.expense(category, amount, liters, price, full, time, outing)) onDismiss()
+                    if (vm.expense(category, amount, liters, price, full, time, outing, odometer))
+                        onDismiss()
                     else invalid = true
                 }
             ) {

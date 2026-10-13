@@ -1,5 +1,16 @@
 # Updating without losing journeys
 
+## Version 3.0
+
+The primary `releases/app-v3.0.apk` keeps the package/key of the published 1.3 and
+2.0 APKs and raises versionCode to 30. Room explicitly migrates schema 5→6 with
+nullable fuel odometers and new merchant-rule/recurring-payment tables; no existing
+rows are removed. End the active outing and install over the existing main APK.
+Use `app-v3.0-independent.apk` only to update an existing `sa.rihla.next` installation.
+See [the complete 3.0 guide](docs/VERSION_3.md) for measurements, maps, tracking,
+wallet controls and explicit trip-edit confirmation. Backup format version 1
+remains compatible, supporting source database schemas 1–6.
+
 ## Version 2.0 from the published 1.3 installation
 
 The user has moved their data into 1.3. The primary `releases/app-v2.0.apk`

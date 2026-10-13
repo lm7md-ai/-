@@ -19,6 +19,8 @@ data class ScreenData(
     val now: Long = System.currentTimeMillis(),
     val loaded: Boolean = false,
     val details: List<TripDetails> = emptyList(),
+    val rules: List<MerchantRule> = emptyList(),
+    val recurring: List<RecurringExpense> = emptyList(),
 ) {
     val active
         get() = outings.firstOrNull { it.endedAt == null }
@@ -64,6 +66,7 @@ fun metrics(data: ScreenData, bounds: Pair<Long, Long>): Metrics {
                         f.full,
                         f.trackedMeters,
                         f.reliable,
+                        f.odometerMeters,
                     )
                 }
         }
@@ -124,6 +127,8 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
             }
             .combine(clock) { d, t -> d.copy(now = t) }
             .combine(repo.dao.detailsFlow()) { d, details -> d.copy(details = details) }
+            .combine(repo.dao.rulesFlow()) { d, rules -> d.copy(rules = rules) }
+            .combine(repo.dao.recurringFlow()) { d, recurring -> d.copy(recurring = recurring) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScreenData())
     val error = MutableStateFlow<String?>(null)
 
@@ -152,10 +157,76 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun budget(value: String): Boolean {
-        val amount = decimalUnits(value, 2) ?: return false
+        val amount = if (value.isBlank() || normalizeSms(value).trim() == "0") 0L else decimalUnits(value, 2) ?: return false
         if (amount !in 0..100_000_000) return false
         work { app.settings.budget(amount) }
         return true
+    }
+
+    fun bluetooth(address: String) {
+        work { app.settings.bluetooth(address) }
+    }
+
+    fun precise(value: Boolean) {
+        work { app.settings.precise(value) }
+    }
+
+    fun categoryBudget(category: String, amount: String): Boolean {
+        val value =
+            if (amount.isBlank() || normalizeSms(amount).trim() == "0") 0L
+            else decimalUnits(amount, 2) ?: return false
+        if (value !in 0..100_000_000) return false
+        work { app.settings.categoryBudget(category, value) }
+        return true
+    }
+
+    fun rule(pattern: String, category: String): Boolean {
+        if (pattern.trim().length !in 2..100 || category !in listOf("FUEL", "FOOD", "OTHER"))
+            return false
+        work {
+            repo.dao.rule(
+                MerchantRule(
+                    pattern = normalizeSms(pattern).trim().lowercase(),
+                    category = category,
+                )
+            )
+        }
+        return true
+    }
+
+    fun deleteRule(id: Long) {
+        work { repo.dao.deleteRule(id) }
+    }
+
+    fun recurring(title: String, amount: String, category: String, day: String): Boolean {
+        val value = decimalUnits(amount, 2) ?: return false
+        val date = normalizeSms(day).trim().toIntOrNull() ?: return false
+        if (
+            date !in 1..31 ||
+                title.trim().length !in 1..80 ||
+                value > 100_000_000 ||
+                category !in listOf("FUEL", "FOOD", "OTHER")
+        )
+            return false
+        work {
+            repo.dao.recurring(
+                RecurringExpense(
+                    title = title.trim(),
+                    category = category,
+                    amountHalala = value,
+                    dayOfMonth = date,
+                )
+            )
+        }
+        return true
+    }
+
+    fun payRecurring(id: Long) {
+        work { repo.payRecurring(id) }
+    }
+
+    fun deleteRecurring(id: Long) {
+        work { repo.dao.deleteRecurring(id) }
     }
 
     fun end() {
@@ -175,6 +246,18 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
 
     fun place(p: SavedPlace) {
         work { repo.dao.place(p) }
+    }
+
+    fun deletePin(type: String) {
+        work { repo.dao.deletePin(type) }
+    }
+
+    fun mergeTrips(first: Long, second: Long) {
+        work { repo.mergeTrips(first, second) }
+    }
+
+    fun splitTrip(id: Long, time: Long) {
+        work { repo.splitTrip(id, time) }
     }
 
     fun theme(value: String) {
@@ -231,6 +314,7 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
         full: Boolean,
         time: Long,
         outing: Long?,
+        odometer: String = "",
     ): Boolean {
         try {
             var a = decimalUnits(amount, 2)
@@ -257,7 +341,10 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
                 if (kotlin.math.abs(a - (l / 1000.0 * p)) > maxOf(2.0, a * 0.02)) return false
             }
             val paid = a
-            work { repo.addExpense(category, paid, l, p, full, time, outing) }
+            val reading =
+                if (category != "FUEL" || odometer.isBlank()) null
+                else decimalUnits(odometer, 3)?.toDouble() ?: return false
+            work { repo.addExpense(category, paid, l, p, full, time, outing, reading) }
             return true
         } catch (_: ArithmeticException) {
             return false

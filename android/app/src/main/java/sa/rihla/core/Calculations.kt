@@ -11,6 +11,7 @@ data class Fill(
     val full: Boolean,
     val trackedMeters: Double,
     val reliable: Boolean = true,
+    val odometerMeters: Double? = null,
 )
 
 data class Economy(val kmPerLiter: Double, val litersPer100Km: Double, val sarPerKm: Double)
@@ -31,8 +32,11 @@ fun fuelEconomy(fills: List<Fill>): Economy? {
             valid = valid && f.reliable
         }
         if (f.full) {
-            val meters = f.trackedMeters - (anchor?.trackedMeters ?: f.trackedMeters)
-            if (anchor != null && valid && meters >= 1000 && liters > 0) {
+            val odometer = f.odometerMeters != null && anchor?.odometerMeters != null
+            val meters =
+                if (odometer) f.odometerMeters!! - anchor!!.odometerMeters!!
+                else f.trackedMeters - (anchor?.trackedMeters ?: f.trackedMeters)
+            if (anchor != null && (valid || odometer) && meters >= 1000 && liters > 0) {
                 km += meters / 1000
                 used += liters
                 paid += cost

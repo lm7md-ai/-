@@ -32,7 +32,16 @@ fun Dashboard(
             if (TrackingService.fineAllowed(context)) vm.start()
             else vm.error.value = "accuracy_notice"
         }
-    val month = metrics(data, periodBounds(Period.MONTH))
+    var selectedPeriod by remember { mutableStateOf("MONTH") }
+    val bounds =
+        when (selectedPeriod) {
+            "TODAY" ->
+                day(data.now).atStartOfDay(SaudiZone).toInstant().toEpochMilli() to
+                    day(data.now).plusDays(1).atStartOfDay(SaudiZone).toInstant().toEpochMilli()
+            "WEEK" -> periodBounds(Period.WEEK)
+            else -> periodBounds(Period.MONTH)
+        }
+    val month = metrics(data, bounds)
     val active = data.active
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -77,7 +86,16 @@ fun Dashboard(
             }
         }
         item {
-            Heading("this_month")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("TODAY" to "اليوم", "WEEK" to "الأسبوع", "MONTH" to "الشهر").forEach {
+                    (value, label) ->
+                    FilterChip(
+                        selectedPeriod == value,
+                        { selectedPeriod = value },
+                        label = { Text(label) },
+                    )
+                }
+            }
             MetricGrid(
                 listOf(
                     "month_distance" to (num(month.meters / 1000) + " " + tr("km")),

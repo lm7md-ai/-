@@ -1,4 +1,5 @@
 <resources>
+  <string name="map">الخريطة</string>
   <string name="app_name">مشواري</string>
   <string name="tracking_channel">تتبع المشاوير</string>
   <string name="tracking_active">تتبع المشوار نشط</string>

@@ -12,6 +12,7 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.*
 import sa.rihla.MainActivity
 import sa.rihla.R
 import sa.rihla.RihlaApp
@@ -25,19 +26,32 @@ class TrackingService : Service() {
 
     private val client by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private val native by lazy { getSystemService(LocationManager::class.java) }
-    private val listener = LocationListener { l ->
+    private val listener = LocationListener { l -> receive(l, "GPS") }
+    private var lastProviderFix = SystemClock.elapsedRealtime()
+    private var nativeActive = false
+    private var precise = false
+    private var pendingTimeout: Job? = null
+
+    private fun receive(l: android.location.Location, source: String) {
+        val age = (SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000
+        @Suppress("DEPRECATION")
+        val mock = if (Build.VERSION.SDK_INT >= 31) l.isMock else l.isFromMockProvider
+        if (!usableLocation(age, l.accuracy.toDouble(), mock)) return
+        lastProviderFix = SystemClock.elapsedRealtime()
+        LiveTrackingHealth.state.value = TrackingHealth(l.time, l.accuracy.toDouble(), source)
         queue.trySend(
             Fix(
                 l.latitude,
                 l.longitude,
                 l.time,
                 l.accuracy.toDouble(),
-                l.speed.toDouble(),
+                if (l.hasSpeed()) l.speed.toDouble() else 0.0,
                 l.altitude,
                 l.bearing.toDouble(),
             )
         )
     }
+
     private var candidate: Fix? = null
     private var autoPending = false
     private var slow = false
@@ -45,19 +59,9 @@ class TrackingService : Service() {
     private val callback =
         object : LocationCallback() {
             override fun onLocationResult(r: LocationResult) {
-                r.locations.forEach { l ->
-                    queue.trySend(
-                        Fix(
-                            l.latitude,
-                            l.longitude,
-                            l.time,
-                            l.accuracy.toDouble(),
-                            l.speed.toDouble(),
-                            l.altitude,
-                            l.bearing.toDouble(),
-                        )
-                    )
-                }
+                r.locations
+                    .sortedBy { it.elapsedRealtimeNanos }
+                    .forEach { l -> receive(l, "Fused") }
             }
         }
 
@@ -131,11 +135,38 @@ class TrackingService : Service() {
                     break
                 }
                 val state = app.repository.dao.active()?.state ?: continue
+                LiveTrackingHealth.state.value =
+                    LiveTrackingHealth.state.value.copy(accepted = state.lastTime == f.time)
                 val shouldSlow = state.stopStart > 0
                 if (shouldSlow != slow) {
                     slow = shouldSlow
                     withContext(Dispatchers.Main) { requestUpdates() }
                 }
+            }
+        }
+        scope.launch {
+            while (isActive) {
+                delay(30_000)
+                if (
+                    !nativeActive &&
+                        registeredInterval != null &&
+                        SystemClock.elapsedRealtime() - lastProviderFix > 60_000
+                )
+                    withContext(Dispatchers.Main) {
+                        client.removeLocationUpdates(callback)
+                        nativeUpdates(registeredInterval!!)
+                    }
+            }
+        }
+        scope.launch {
+            app.settings.flow.collect { preferences ->
+                if (preferences.preciseTracking != precise) {
+                    precise = preferences.preciseTracking
+                    if (registeredInterval != null)
+                        withContext(Dispatchers.Main) { requestUpdates() }
+                }
+                if (!preferences.auto && autoPending && app.repository.dao.active() == null)
+                    stopSelf()
             }
         }
     }
@@ -148,8 +179,18 @@ class TrackingService : Service() {
             }
             return START_NOT_STICKY
         }
-        autoPending = i?.getBooleanExtra("automatic", false) == true
         scope.launch {
+            autoPending =
+                i?.getBooleanExtra("automatic", false) == true &&
+                    app.repository.dao.active() == null
+            if (autoPending) candidate = null
+            precise = app.settings.flow.first().preciseTracking
+            pendingTimeout?.cancel()
+            if (autoPending)
+                pendingTimeout = scope.launch {
+                    delay(150_000)
+                    if (app.repository.dao.active() == null) stopSelf()
+                }
             if (!autoPending && app.repository.dao.active() == null) {
                 if (i == null) {
                     stopSelf()
@@ -159,11 +200,6 @@ class TrackingService : Service() {
             }
             withContext(Dispatchers.Main) { requestUpdates() }
         }
-        if (autoPending)
-            scope.launch {
-                delay(150000)
-                if (app.repository.dao.active() == null) stopSelf()
-            }
         return START_STICKY
     }
 
@@ -173,14 +209,16 @@ class TrackingService : Service() {
             stopSelf()
             return
         }
-        val interval = if (slow) 30000L else 5000L
+        val interval = trackingInterval(slow, precise)
         if (registeredInterval == interval) return
         client.removeLocationUpdates(callback)
         native.removeUpdates(listener)
         registeredInterval = interval
+        nativeActive = false
+        lastProviderFix = SystemClock.elapsedRealtime()
         val request =
             LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
-                .setMinUpdateIntervalMillis(if (slow) 15000L else 2000L)
+                .setMinUpdateIntervalMillis(if (slow) { if (precise) 5000L else 15000L } else 2000L)
                 .setMaxUpdateDelayMillis(interval)
                 .build()
         try {
@@ -200,6 +238,7 @@ class TrackingService : Service() {
     @Suppress("MissingPermission")
     private fun nativeUpdates(interval: Long) {
         if (registeredInterval != interval) return
+        nativeActive = true
         try {
             native.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,

@@ -15,7 +15,7 @@ import subprocess
 import tarfile
 import tempfile
 
-TABLES = ("outings", "points", "events", "places", "expenses", "fuel", "active_slot", "imported_sms", "trip_details")
+TABLES = ("outings", "points", "events", "places", "expenses", "fuel", "active_slot", "imported_sms", "trip_details", "merchant_rules", "recurring_expenses")
 
 def portable_backup(archive):
     with tempfile.TemporaryDirectory() as directory:
@@ -34,7 +34,7 @@ def portable_backup(archive):
             if database.execute("PRAGMA integrity_check").fetchone() != ("ok",) or database.execute("PRAGMA foreign_key_check").fetchall():
                 raise ValueError("Original backup failed database integrity checks")
             version = database.execute("PRAGMA user_version").fetchone()[0]
-            if version not in range(1, 6):
+            if version not in range(1, 7):
                 raise ValueError("Unsupported original database version")
             names = {row[0] for row in database.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if not {"outings", "points", "expenses"}.issubset(names):

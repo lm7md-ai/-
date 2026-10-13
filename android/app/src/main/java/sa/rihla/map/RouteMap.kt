@@ -77,7 +77,7 @@ class HybridTiles(private val c: Context) : TileProvider {
         offlineTile(offline, z, x, y)?.let {
             return it
         }
-        runCatching { OfflineMapStore.bundled(c) }
+        runCatching { OfflineMapStore.existing(c) }
             .getOrNull()
             ?.let { bundled ->
                 offlineTile(bundled, z, x, y)?.let {
@@ -146,7 +146,7 @@ class RouteMapView(c: Context) : View(c) {
         }
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(2))
+    private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(2))
     private val tiles = android.util.LruCache<String, Bitmap>(80)
     private val loading = mutableSetOf<String>()
     private val failed = mutableMapOf<String, Long>()
@@ -159,6 +159,20 @@ class RouteMapView(c: Context) : View(c) {
     var lastSelection: Pair<Double, Double>? = null
     var polygonDraft: List<Pair<Double, Double>> = emptyList()
     var onPick: ((Double, Double) -> Unit)? = null
+    var pickStopsWithSelection = false
+    var layers = MapLayers()
+    var measurement: List<Pair<Double, Double>> = emptyList()
+    private var country: CountryScene? = null
+    private var countryViewport: List<Double> = emptyList()
+    private var loadedViewport: List<Double> = emptyList()
+    val isCountryReady: Boolean
+        get() = country != null && loadedViewport == countryViewport
+
+    private var countryJob: Job? = null
+    private val countryPaths = linkedMapOf<String, Path>()
+    private var renderedCountry: CountryScene? = null
+    private var renderedViewport: List<Double> = emptyList()
+    private var countryFailed = false
     private var zoom = 11
     private val tilePixels = 256.0 * resources.displayMetrics.density
     private var lat = 21.55
@@ -196,7 +210,11 @@ class RouteMapView(c: Context) : View(c) {
 
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                     val p = world(lat, lon)
-                    if (onPick == null) {
+                    if (
+                        onStopPick != null &&
+                            layers.stops &&
+                            (onPick == null || pickStopsWithSelection)
+                    ) {
                         val stop =
                             hitStop(stops, e.x, e.y, 24f * resources.displayMetrics.density) { a, b
                                 ->
@@ -227,7 +245,7 @@ class RouteMapView(c: Context) : View(c) {
                         zoom = (zoom + 1).coerceAtMost(18)
                         factor = 1f
                     } else if (factor < 0.7f) {
-                        zoom = (zoom - 1).coerceAtLeast(7)
+                        zoom = (zoom - 1).coerceAtLeast(4)
                         factor = 1f
                     }
                     invalidate()
@@ -240,6 +258,28 @@ class RouteMapView(c: Context) : View(c) {
         lat = a
         lon = b
         centered = true
+        invalidate()
+    }
+
+    fun changeZoom(delta: Int) {
+        zoom = (zoom + delta).coerceIn(4, 18)
+        centered = true
+        invalidate()
+    }
+
+    fun countryOverview() {
+        zoom = 4
+        center(24.5, 45.0)
+    }
+
+    fun navigate(a: Double, b: Double) {
+        zoom = 13
+        center(a, b)
+    }
+
+    fun fitRoute() {
+        centered = false
+        fit()
         invalidate()
     }
 
@@ -297,7 +337,7 @@ class RouteMapView(c: Context) : View(c) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(Color.rgb(228, 235, 233))
+        canvas.drawColor(Color.rgb(243, 239, 230))
         val center = world(lat, lon)
         val left = center.first - width / 2
         val top = center.second - height / 2
@@ -336,10 +376,101 @@ class RouteMapView(c: Context) : View(c) {
             val p = world(a, b)
             return (p.first - left).toFloat() to (p.second - top).toFloat()
         }
-        if (!drawn) {
+        val viewportKey = listOf(lat, lon, zoom.toDouble(), width.toDouble(), height.toDouble())
+        if (countryViewport != viewportKey && width > 0 && height > 0) {
+            countryViewport = viewportKey
+            countryJob?.cancel()
+            val nw = coordinate(left, top)
+            val se = coordinate(left + width, top + height)
+            val level = zoom
+            countryJob = scope.launch {
+                delay(120)
+                val scene = runCatching {
+                    SaudiMap.scene(
+                        context,
+                        nw.second,
+                        se.first,
+                        se.second,
+                        nw.first,
+                        level.coerceAtLeast(5),
+                    )
+                }
+                    .getOrNull()
+                withContext(Dispatchers.Main) {
+                    if (countryViewport == viewportKey) {
+                        country = scene
+                        loadedViewport = viewportKey
+                        countryFailed = scene == null
+                        invalidate()
+                    }
+                }
+            }
+        }
+        country?.let { scene ->
+            paint.style = Paint.Style.STROKE
+            if (renderedCountry !== scene || renderedViewport != viewportKey) {
+                countryPaths.clear()
+                scene.roads.asReversed().forEach { road ->
+                    val path = countryPaths.getOrPut(road.kind) { Path() }
+                    road.points.forEachIndexed { i, point ->
+                        val p = screen(point.first, point.second)
+                        if (i == 0) path.moveTo(p.first, p.second)
+                        else path.lineTo(p.first, p.second)
+                    }
+                }
+                renderedCountry = scene
+                renderedViewport = viewportKey
+            }
+            countryPaths.forEach { (kind, path) ->
+                paint.color =
+                    when (kind) {
+                        "coast" -> Color.rgb(92, 157, 182)
+                        "motorway",
+                        "trunk" -> Color.rgb(218, 156, 65)
+                        "primary" -> Color.rgb(225, 184, 100)
+                        else -> Color.WHITE
+                    }
+                paint.strokeWidth =
+                    (if (kind in listOf("motorway", "trunk")) 3f else 1.6f) *
+                        resources.displayMetrics.density
+                canvas.drawPath(path, paint)
+            }
+            if (zoom >= 15)
+                scene.roads.forEach { road ->
+                    if (zoom >= 15 && road.name.isNotBlank() && road.points.size > 1) {
+                        val p = road.points[road.points.size / 2]
+                        val xy = screen(p.first, p.second)
+                        if (xy.first in 15f..width - 15f && xy.second in 30f..height - 60f) {
+                            paint.style = Paint.Style.FILL
+                            paint.color = Color.rgb(80, 74, 65)
+                            paint.textSize = 10f * resources.displayMetrics.density
+                            canvas.drawText(road.name.take(30), xy.first, xy.second, paint)
+                            paint.style = Paint.Style.STROKE
+                        }
+                    }
+                }
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(45, 62, 71)
+            paint.textSize = 13f * resources.displayMetrics.density
+            scene.labels.forEach { label ->
+                val p = screen(label.latitude, label.longitude)
+                canvas.drawText(label.name, p.first, p.second, paint)
+            }
+            if (scene.clipped) {
+                paint.textSize = 10f * resources.displayMetrics.density
+                canvas.drawText("كبّر لعرض تفاصيل إضافية", 16f, height - 100f, paint)
+            }
+        }
+        if (!drawn && country == null) {
             paint.color = Color.DKGRAY
             paint.textSize = 32f
-            canvas.drawText(context.getString(R.string.map_unavailable), 20f, 45f, paint)
+            canvas.drawText(
+                if (countryFailed) context.getString(R.string.map_unavailable)
+                else "تجهيز خريطة السعودية محليًا…",
+                20f,
+                45f,
+                paint,
+            )
         }
         paint.color = Color.rgb(16, 118, 106)
         paint.style = Paint.Style.STROKE
@@ -356,8 +487,28 @@ class RouteMapView(c: Context) : View(c) {
             routePoints = points
             routeViewport = viewport
         }
-        canvas.drawPath(route, paint)
-        places.forEach { p ->
+        if (layers.route) {
+            if (layers.speed)
+                points.zipWithNext().forEach { (a, b) ->
+                    if (!b.breakBefore) {
+                        val first = screen(a.latitude, a.longitude)
+                        val second = screen(b.latitude, b.longitude)
+                        paint.color =
+                            if (b.speed * 3.6 < 30) Color.rgb(49, 111, 224)
+                            else if (b.speed * 3.6 < 80) Color.rgb(16, 160, 132)
+                            else Color.rgb(228, 139, 48)
+                        canvas.drawLine(
+                            first.first,
+                            first.second,
+                            second.first,
+                            second.second,
+                            paint,
+                        )
+                    }
+                }
+            else canvas.drawPath(route, paint)
+        }
+        (if (layers.places) places else emptyList()).forEach { p ->
             val xy = screen(p.latitude, p.longitude)
             paint.color = if (p.type == "HOME") Color.rgb(33, 95, 176) else Color.rgb(133, 77, 14)
             paint.strokeWidth = 3f
@@ -405,15 +556,62 @@ class RouteMapView(c: Context) : View(c) {
         }
         points.firstOrNull()?.let { marker(it.latitude, it.longitude, Color.rgb(20, 128, 74)) }
         points.lastOrNull()?.let { marker(it.latitude, it.longitude, Color.rgb(31, 82, 195)) }
-        events
+        (if (layers.stops) events else emptyList())
             .filter { it.type == "STOP" }
             .forEach { marker(it.latitude, it.longitude, Color.rgb(208, 128, 16)) }
-        stops
+        (if (layers.stops) stops else emptyList())
             .filter { it.endedAt == null }
             .forEach {
                 marker(it.latitude, it.longitude, Color.rgb(208, 128, 16))
             }
         selected?.let { marker(it.first, it.second, Color.RED) }
+        if (layers.accuracy)
+            points.lastOrNull()?.let { last ->
+                val p = screen(last.latitude, last.longitude)
+                val metersPerPixel =
+                    156543.03392 * cos(last.latitude * PI / 180) /
+                        (1 shl zoom) /
+                        resources.displayMetrics.density
+                paint.color = Color.argb(40, 49, 111, 224)
+                canvas.drawCircle(
+                    p.first,
+                    p.second,
+                    (last.accuracy / metersPerPixel).toFloat(),
+                    paint,
+                )
+            }
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(144, 61, 155)
+        paint.strokeWidth = 4f
+        measurement.zipWithNext().forEach { (a, b) ->
+            val first = screen(a.first, a.second)
+            val second = screen(b.first, b.second)
+            canvas.drawLine(first.first, first.second, second.first, second.second, paint)
+        }
+        paint.style = Paint.Style.FILL
+        measurement.forEach { marker(it.first, it.second, Color.rgb(144, 61, 155)) }
+        val metersPerPixel =
+            156543.03392 * cos(lat * PI / 180) / (1 shl zoom) / resources.displayMetrics.density
+        val scaleMeters =
+            listOf(10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000)
+                .lastOrNull { it <= metersPerPixel * 100 * resources.displayMetrics.density } ?: 10
+        paint.color = Color.DKGRAY
+        paint.strokeWidth = 3f
+        paint.textSize = 11f * resources.displayMetrics.density
+        canvas.drawLine(
+            16f,
+            height - 65f,
+            (16 + scaleMeters / metersPerPixel).toFloat(),
+            height - 65f,
+            paint,
+        )
+        canvas.drawText(
+            if (scaleMeters >= 1000) "${scaleMeters/1000} كم" else "$scaleMeters م",
+            16f,
+            height - 75f,
+            paint,
+        )
+        canvas.drawText("N ↑", width - 65f, 45f, paint)
         paint.color = Color.argb(225, 255, 255, 255)
         canvas.drawRect(0f, height - 42f, width.toFloat(), height.toFloat(), paint)
         paint.color = Color.DKGRAY
@@ -424,6 +622,15 @@ class RouteMapView(c: Context) : View(c) {
     override fun onDetachedFromWindow() {
         scope.cancel()
         super.onDetachedFromWindow()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!scope.isActive) {
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(2))
+            loading.clear()
+            countryViewport = emptyList()
+        }
     }
 }
 
@@ -437,6 +644,11 @@ fun RouteMap(
     polygon: List<Pair<Double, Double>> = emptyList(),
     stops: List<StopDetails> = emptyList(),
     onStopPick: ((StopDetails) -> Unit)? = null,
+    camera: MapCamera? = null,
+    layers: MapLayers = MapLayers(),
+    measurement: List<Pair<Double, Double>> = emptyList(),
+    pickStopsWithSelection: Boolean = false,
+    centerSelection: Boolean = true,
     onPick: ((Double, Double) -> Unit)? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -445,7 +657,7 @@ fun RouteMap(
     }
         .collectAsState(initial = sa.rihla.data.Preferences())
     AndroidView(
-        factory = { RouteMapView(it) },
+        factory = { RouteMapView(it).also { view -> camera?.view = view } },
         modifier = modifier,
         update = { v ->
             val changed =
@@ -454,7 +666,9 @@ fun RouteMap(
                     v.places != places ||
                     v.selected != selected ||
                     v.polygonDraft != polygon ||
-                    v.stops != stops
+                    v.stops != stops ||
+                    v.layers != layers ||
+                    v.measurement != measurement
             v.points = points
             v.events = events
             v.places = places
@@ -463,9 +677,18 @@ fun RouteMap(
             v.onPick = onPick
             v.stops = stops
             v.onStopPick = onStopPick
+            v.pickStopsWithSelection = pickStopsWithSelection
+            v.layers = layers
+            v.measurement = measurement
+            camera?.view = v
             v.online(preferences.onlineMaps)
             v.fit()
-            if (points.isEmpty() && selected != null && v.lastSelection != selected) {
+            if (
+                centerSelection &&
+                    points.isEmpty() &&
+                    selected != null &&
+                    v.lastSelection != selected
+            ) {
                 v.center(selected.first, selected.second)
                 v.lastSelection = selected
             }

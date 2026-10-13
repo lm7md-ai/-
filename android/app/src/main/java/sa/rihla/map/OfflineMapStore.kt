@@ -10,6 +10,9 @@ object OfflineMapStore {
     private const val FileName = "jeddah-makkah-20261012.mbtiles"
     private val lock = Any()
 
+    fun existing(context: Context): File? =
+        File(context.noBackupFilesDir, FileName).takeIf { it.exists() }
+
     fun bundled(context: Context): File =
         synchronized(lock) {
             val target = File(context.noBackupFilesDir, FileName)

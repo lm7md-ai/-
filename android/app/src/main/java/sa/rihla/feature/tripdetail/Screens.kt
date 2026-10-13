@@ -124,6 +124,13 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
             ) {
                 routeGpx(points)
             }
+            TripEditPanel(
+                vm,
+                data,
+                o,
+                if (replay && cursor in 1 until points.lastIndex) points[cursor].recordedAt
+                else null,
+            )
             if (points.isNotEmpty()) {
                 MetricGrid(
                     listOf(

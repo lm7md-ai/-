@@ -22,7 +22,8 @@ class SmsExpenseImporter(private val db: JourneyDatabase) {
                 .importExpense(
                     Expense(
                         outingId = db.dao().outingAt(receivedAt),
-                        category = "OTHER",
+                        category =
+                            sa.rihla.core.merchantCategory(purchase.merchant, db.dao().rules()),
                         amountHalala = purchase.amountHalala,
                         createdAt = receivedAt,
                         source = "SMS_NOTIFICATION",

@@ -46,5 +46,10 @@ class StopTapTest {
         assertNull(selected)
         assertNotNull(coordinate)
         assertEquals(21.5, coordinate!!.first, 0.001)
+        map.pickStopsWithSelection = true
+        coordinate = null
+        tap(android.os.SystemClock.uptimeMillis())
+        assertEquals(stop, selected)
+        assertNull(coordinate)
     }
 }

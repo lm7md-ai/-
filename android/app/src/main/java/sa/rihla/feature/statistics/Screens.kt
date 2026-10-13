@@ -78,7 +78,7 @@ fun MetricsList(m: Metrics) {
 }
 
 @Composable
-fun StatisticsScreen(data: ScreenData) {
+fun StatisticsScreen(data: ScreenData, vm: JourneyViewModel? = null, onTrip: (Long) -> Unit = {}) {
     var period by remember { mutableStateOf(Period.MONTH) }
     val m = metrics(data, periodBounds(period))
     val previous = metrics(data, periodBounds(period, previous = true))
@@ -118,6 +118,8 @@ fun StatisticsScreen(data: ScreenData) {
                 Metric("university_trips", num(m.universityTrips.toDouble(), 0))
             }
             Panel("fuel_economy") { EconomyCard(m.economy) }
+            sa.rihla.ui.AdvancedAnalytics(data, periodBounds(period))
+            if (vm != null) sa.rihla.ui.RouteComparisonPanel(vm, data, periodBounds(period), onTrip)
             val bounds = periodBounds(period)
             val estimated =
                 estimateTotals(
@@ -142,7 +144,7 @@ fun StatisticsScreen(data: ScreenData) {
                 )
                 Metric(
                     "trips_change",
-                    num((m.universityTrips - previous.universityTrips).toDouble(), 0),
+                    num((m.outings - previous.outings).toDouble(), 0),
                 )
                 Metric(
                     "travel_change",

@@ -1,99 +1,87 @@
-# Verification — version 2.0, 2026-10-13
+# Verification — version 3.0, 2026-10-13
 
-The final source check passed with JDK 21, Gradle 9.8.0, AGP 9.4.1, Kotlin 2.4.20,
-KSP 2.3.12, Android platform 37.2/build-tools 37.0.0, Compose BOM 2026.09.00,
-Room 2.8.5, DataStore 1.2.1 and Robolectric 4.17. Dependency downloads used the
-configured proxy and trusted CA; verification was not disabled.
+Toolchain: JDK 21, Gradle 9.8.0, AGP 9.4.1, Kotlin 2.4.20/KSP 2.3.12,
+Android platform 37.2/build-tools 37.0.0, Compose BOM 2026.09.00, Room 2.8.5,
+DataStore 1.2.1 and Robolectric 4.17. TLS, wrapper and source verification remain enabled.
 
 ```sh
-./gradlew --no-daemon --max-workers=2 assembleNextDebug assembleClassicDebug testNextDebugUnitTest lintNextDebug lintClassicDebug
+./gradlew --no-daemon --max-workers=2 assembleClassicDebug assembleNextDebug testNextDebugUnitTest lintClassicDebug lintNextDebug
 python3 tools/verify_schema.py
-python3 tools/test_safe_update.py
-python3 tools/test_legacy_backup.py
-python3 tools/test_release_identity.py
-python3 tools/test_windows_transfer.py
+python3 tools/verify_country_map.py
+python3 -m unittest discover -s tools -p 'test_*.py'
+python3 tools/verify_release.py app/build/outputs/apk/classic/debug/app-classic-debug.apk --edition classic --previous ../releases/app-v2.0.apk
+python3 tools/verify_release.py app/build/outputs/apk/next/debug/app-next-debug.apk --edition next
 ```
 
 | Check | Result |
 |---|---|
-| Next and classic APK builds | Passed |
-| Android/JVM tests | 61 executed, 61 passed, 0 failed/errors/skipped |
-| Safe-update guard tests | 5 passed |
-| Legacy archive conversion tests | 2 passed, including committed WAL records |
-| Publication identity tests | 2 passed; wrong edition/key/old version and incompatible classic baselines rejected |
-| Windows transfer assistant tests | 2 passed; one authorized USB device required; verified conversion precedes push; failed conversion prevents push |
-| Android Lint | 0 errors; notices about a newer Gradle patch and the optional toUri KTX convenience |
-| Actual Room migrations | Versions 1–5 opened and validated; every original column value preserved |
-| SQLite migration/deletion checks | Passed through schema 5; trip-detail cascade and expense/fuel preservation checked |
-| Local backup round trip | All database tables, IDs, points, fuel links, annotations and receipt hashes preserved |
-| Original schema-1 portable import | Missing later fields filled with migration defaults; historical amounts/distance preserved |
-| Invalid/nonempty restore | Foreign-key errors roll back; existing records cannot be overwritten; negative expenses/future schemas rejected |
-| CSV/GPX | Exact halala amounts, spreadsheet-formula escaping, timestamps and GPS segment breaks checked |
-| Search/favorites/sorting/budget | Passed, including Saudi midnight day boundaries and empty spending days |
-| Compose UI interaction | Expense action, search, favorites, navigation, light/dark themes, backup panel and draft retention across saved-state restoration checked |
-| Android 8 notification permission lookup | Passed under Robolectric API 26 |
-| SMS import/parser/receipt persistence | Existing Arabic/English parsing, exclusions, concurrency, deletion and reopen tests passed |
-| APK map asset | Original 56,582,144-byte MBTiles checksum retained |
-| APK signature | Verified; no private keystore bundled |
-| Main APK identity | `sa.rihla`, versionCode 20, versionName 2.0, label مشواري |
-| Optional independent APK | `sa.rihla.next`, versionCode 20, versionName 2.0, label مشواري |
-| 1.3 → 2.0 update identity | Published 1.3 certificate identical; package retained; versionCode increases 4 → 20 |
-| Windows ZIP | Original official archive hashes checked; every bundled file checked against its manifest; SQLite and licenses included; no private keystores |
-| Existing website application files | Unchanged |
+| Android tests | 72 passed; 0 failures/errors/skipped |
+| Python transfer/signature/geometry tests | 12 passed |
+| Classic and next builds | Passed; versionCode 30, versionName 3.0 |
+| Both Android lint targets | 0 errors; convenience/obsolete-SDK/newer-Gradle notices remain |
+| Historical Room migration | Every schema 1–5 opens as schema 6; all original column values retained |
+| SQLite schema constraints | Migrations through 6, cascade/unlink behavior and singleton active slot passed |
+| Fuel measurement | Full-tank odometer distances work across GPS gaps; partial fills included; decreasing readings rejected transactionally |
+| Wallet rules | Most specific normalized merchant rule wins; unknown merchants stay other; actual purchase import checked |
+| Recurring payments | Concurrent confirmations create one expense per month; next month can be paid; short months clamp correctly |
+| Backup | Rules, schedules, odometers and existing IDs/receipts survive export/restore; existing target cannot be overwritten |
+| Trip split/merge | Recursive splits preserve distance, stop/visit durations and visit count; expenses follow timestamps; original point IDs survive split/remerge; malformed endpoint edits roll back |
+| Route comparison | Repeated geographic corridors grouped; different corridors and incomplete GPS traces distinguished |
+| Tracking policy | Stale, mock, invalid and poor fixes rejected; balanced intervals retained at 5/30 seconds, optional precise intervals 3/15 seconds |
+| Map asset | Database/pack checksums and SQLite integrity passed; no spatial extension required |
+| Country coverage | Road samples in Riyadh, Jeddah, Makkah, Dammam, Tabuk, Jazan, Arar and Najran passed |
+| Actual Android map access | Bundled asset copied/decompressed, Arabic search and viewport queries passed under native Android SQLite |
+| UI map | Navigation, zoom, measurement selection, loaded native map rendering and screenshots checked |
+| Stop taps | Existing coordinate-picking behavior retained; advanced map can select stops alongside point picking |
+| Existing behavior | SMS parser/deduplication, migrations, fuel/cost/duration calculations, backup rejection and UI restoration tests retained |
+| Main update identity | `sa.rihla`, same verified certificate as published 1.3 and 2.0; versionCode increases to 30 |
+| Independent identity | `sa.rihla.next`, same retained certificate; versionCode 30 |
 
-The optional `RIHLA_SIGNING_KEYSTORE` configuration was exercised with the existing
-private key path and produced the expected public certificate. No private key or
-password is committed. `tools/verify_release.py` must pass before publishing the
-APK; it refuses a regenerated or different signing key and requires an explicit
-edition. Classic updates require a verified compatible previous APK.
+## Offline country data
 
-Published main APK: `releases/app-v2.0.apk`, 60,282,373 bytes.
-SHA-256: `b21439d82e4b07500a42fda8d1df9446b9743312fd9bc034d4645572f857f664`.
-Independent APK SHA-256: `7495f7c253bf3867407c1ff91e09945dd136b4b14a6c8c02672846a06ad2f186`.
-Windows transfer ZIP: 18,926,331 bytes; SHA-256
-`8e328243254d812b7fdd3f78656eb24dec4c8c7257c465dbf5a102b2a73749c3`.
-Public certificate SHA-256: `c82d020159412f6dac6f0675f1b826f7335730bbe9b647224644f94937da8b34`.
+The licensed Geofabrik/OSM snapshot is from 2026-10-12. It contains 1,422,261
+road/coast sections and 8,516 settlement names in a rectangle covering Saudi
+Arabia plus adjoining GCC areas. High-density views cap results and simplify
+display geometry at low zoom; no navigation graph, live traffic or satellite
+imagery is provided. See [map provenance and ODbL source distribution](maps/README.md).
 
-The user reports having transferred data into 1.3. The main classic APK is a
-compatible update of the verified published 1.3 APK; schema 4 → 5 preserves
-all existing rows. Installation on the physical handset remains untested.
-The original 1.0 APK/key is unavailable, so direct 1.0 upgrade compatibility
-is not established. The optional next APK has a distinct identity and requires
-explicit local backup/import; historical transfer to that edition is not automatic.
+Expanded database: 139,857,920 bytes, SHA-256
+`5a9ba137a2c638f9706bf2cbebed611e4a40e42cbf0f26240e51d7d81d403159`.
+Pack: 66,599,121 bytes, SHA-256
+`fc47bcdafc88c41b9223666099fd327cf5386ceba5b9837695a831fbc659e7dd`.
+The APK asset matches this pack exactly. Legacy Jeddah–Makkah data remains in
+the repository and prepared phone caches; fresh 3.0 installs ship national data.
 
-The expense dialog's platform wrap-content sizing caused repeated layout and a
-test idle timeout. Explicit dialog sizing with horizontal margins resolves it;
-the full application draft-restoration assertion passes with native rendering.
+The Android asset merger automatically expanded `.gz` inputs; the gzip stream
+now uses a `.pack` filename and is explicitly decoded by the app. The first
+R-tree prototype was rejected by native Android SQLite; the shipped ordinary
+grid tables have no extension dependency. Obsolete incremental APK ZIP gaps were
+removed by repackaging; the publication guard refuses APKs at or above 100 MiB.
 
-## Visual evidence
+## Artifact identity
 
-Native Android rendering under Robolectric generated and was visually inspected:
-`releases/previews/app-light.png`, `app-dark.png`, and `more-dark.png`. These are
-actual Compose interfaces from a simulated Android runtime, with an empty ledger,
-not photographs of a RedMagic handset or fabricated personal journeys. The
-interactive history fixture is test data and is not inserted into production.
+Public certificate SHA-256:
+`c82d020159412f6dac6f0675f1b826f7335730bbe9b647224644f94937da8b34`.
+No private signing key or password is committed or bundled. The secure existing
+key file is retained outside Git. Published APK hashes are in `releases/README.md`.
+The same-package main update preserves the installed 1.3/2.0 data. The independent
+edition updates only an existing next installation; cross-package transfer remains
+explicit and cannot bypass Android isolation or the unavailable original 1.0 key.
 
-## Phone validation still required
+Main APK: 86,959,186 bytes; SHA-256
+`cb8ba80418c2b2b6cb3c7c687eb7da7fc007fa03d2df65cbd3872b49c3c3ad45`.
+Independent APK: 86,959,190 bytes; SHA-256
+`1358da21d3ec791615b39a565bb2f616ba3ea7d6ee57dd7161d2b4923f46c4cf`.
 
-No physical phone or full emulator was available. APK installation on the user's
-RedMagic, Windows executable launch, USB/wireless ADB/run-as extraction, actual SAF file selection,
-notification delivery/redaction, live GPS, Android/OEM background callbacks,
-reboot recovery and battery savings remain untested on hardware. Android location
-priority/intervals and the tracking engine are retained; lower consumption has not
-been measured. UI and database tests do not establish hardware reliability.
+## Hardware limits
 
-The legacy converter was tested with real SQLite/WAL archives. No ADB command was
-run against a user's phone. It never removes the old app or clears its data. See
-[Windows transfer requirements and steps](docs/WINDOWS_MIGRATION.md). ADB/run-as
-can be unavailable on some installations; the tool cannot bypass Android's
-private-data isolation. This cross-package transfer is unnecessary for the user's
-current 1.3 → main 2.0 update.
+These are JVM/native Android simulations, not installation or driving tests on a
+RedMagic handset. Real GPS, Bluetooth broadcasts/background foreground-service
+permission, OEM process killing, notification visibility, SAF document selection,
+reboot behavior and battery consumption still require phone testing. Higher
+precision is optional; balanced request intervals remain unchanged. No battery
+savings or complete hardware reliability has been measured or asserted.
 
-Portable import accepts up to 100 MiB and an empty target only. It transfers
-database records, not map files, theme/budget preferences or OS permissions.
-Keep the original installation and backup until imported records are checked.
-
-Offline map coverage remains Jeddah–Makkah, not all Saudi Arabia. Fuel prices are
-the dated Aramco October 2026 snapshot. The confirmed vehicle is 1.6L 4A92 with a
-4-speed automatic; consumption remains an explicitly provisional editable input
-until reliable full-tank measurements exist. See `docs/FUEL_RESEARCH.md`.
+The map screenshot is actual loaded native rendering of public OSM data in
+Robolectric. UI preview ledgers are empty; no user VIN, private routes or financial
+data are published. The web/Expo application code remains untouched.

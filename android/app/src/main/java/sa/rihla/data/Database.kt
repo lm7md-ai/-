@@ -142,10 +142,38 @@ data class FuelFillUp(
     val full: Boolean,
     val trackedMeters: Double,
     val reliable: Boolean,
+    val odometerMeters: Double? = null,
 )
 
 @Dao
 interface JourneyDao {
+    @Query("DELETE FROM places WHERE type=:type AND type LIKE 'PIN:%'")
+    suspend fun deletePin(type: String)
+
+    @Query("DELETE FROM merchant_rules") suspend fun clearRules()
+
+    @Query("DELETE FROM recurring_expenses") suspend fun clearRecurring()
+
+    @Query("SELECT * FROM merchant_rules ORDER BY LENGTH(pattern) DESC, id")
+    fun rulesFlow(): Flow<List<MerchantRule>>
+
+    @Query("SELECT * FROM merchant_rules ORDER BY LENGTH(pattern) DESC, id")
+    suspend fun rules(): List<MerchantRule>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun rule(value: MerchantRule)
+
+    @Query("DELETE FROM merchant_rules WHERE id=:id") suspend fun deleteRule(id: Long)
+
+    @Query("SELECT * FROM recurring_expenses ORDER BY dayOfMonth, id")
+    fun recurringFlow(): Flow<List<RecurringExpense>>
+
+    @Query("SELECT * FROM recurring_expenses WHERE id=:id")
+    suspend fun recurring(id: Long): RecurringExpense?
+
+    @Insert suspend fun recurring(value: RecurringExpense)
+
+    @Query("DELETE FROM recurring_expenses WHERE id=:id") suspend fun deleteRecurring(id: Long)
+
     @Query("SELECT * FROM trip_details") fun detailsFlow(): Flow<List<TripDetails>>
 
     @Query("SELECT * FROM trip_details WHERE outingId=:id")
@@ -254,8 +282,10 @@ interface JourneyDao {
             FuelFillUp::class,
             ImportedSms::class,
             TripDetails::class,
+            MerchantRule::class,
+            RecurringExpense::class,
         ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class JourneyDatabase : RoomDatabase() {
@@ -327,6 +357,38 @@ val MIGRATION_4_5 =
         override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
             db.execSQL(
                 "CREATE TABLE IF NOT EXISTS trip_details (outingId INTEGER NOT NULL, title TEXT NOT NULL, note TEXT NOT NULL, favorite INTEGER NOT NULL, PRIMARY KEY(outingId), FOREIGN KEY(outingId) REFERENCES outings(id) ON UPDATE NO ACTION ON DELETE CASCADE)"
+            )
+        }
+    }
+
+@Entity(tableName = "merchant_rules", indices = [Index(value = ["pattern"], unique = true)])
+data class MerchantRule(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val pattern: String,
+    val category: String,
+)
+
+@Entity(tableName = "recurring_expenses")
+data class RecurringExpense(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val category: String,
+    val amountHalala: Long,
+    val dayOfMonth: Int,
+)
+
+val MIGRATION_5_6 =
+    object : androidx.room.migration.Migration(5, 6) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE fuel ADD COLUMN odometerMeters REAL")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS merchant_rules (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, pattern TEXT NOT NULL, category TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_merchant_rules_pattern ON merchant_rules(pattern)"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS recurring_expenses (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL, amountHalala INTEGER NOT NULL, dayOfMonth INTEGER NOT NULL)"
             )
         }
     }

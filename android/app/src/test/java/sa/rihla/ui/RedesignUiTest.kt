@@ -32,6 +32,49 @@ class RedesignUiTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
+    fun mapNavigationExposesZoomLayersMeasurementAndOfflineSearch() {
+        val app = RuntimeEnvironment.getApplication() as RihlaApp
+        runBlocking {
+            app.settings.clear()
+            app.settings.onboard()
+        }
+        compose.setContent { RihlaRoot() }
+        compose.waitUntil(20000) {
+            compose.onAllNodesWithText("رحلتك تبدأ هنا").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithContentDescription("الخريطة").performClick()
+        compose.onNodeWithText("خريطة السعودية دون إنترنت").assertIsDisplayed()
+        compose.onNodeWithText("تكبير +").performClick()
+        compose.onNodeWithText("تصغير −").performClick()
+        compose.onNodeWithText("قياس المسافات").performScrollTo().performClick()
+        compose.onNodeWithText("قياس المسافات").assertIsSelected()
+        compose.onNodeWithText("السعودية كاملة").performScrollTo().performClick()
+        compose.onNodeWithText("ابحث عن مدينة أو حي بالعربية").performScrollTo()
+        val activity =
+            (compose as androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>).activity
+        fun map(view: android.view.View): sa.rihla.map.RouteMapView? {
+            if (view is sa.rihla.map.RouteMapView) return view
+            if (view is android.view.ViewGroup)
+                for (index in 0 until view.childCount) map(view.getChildAt(index))?.let {
+                    return it
+                }
+            return null
+        }
+        // Native AndroidView drawing is explicit in Robolectric; start the viewport request,
+        // then deliver its main-looper completion before capturing the loaded map.
+        compose.onRoot().captureToImage()
+        compose.waitUntil(30000) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            map(activity.window.decorView)?.isCountryReady == true
+        }
+        val image = compose.onRoot().captureToImage().asAndroidBitmap()
+        val directory = File("build/outputs/ui-previews").apply { mkdirs() }
+        File(directory, "map-3.png").outputStream().use {
+            image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+    }
+
+    @Test
     fun dashboardHasWorkingExpenseActionAndRendersArabicLightTheme() {
         val vm = JourneyViewModel(RuntimeEnvironment.getApplication())
         var clicked = false

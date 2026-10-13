@@ -36,6 +36,7 @@ fun VehicleScreen(data: ScreenData) {
                 Text(tr("vehicle_specs"))
             }
             val m = metrics(data, periodBounds(Period.ALL))
+            sa.rihla.ui.FuelLog(data)
             MetricsList(m)
             CostPerKilometer(data)
             val estimated = estimateTotals(data.outings, data.settings, m.economy)
