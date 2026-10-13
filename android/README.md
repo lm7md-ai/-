@@ -2,9 +2,9 @@
 
 A native, Arabic-first, local-first personal driving journal for one Mitsubishi Lancer 2016. The existing website in the repository root is independent of this Android project.
 
-Version 1.2 retains the ready-to-use Jeddah–Makkah offline map, displays durations
-as hours/minutes/seconds, and estimates trip fuel costs using saved Saudi fuel
-prices and either personal consumption or an explicitly labeled reference range.
+Version 1.3 adds automatic purchase expenses from SMS notifications, retains the
+Jeddah–Makkah offline map, displays durations as hours/minutes/seconds, and estimates
+trip fuel costs using saved Saudi prices and personal or provisional consumption.
 
 ## Build and run
 
@@ -84,7 +84,7 @@ Room tables: outings (persistent reducer state), active_slot, route points (inde
 
 Outing deletion cascades route/events and clears expense links, preserving actual money spent. Fuel estimates that predate a deletion are invalidated, preventing a changed distance baseline from producing plausible but incorrect results. Full deletion stops tracking/detection, removes all Room data, resets preferences, and deletes imported tiles/cache. There is no coordinate logging or backup/sync integration. Android backup is disabled, and Android 12+ extraction rules exclude app data from cloud backup and device transfer.
 
-Exported Room schemas 1–3 are retained in `app/schemas`. The explicit 1→2 migration adds the outing end-time index and GPS uncertainty flag. The 2→3 migration adds saved trip fuel-price/consumption/source fields and the stationary-time credit counter without deleting rows. Legacy outings are explicitly marked as lacking archived cost inputs. There is no destructive migration fallback.
+Exported Room schemas 1–4 are retained in `app/schemas`. The explicit 1→2 migration adds the outing end-time index and GPS uncertainty flag. The 2→3 migration adds saved trip fuel-price/consumption/source fields and the stationary-time credit counter without deleting rows. The 3→4 migration adds expense import metadata and persistent SMS receipt fingerprints. Legacy outings are explicitly marked as lacking archived cost inputs. There is no destructive migration fallback.
 
 ## Spending and fuel
 
@@ -99,6 +99,11 @@ Between successive full tanks, the initial tank's liters are excluded. All subse
 Zero distance, insufficient full tanks, or detected unreliable intervals display an insufficient-data message for personal consumption. This is conditional on recording **all** driving and fills; undetected unrecorded driving cannot be recovered. Fuel efficiency is cumulative across completed intervals, clearly labeled, while spending follows the selected period.
 
 ## Automatic fuel-cost estimates
+
+SMS purchases can now be imported locally from the default Messages application's
+notifications after opt-in notification access. Clear SAR purchase amounts appear
+in the ledger with merchant/source, classification controls and deletion.
+OTP/refund/declined/ambiguous messages are skipped. See [setup, behavior and limits](docs/SMS_IMPORT.md).
 
 See [the researched sources and assumptions](docs/FUEL_RESEARCH.md). Aramco's October 2026 retail prices were checked on 13 October: PG91 **2.18 SAR/L**, PG95 **2.33 SAR/L**. Both are saved offline and editable.
 

@@ -107,7 +107,7 @@ data class SavedPlace(
                 onDelete = ForeignKey.SET_NULL,
             )
         ],
-    indices = [Index("outingId"), Index("createdAt")],
+    indices = [Index("outingId"), Index("createdAt"), Index(value = ["importKey"], unique = true)],
 )
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -115,6 +115,9 @@ data class Expense(
     val category: String,
     val amountHalala: Long,
     val createdAt: Long,
+    @ColumnInfo(defaultValue = "'MANUAL'") val source: String = "MANUAL",
+    @ColumnInfo(defaultValue = "''") val merchant: String = "",
+    val importKey: String? = null,
 )
 
 @Entity(
@@ -143,6 +146,13 @@ data class FuelFillUp(
 
 @Dao
 interface JourneyDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun claimSms(receipt: ImportedSms): Long
+
+    @Query("DELETE FROM imported_sms") suspend fun clearImportedSms()
+
+    @Query("DELETE FROM expenses WHERE id=:id AND source='SMS_NOTIFICATION'")
+    suspend fun deleteImportedExpense(id: Long)
+
     @Query("SELECT * FROM outings ORDER BY startedAt DESC") fun observeOutings(): Flow<List<Outing>>
 
     @Query("SELECT * FROM outings ORDER BY startedAt") suspend fun outings(): List<Outing>
@@ -199,6 +209,16 @@ interface JourneyDao {
 
     @Insert suspend fun expense(e: Expense): Long
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun importExpense(e: Expense): Long
+
+    @Query(
+        "SELECT id FROM outings WHERE startedAt<=:time AND (endedAt IS NULL OR endedAt>:time) ORDER BY startedAt DESC LIMIT 1"
+    )
+    suspend fun outingAt(time: Long): Long?
+
+    @Query("UPDATE expenses SET category=:category WHERE id=:id AND source='SMS_NOTIFICATION'")
+    suspend fun categorizeImportedExpense(id: Long, category: String)
+
     @Insert suspend fun fuel(f: FuelFillUp)
 
     @Query("DELETE FROM expenses WHERE id=:id") suspend fun deleteExpense(id: Long)
@@ -225,8 +245,9 @@ interface JourneyDao {
             SavedPlace::class,
             Expense::class,
             FuelFillUp::class,
+            ImportedSms::class,
         ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class JourneyDatabase : RoomDatabase() {
@@ -255,3 +276,21 @@ val MIGRATION_2_3 =
             db.execSQL("ALTER TABLE outings ADD COLUMN fuelGrade TEXT NOT NULL DEFAULT '91'")
         }
     }
+
+val MIGRATION_3_4 =
+    object : androidx.room.migration.Migration(3, 4) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE expenses ADD COLUMN source TEXT NOT NULL DEFAULT 'MANUAL'")
+            db.execSQL("ALTER TABLE expenses ADD COLUMN merchant TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE expenses ADD COLUMN importKey TEXT")
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS index_expenses_importKey ON expenses (importKey)"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS imported_sms (`key` TEXT NOT NULL, receivedAt INTEGER NOT NULL, PRIMARY KEY(`key`))"
+            )
+        }
+    }
+
+@Entity(tableName = "imported_sms")
+data class ImportedSms(@PrimaryKey val key: String, val receivedAt: Long)

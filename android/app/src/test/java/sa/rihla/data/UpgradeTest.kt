@@ -21,7 +21,7 @@ class UpgradeTest {
     @Test
     fun upgradeFromEveryPublishedSchemaKeepsAllHistoricalRows() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
-        for (version in 1..3) {
+        for (version in 1..4) {
             val name = "upgrade-$version.db"
             context.deleteDatabase(name)
             val schema =
@@ -92,7 +92,7 @@ class UpgradeTest {
             old.close()
             val current =
                 Room.databaseBuilder(context, JourneyDatabase::class.java, name)
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
             try {
                 assertEquals(

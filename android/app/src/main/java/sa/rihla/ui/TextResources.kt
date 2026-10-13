@@ -218,5 +218,13 @@ fun textResource(key: String): Int =
         "vehicle_specs" -> R.string.vehicle_specs
         "engine_lancer_16_at" -> R.string.engine_lancer_16_at
         "basis_provisional" -> R.string.basis_provisional
+        "sms_import" -> R.string.sms_import
+        "sms_import_explanation" -> R.string.sms_import_explanation
+        "sms_access" -> R.string.sms_access
+        "sms_access_settings" -> R.string.sms_access_settings
+        "sms_access_required" -> R.string.sms_access_required
+        "sms_app_missing" -> R.string.sms_app_missing
+        "sms_import_limits" -> R.string.sms_import_limits
+        "sms_imported" -> R.string.sms_imported
         else -> error("Unknown UI text resource: $key")
     }

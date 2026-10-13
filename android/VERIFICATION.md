@@ -1,12 +1,12 @@
-# Verification — version 1.2, 2026-10-13
+# Verification — version 1.3, 2026-10-13
 
 The final `./gradlew --no-daemon --max-workers=2 assembleDebug testDebugUnitTest lintDebug` run completed successfully using JDK 21, Gradle 9.8.0, AGP 9.4.1, Kotlin/Compose compiler 2.4.20, KSP 2.3.12, SDK platform 37.2, and build-tools 37.0.0. Dependencies are pinned (Compose BOM 2026.09.00, Activity 1.13.0, Lifecycle 2.11.0, Room 2.8.5, DataStore 1.2.1, Play Services Location 21.4.0, Coroutines 1.11.0, Robolectric 4.17). The test JVM uses the configured proxy and trusted CA for verified Android runtime downloads.
 
 | Check | Result |
 |---|---|
 | `assembleDebug` | Passed; APK generated |
-| `testDebugUnitTest` | 32 executed, 32 passed, 0 failed/errors, 0 skipped |
-| Actual Room upgrades | Schemas 1, 2, 3 opened successfully; every original column value preserved in all seven tables |
+| `testDebugUnitTest` | 48 executed, 48 passed, 0 failed/errors, 0 skipped |
+| Actual Room upgrades | Schemas 1–4 opened successfully; every original column value preserved in historical tables |
 | Android map gesture | Real single tap selects a stop; location picker retains its coordinate callback |
 | `python3 tools/test_safe_update.py` | 5 executed/passed: signer formats, missing/wrong signer, version/app ID, WAL backup, missing DB |
 | `lintDebug` | Passed; 0 errors, 1 notice that Gradle 9.8.1 is available |
@@ -19,11 +19,16 @@ The final `./gradlew --no-daemon --max-workers=2 assembleDebug testDebugUnitTest
 | Bundled offline map | All 20,321 PNG tiles verified; SQLite integrity/metadata/coverage passed |
 | APK offline asset | Confirmed `assets/maps/jeddah-makkah.mbtiles` is present (56,582,144 bytes) |
 | Existing website tracked files | Unchanged |
-| v1.1 → v1.2 signing compatibility | Verified against both real APKs: same app ID, increasing version, same certificate |
+| v1.2 → v1.3 signing compatibility | Verified against both real APKs: same app ID, increasing version, same certificate |
+| SMS parser | Arabic/English purchases, digit/separator normalization, balances/fees and excluded/ambiguous messages passed |
+| SMS persistence | Concurrent duplicates, deletion, database reopening, enable/disable boundary and outing links passed |
+| Notification formats | Individual MessagingStyle entries, group-summary exclusion and stable repost timestamps passed |
+| Android 8 permission lookup | Exact listener-component check passed under Robolectric API 26 |
+| SQLite migration 3→4 | Passed; original spending preserved with MANUAL defaults and empty receipt table |
 | Installed v1.0 signing compatibility | Not established: installed APK/certificate and original key unavailable |
 
 APK: `app/build/outputs/apk/debug/app-debug.apk` (debug signed, approximately 58 MiB).
-SHA-256: `7a1553e527b21812b22b7456b1d3e5c2344420995e785cd2fbf8c5f4f93d2f25`.
+SHA-256: `f7fbfcbee391390463c2abb7be678f7fe36e09c7770047f8e70b30172f1cd7da`.
 Public signing certificate SHA-256: `c82d020159412f6dac6f0675f1b826f7335730bbe9b647224644f94937da8b34`.
 
 New tests exercise duration carries through seconds/minutes/hours, PG91/PG95 prices,
@@ -37,7 +42,7 @@ coverage in both cities/the university region and regional road-corridor coverag
 OSM source checksum, data date, attribution, and reproducible clipped source
 database are documented in `maps/README.md`.
 
-The Python schema checks execute the actual migration SQL and exported table/index definitions on SQLite. The added Robolectric test also opens databases through Room with native SQLite, runs its migrations/schema validation, compares all original values and checks foreign keys, including an active outing. This verifies the adapter in a simulated Android runtime; actual phone update/install and service lifecycles remain untested. The backup test includes committed rows still in an uncheckpointed WAL. No ADB backup or installation was executed against a phone.
+The Python schema checks execute the actual migration SQL and exported table/index definitions on SQLite. Robolectric also opens schemas 1–4 through Room, runs migrations/schema validation, compares all original values and checks foreign keys, including an active outing. SMS tests exercise transactional concurrent deduplication, persistence after reopening, deletion without reimport, settings activation boundaries and notification bundles. Al Rajhi layouts are synthetic examples, not the user's actual message template. Physical SMS delivery and the complete settings/UI flow still require a real phone. The backup test includes committed rows still in an uncheckpointed WAL. No ADB backup or installation was executed against a phone.
 
 Gradle reports compatibility deprecations for a future Gradle 10 upgrade. Android Lint reports no application errors; its sole notice is availability of a newer Gradle patch. Tool activation uses the cloud machine's maintained Java trust store; TLS/signature/checksum verification was retained.
 

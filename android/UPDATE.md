@@ -1,15 +1,16 @@
 # Updating without losing journeys
 
-Version 1.2 keeps application ID `sa.rihla`, the `journeys.db` filename,
-DataStore settings, and Room migrations 1 → 2 → 3. No destructive migration
-or automatic clearing is enabled. Version 1.2 still uses schema 3.
+Version 1.3 keeps application ID `sa.rihla`, the `journeys.db` filename,
+DataStore settings, and explicit Room migrations 1 → 2 → 3 → 4. No destructive
+migration or automatic clearing is enabled. Schema 4 adds expense import metadata
+and persistent SMS receipt fingerprints, preserving old expense and journey data.
 
 Android retains app data when a newer APK has the same application ID and
 compatible signing certificate. **Never uninstall version 1.0 to overcome a
 signature error**: uninstalling deletes its private journeys.
 
 The installed 1.0 APK/signing certificate was not available in this workspace.
-Its compatibility cannot be established from its version name alone. The 1.2
+Its compatibility cannot be established from its version name alone. The 1.3
 build uses the current environment's existing debug key; the signing key is
 not committed. Keep that key in secure environment storage for future builds.
 
@@ -20,7 +21,7 @@ trusted computer. Install Android SDK `adb`, `aapt2`, and `apksigner`, add them
 to PATH (with Java available), then run:
 
 ```bash
-python3 tools/safe_update.py app-v1.2.apk --backup-dir /path/to/private-rihla-backups
+python3 tools/safe_update.py app-v1.3.apk --backup-dir /path/to/private-rihla-backups
 ```
 
 This tool reads the installed APK's signature, stops writes, takes a private

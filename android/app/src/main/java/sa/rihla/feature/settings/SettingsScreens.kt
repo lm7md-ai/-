@@ -144,6 +144,7 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData) {
         Action("configure_university") { place = "UNIVERSITY" }
         Text(tr("no_official_boundary"))
         FuelCostSettings(vm, data)
+        SmsImportSettings(vm, data)
         PermissionsPanel(vm)
         OfflineImport(vm, data)
         Heading("privacy")
@@ -152,6 +153,55 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData) {
     }
     if (place != null) PlaceDialog(vm, data, place!!) { place = null }
     if (deleting) Confirm("delete_all_confirmation", { deleting = false }) { vm.clear() }
+}
+
+@Composable
+fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
+    val context = LocalContext.current
+    var refresh by remember { mutableIntStateOf(0) }
+    var enabling by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    val launcher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            refresh++
+            if (enabling) {
+                vm.smsImport(sa.rihla.sms.PurchaseNotificationService.allowed(context))
+                enabling = false
+            }
+        }
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val observer =
+            androidx.lifecycle.LifecycleEventObserver { _, event ->
+                if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) refresh++
+            }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    val allowed = refresh >= 0 && sa.rihla.sms.PurchaseNotificationService.allowed(context)
+    val messagesApp = android.provider.Telephony.Sms.getDefaultSmsPackage(context)
+    Heading("sms_import")
+    Text(tr("sms_import_explanation"))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(
+            data.settings.smsImport,
+            { enabled ->
+                if (!enabled || allowed) vm.smsImport(enabled)
+                else {
+                    enabling = true
+                    launcher.launch(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                }
+            },
+            enabled = messagesApp != null || data.settings.smsImport,
+        )
+        Text(tr("sms_import"))
+    }
+    Metric("sms_access", tr(if (allowed) "allowed" else "denied"))
+    if (messagesApp == null) Text(tr("sms_app_missing"))
+    if (data.settings.smsImport && !allowed) Text(tr("sms_access_required"))
+    Action("sms_access_settings") {
+        launcher.launch(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    }
+    Text(tr("sms_import_limits"), style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable

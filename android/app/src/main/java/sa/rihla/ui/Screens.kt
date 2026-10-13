@@ -282,7 +282,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                     "statistics" -> StatisticsScreen(data)
                                     "vehicle" -> VehicleScreen(data)
                                     "expenses" ->
-                                        ExpensesScreen(data) {
+                                        ExpensesScreen(data, vm) {
                                             expenseOuting = data.active?.id
                                             expense = true
                                         }

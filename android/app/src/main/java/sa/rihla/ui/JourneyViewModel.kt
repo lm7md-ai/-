@@ -168,6 +168,19 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
         work { app.settings.onlineMaps(value) }
     }
 
+    fun smsImport(value: Boolean) {
+        work { app.settings.smsImport(value) }
+    }
+
+    fun categorizeImportedExpense(id: Long, category: String) {
+        require(category in listOf("FUEL", "FOOD", "OTHER"))
+        work { repo.dao.categorizeImportedExpense(id, category) }
+    }
+
+    fun deleteImportedExpense(id: Long) {
+        work { repo.dao.deleteImportedExpense(id) }
+    }
+
     fun costSettings(
         grade: String,
         price: String,
@@ -236,6 +249,7 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
 
     fun clear() {
         work {
+            app.settings.smsImport(false)
             app.stopService(trackingIntent)
             Detection.register(app, false)
             repo.clear()

@@ -31,7 +31,8 @@ import sa.rihla.tracking.*
 import sa.rihla.ui.*
 
 @Composable
-fun ExpensesScreen(data: ScreenData, onAdd: () -> Unit) {
+fun ExpensesScreen(data: ScreenData, vm: JourneyViewModel, onAdd: () -> Unit) {
+    var deleting by remember { mutableStateOf<Long?>(null) }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Action("add_expense", click = onAdd)
@@ -55,6 +56,23 @@ fun ExpensesScreen(data: ScreenData, onAdd: () -> Unit) {
                     )
                     Text(num(e.amountHalala / 100.0, 2) + " " + tr("sar"))
                     Text(stamp(e.createdAt))
+                    if (e.source == "SMS_NOTIFICATION") {
+                        Text(tr("sms_imported"), style = MaterialTheme.typography.labelMedium)
+                        if (e.merchant.isNotBlank()) Text(e.merchant)
+                        run {
+                            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                listOf("FUEL" to "fuel", "FOOD" to "food", "OTHER" to "other")
+                                    .forEach { (category, label) ->
+                                        FilterChip(
+                                            e.category == category,
+                                            { vm.categorizeImportedExpense(e.id, category) },
+                                            label = { Text(tr(label)) },
+                                        )
+                                    }
+                            }
+                            TextButton(onClick = { deleting = e.id }) { Text(tr("delete")) }
+                        }
+                    }
                     data.fuel
                         .find { it.expenseId == e.id }
                         ?.let { f ->
@@ -66,6 +84,10 @@ fun ExpensesScreen(data: ScreenData, onAdd: () -> Unit) {
             }
         }
     }
+    if (deleting != null)
+        Confirm("delete_confirmation", { deleting = null }) {
+            vm.deleteImportedExpense(deleting!!)
+        }
 }
 
 @Composable

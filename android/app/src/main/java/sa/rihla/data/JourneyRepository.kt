@@ -11,6 +11,14 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
     private val engine = TrackingEngine()
     private val lock = Mutex()
 
+    suspend fun importSms(packageName: String, body: String, receivedAt: Long): Boolean =
+        lock.withLock {
+            val preferences = settings.flow.first()
+            if (!preferences.smsImport || receivedAt < preferences.smsImportSince)
+                return@withLock false
+            SmsExpenseImporter(db).import(packageName, body, receivedAt)
+        }
+
     suspend fun start(automatic: Boolean, startedAt: Long = System.currentTimeMillis()): Long =
         lock.withLock {
             db.withTransaction {
@@ -196,6 +204,7 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
         db.withTransaction {
             dao.clearOutings()
             dao.clearExpenses()
+            dao.clearImportedSms()
             dao.clearPlaces()
         }
     }

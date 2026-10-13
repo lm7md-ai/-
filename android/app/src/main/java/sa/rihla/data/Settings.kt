@@ -18,6 +18,8 @@ data class Preferences(
     val engine: String = "LANCER_16_AT",
     val customConsumptionMl: Long = 8000,
     val useMeasured: Boolean = true,
+    val smsImport: Boolean = false,
+    val smsImportSince: Long = 0,
 )
 
 class Settings(private val context: Context) {
@@ -34,6 +36,8 @@ class Settings(private val context: Context) {
                 if (it[stringPreferencesKey("engine")] == "CUSTOM") "CUSTOM" else "LANCER_16_AT",
                 it[longPreferencesKey("custom_consumption")] ?: 8000,
                 it[booleanPreferencesKey("use_measured")] ?: true,
+                it[booleanPreferencesKey("sms_import")] ?: false,
+                it[longPreferencesKey("sms_import_since")] ?: 0,
             )
         }
 
@@ -77,5 +81,13 @@ class Settings(private val context: Context) {
 
     suspend fun clear() {
         context.store.edit { it.clear() }
+    }
+
+    suspend fun smsImport(enabled: Boolean) {
+        context.store.edit {
+            if (enabled && it[booleanPreferencesKey("sms_import")] != true)
+                it[longPreferencesKey("sms_import_since")] = System.currentTimeMillis()
+            it[booleanPreferencesKey("sms_import")] = enabled
+        }
     }
 }
