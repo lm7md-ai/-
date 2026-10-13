@@ -102,7 +102,7 @@ fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
             Metric("outings_count", num(m.outings.toDouble(), 0))
             Metric("visits", num(m.visits.toDouble(), 0))
             Metric("distance", num(m.meters / 1000) + " " + tr("km"))
-            Metric("university_time", duration(m.universityMs) + " " + tr("hours"))
+            Metric("university_time", duration(m.universityMs))
             Metric("total_spending", num(m.total / 100.0, 2) + " " + tr("sar"))
             Text(tr("stats_policy"), style = MaterialTheme.typography.labelSmall)
         }

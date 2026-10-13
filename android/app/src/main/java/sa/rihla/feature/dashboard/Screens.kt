@@ -57,21 +57,22 @@ fun Dashboard(
         val active = data.active
         if (active != null) {
             item {
-                Metric("total_time", duration(data.now - active.startedAt) + " " + tr("hours"))
+                Metric("total_time", duration(data.now - active.startedAt))
                 Metric("distance", num(active.state.meters / 1000) + " " + tr("km"))
+                EstimatedCostCard(active, data)
             }
             if (active.state.stopStart > 0)
                 item {
                     Metric(
                         "stopped_time",
-                        duration(data.now - active.state.stopStart) + " " + tr("hours"),
+                        duration(data.now - active.state.stopStart),
                     )
                 }
             if (active.state.universityArrival > 0)
                 item {
                     Metric(
                         "university_time",
-                        duration(data.now - active.state.universityArrival) + " " + tr("hours"),
+                        duration(data.now - active.state.universityArrival),
                     )
                 }
             item {
@@ -110,10 +111,23 @@ fun Dashboard(
             Metric("month_university", num(monthly.universityTrips.toDouble(), 0))
             Metric("month_distance", num(monthly.meters / 1000) + " " + tr("km"))
             Metric("month_spending", num(monthly.total / 100.0, 2) + " " + tr("sar"))
-            Metric("university_time", duration(monthly.universityMs) + " " + tr("hours"))
+            val estimated =
+                estimateTotals(
+                    data.outings.filter {
+                        it.startedAt >= periodBounds(Period.MONTH).first &&
+                            it.startedAt < periodBounds(Period.MONTH).second
+                    },
+                    data.settings,
+                    monthly.economy,
+                )
+            Metric(
+                "estimated_month_cost",
+                numberRange(estimated.first / 100.0, estimated.second / 100.0) + " " + tr("sar"),
+            )
+            Metric("university_time", duration(monthly.universityMs))
             Metric(
                 "average_travel",
-                monthly.averageTravelMs?.let { duration(it) + " " + tr("hours") } ?: tr("empty"),
+                monthly.averageTravelMs?.let { duration(it) } ?: tr("empty"),
             )
         }
         item {

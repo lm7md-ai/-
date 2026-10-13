@@ -172,5 +172,40 @@ fun textResource(key: String): Int =
         "confirm_import" -> R.string.confirm_import
         "no_home" -> R.string.no_home
         "no_university" -> R.string.no_university
+        "seconds" -> R.string.seconds
+        "estimated_fuel_cost" -> R.string.estimated_fuel_cost
+        "estimated_month_cost" -> R.string.estimated_month_cost
+        "estimated_liters" -> R.string.estimated_liters
+        "fuel_grade" -> R.string.fuel_grade
+        "grade_91" -> R.string.grade_91
+        "grade_95" -> R.string.grade_95
+        "estimate_basis" -> R.string.estimate_basis
+        "basis_measured" -> R.string.basis_measured
+        "basis_reference" -> R.string.basis_reference
+        "basis_custom" -> R.string.basis_custom
+        "basis_unknown" -> R.string.basis_unknown
+        "estimate_not_expense" -> R.string.estimate_not_expense
+        "legacy_estimate" -> R.string.legacy_estimate
+        "automatic_cost" -> R.string.automatic_cost
+        "unknown_engine_explanation" -> R.string.unknown_engine_explanation
+        "fuel_price_verified" -> R.string.fuel_price_verified
+        "consumption_basis" -> R.string.consumption_basis
+        "engine_unknown" -> R.string.engine_unknown
+        "engine_lancer_16_manual" -> R.string.engine_lancer_16_manual
+        "engine_lancer_20_cvt" -> R.string.engine_lancer_20_cvt
+        "engine_custom" -> R.string.engine_custom
+        "prefer_measured" -> R.string.prefer_measured
+        "reference_explanation" -> R.string.reference_explanation
+        "invalid_cost_settings" -> R.string.invalid_cost_settings
+        "save_cost_settings" -> R.string.save_cost_settings
+        "bundled_map_ready" -> R.string.bundled_map_ready
+        "online_map_optional" -> R.string.online_map_optional
+        "offline_default_explanation" -> R.string.offline_default_explanation
+        "comparison_faster" -> R.string.comparison_faster
+        "comparison_slower" -> R.string.comparison_slower
+        "comparison_equal" -> R.string.comparison_equal
+        "estimated_consumption_km" -> R.string.estimated_consumption_km
+        "estimated_cost_km" -> R.string.estimated_cost_km
+        "liters_per_km" -> R.string.liters_per_km
         else -> error("Unknown UI text resource: $key")
     }

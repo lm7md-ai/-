@@ -1,11 +1,12 @@
 package sa.rihla.data
 
 import androidx.room.withTransaction
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import sa.rihla.core.*
 
-class JourneyRepository(private val db: JourneyDatabase) {
+class JourneyRepository(private val db: JourneyDatabase, private val settings: Settings) {
     val dao = db.dao()
     private val engine = TrackingEngine()
     private val lock = Mutex()
@@ -14,11 +15,46 @@ class JourneyRepository(private val db: JourneyDatabase) {
         lock.withLock {
             db.withTransaction {
                 dao.active()?.id
-                    ?: dao.insert(Outing(startedAt = startedAt, automatic = automatic)).also {
+                    ?: createOuting(startedAt, automatic).also {
                         dao.activate(ActiveSlot(outingId = it))
                     }
             }
         }
+
+    private suspend fun createOuting(startedAt: Long, automatic: Boolean): Long {
+        val preferences = settings.flow.first()
+        val expenses = dao.expenseRecords().associateBy { it.id }
+        val economy =
+            if (preferences.useMeasured)
+                fuelEconomy(
+                    dao.fuelRecords().mapNotNull { f ->
+                        expenses[f.expenseId]?.let { e ->
+                            Fill(
+                                f.createdAt,
+                                e.amountHalala,
+                                f.litersMl,
+                                f.full,
+                                f.trackedMeters,
+                                f.reliable,
+                            )
+                        }
+                    }
+                )
+            else null
+        val profile =
+            consumptionProfile(preferences.engine, preferences.customConsumptionMl, economy)
+        return dao.insert(
+            Outing(
+                startedAt = startedAt,
+                automatic = automatic,
+                fuelPriceHalala = preferences.fuelPriceHalala,
+                consumptionMinMl = profile.minMlPer100Km,
+                consumptionMaxMl = profile.maxMlPer100Km,
+                estimateSource = profile.source,
+                fuelGrade = preferences.fuelGrade,
+            )
+        )
+    }
 
     fun area(p: SavedPlace?) = p?.let {
         Area(

@@ -2,6 +2,10 @@
 
 A native, Arabic-first, local-first personal driving journal for one Mitsubishi Lancer 2016. The existing website in the repository root is independent of this Android project.
 
+Version 1.1 bundles a ready-to-use Jeddah–Makkah offline map, displays durations
+as hours/minutes/seconds, and estimates trip fuel costs using saved Saudi fuel
+prices and either personal consumption or an explicitly labeled reference range.
+
 ## Build and run
 
 Requirements: JDK 17 or newer with `javac`, Android SDK platform 37.2 and build-tools 37.0.0. Open this directory in Android Studio, let Gradle sync, and run on an Android 8+ device. Automatic recognition requires Google Play Services; manual recording has an Android GPS fallback.
@@ -31,9 +35,9 @@ Automatic mode registers IN_VEHICLE transitions plus low-power activity updates 
 
 Manual start is available from the foreground with precise location. GPS samples arrive approximately every five seconds during driving, and every thirty seconds after a confirmed stop. An ongoing system notification opens the app or ends the outing. No other notifications are scheduled.
 
-The reducer rejects inaccurate samples (>60m), invalid/nonmonotonic timestamps, and implied speeds above 65m/s. Distance uses accepted significant movement samples, not a directions service or the straight-line origin/destination distance. Gaps longer than 90 seconds break the displayed polyline and do not invent distance. Missing driving GPS makes consumption estimates unavailable. A phone left stationary after a confirmed stop does not infer missing driving.
+The reducer rejects inaccurate samples (>60m), invalid/nonmonotonic timestamps, and implied speeds above 65m/s. Distance uses accepted significant movement samples, not a directions service or the straight-line origin/destination distance. Gaps longer than 90 seconds break the displayed polyline and do not invent distance. Missing driving GPS invalidates affected personal consumption intervals; reference cost estimates still apply to the recorded distance only. A phone left stationary after a confirmed stop does not infer missing driving.
 
-A stop requires remaining within approximately 50 meters for three minutes. Stop arrival is backdated to the start of that stationary period. Ordinary lights and brief congestion do not create stops. A confirmed stop stays part of the same outing, even for hours. Renewed motion closes the stop and starts another driving segment.
+A stop requires remaining within approximately 50 meters for three minutes. Stop arrival is backdated to the start of that stationary period. Ordinary lights and brief congestion do not create stops. A confirmed stop stays part of the same outing, even for hours. Renewed motion closes the stop and starts another driving segment. Confirmation rolls back only stationary time actually credited to driving, so a GPS gap cannot erase previous driving time. All duration displays show hours, minutes, and seconds; university exit grace uses the provisional departure time consistently.
 
 Home return requires a prior confirmed departure outside the saved area, low motion, location inside the circle including accuracy, and five minutes of continuous sampled dwell. A long GPS gap resets home dwell. Driving past home never triggers completion. Manual end also works away from home.
 
@@ -62,7 +66,9 @@ The documentation website was blocked by this cloud instance's egress policy; th
 
 ## Maps, policies, and offline use
 
-The map renders actual recorded points, start/end/current-last-fix markers, stop markers, and saved circle/polygon boundaries. A missing basemap still leaves the route and overlays available. No route coordinates are uploaded. Online tile requests reveal the viewed region to the map host; the onboarding screen explains this.
+The map renders actual recorded points, start/end/current-last-fix markers, stop markers, and saved circle/polygon boundaries. Version 1.1 includes a **54 MiB raster MBTiles basemap** covering Jeddah, Makkah, Al-Abdiyyah and the connecting region (20,321 PNG tiles). It is copied from the APK to private storage on first use without a connection. See [map source, coverage, licensing and rebuild instructions](maps/README.md). No route coordinates are uploaded.
+
+Online maps are **off by default**. Core tracking, maps within this region, calculations, settings, expenses, and history function offline from first launch. Imported user maps take priority, followed by the bundled map (including parent-tile overzoom), then cache. Only an explicit online-map setting enables interactive network tile requests outside local coverage. The renderer respects screen density for readable map labels and fits the route to the real viewport.
 
 Online source: HTTPS `tile.openstreetmap.org`, © OpenStreetMap contributors. Attribution is drawn visibly on the map and repeated with its copyright URL below it. Only visible tiles are requested, with an identifying application User-Agent, modest concurrency, and a persistent minimum seven-day cache. Public tiles provide no SLA and may block access. The provider interface permits replacement.
 
@@ -70,7 +76,7 @@ The policy was inspected from the official OpenStreetMap operations working-grou
 https://github.com/openstreetmap/owg-website/blob/master/policies/tiles.md
 https://operations.osmfoundation.org/policies/tiles/
 
-There is **no download-region or bulk-prefetch feature against OSM public servers**. Import a legally obtained raster MBTiles file using Android's document picker, acknowledge offline-use rights, and enter the provider's attribution. The importer checks SQLite integrity, format (PNG/JPEG), and decodable tile data before installing it privately. Vector/PBF MBTiles are not supported. The offline source uses MBTiles TMS row ordering and falls back to ordinary online/cached tiles for missing coverage. A suitable Jeddah–Makkah package is user-supplied; none is bundled or implied to be licensed. Routes remain visible without one.
+There is **no download-region or bulk-prefetch feature against OSM public servers**. The bundled map was rendered locally from the Geofabrik OSM extract dated 12 October 2026; its clipped derived geometry database is supplied under ODbL. You can also import a legally obtained raster MBTiles file using Android's document picker, acknowledge offline-use rights, and enter the provider's attribution. The importer checks SQLite integrity, format (PNG/JPEG), and decodable tile data before installing it privately. Vector/PBF MBTiles are not supported. Outside saved coverage, routes remain visible and optional online maps can fill the basemap.
 
 ## Database and privacy
 
@@ -78,7 +84,7 @@ Room tables: outings (persistent reducer state), active_slot, route points (inde
 
 Outing deletion cascades route/events and clears expense links, preserving actual money spent. Fuel estimates that predate a deletion are invalidated, preventing a changed distance baseline from producing plausible but incorrect results. Full deletion stops tracking/detection, removes all Room data, resets preferences, and deletes imported tiles/cache. There is no coordinate logging or backup/sync integration. Android backup is disabled, and Android 12+ extraction rules exclude app data from cloud backup and device transfer.
 
-Exported Room schemas 1 and 2 are retained in `app/schemas`. The explicit 1→2 migration adds the outing end-time index and GPS uncertainty flag without deleting rows (legacy gaps are conservatively flagged). There is no destructive migration fallback. Future versions must increase the schema version and supply explicit tested migrations; an unsupported upgrade fails instead of erasing data.
+Exported Room schemas 1–3 are retained in `app/schemas`. The explicit 1→2 migration adds the outing end-time index and GPS uncertainty flag. The 2→3 migration adds saved trip fuel-price/consumption/source fields and the stationary-time credit counter without deleting rows. Legacy outings are explicitly marked as lacking archived cost inputs. There is no destructive migration fallback.
 
 ## Spending and fuel
 
@@ -90,7 +96,15 @@ Between successive full tanks, the initial tank's liters are excluded. All subse
 - L/100km = added liters / recorded kilometers × 100
 - SAR/km = interval fuel cost / recorded kilometers
 
-Zero distance, insufficient full tanks, or detected unreliable intervals display an insufficient-data message. This is a personal estimate, conditional on recording **all** driving and fills; undetected unrecorded driving cannot be mathematically recovered. No manufacturer's engine-specific value is used. Fuel efficiency is cumulative across completed intervals, clearly labeled, while spending follows the selected period.
+Zero distance, insufficient full tanks, or detected unreliable intervals display an insufficient-data message for personal consumption. This is conditional on recording **all** driving and fills; undetected unrecorded driving cannot be recovered. Fuel efficiency is cumulative across completed intervals, clearly labeled, while spending follows the selected period.
+
+## Automatic fuel-cost estimates
+
+See [the researched sources and assumptions](docs/FUEL_RESEARCH.md). Aramco's October 2026 retail prices were checked on 13 October: PG91 **2.18 SAR/L**, PG95 **2.33 SAR/L**. Both are saved offline and editable.
+
+The owner's engine/transmission is unknown. Initial estimates therefore use an explicitly labeled **reference range** of 5.5–7.8 L/100 km (0.055–0.078 L/km), based on different international Lancer variants covering 2016. This is not a certified rating or a guaranteed real-world consumption range for the owner's car. Settings lets the owner select the exact researched manual/CVT variant or supply a custom value. Valid personal full-tank consumption is preferred when available.
+
+Trip estimates use recorded kilometers × consumption × selected price. Estimates are shown live, in trip detail, monthly/all-period statistics, and the vehicle dashboard, separately from actual paid expenses. They never create fictitious expenses or count fuel fills twice. New outings archive their inputs at start; changing prices later does not reprice them. Old outings use current inputs with an explicit label. Fuel-entry forms prefill the selected price and provide PG91/PG95 switches while retaining manual price entry.
 
 ## Statistics and calendar semantics
 
@@ -100,4 +114,4 @@ Outing metrics belong to the outing's **start date**; expenses belong to their o
 
 ## Verification
 
-Seventeen lightweight unit tests cover realistic automatic-start evidence, highway distance, noise/jump rejection, traffic lights, multi-hour parking, home drive-by/dwell, university reentry/de-duplication, outside-home starts, tunnel gaps, deterministic recovery, polygons, decimal expense totals, full-tank/partial-fill formulas, insufficient fuel, and Saudi period boundaries. Four real SQLite checks also verify the active-slot constraint, the schema migration, and deletion integrity. Build/lint results and remaining device checks are recorded in `VERIFICATION.md`.
+Twenty-six lightweight unit tests cover tracking transitions, GPS filtering, fuel formulas, duration carries, Saudi prices, automatic cost ranges/rounding, archived cost stability, and the stop-after-GPS-gap regression. SQLite checks verify both migrations and deletion integrity. Offline-map checks validate all 20,321 PNG tiles and representative regional coverage without any network access. Build/lint results and remaining device checks are recorded in `VERIFICATION.md`.

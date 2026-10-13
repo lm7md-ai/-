@@ -3,7 +3,7 @@ android {
  namespace = "sa.rihla"; compileSdk = 37
  compileSdkMinor = 2
  buildToolsVersion = "37.0.0"
- defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 1; versionName = "1.0" }
+ defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 2; versionName = "1.1" }
  bundle { language { enableSplit = false } }
  buildFeatures { compose = true }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

@@ -55,7 +55,19 @@ fun stamp(t: Long) =
     DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Arabic)
         .format(Instant.ofEpochMilli(t).atZone(SaudiZone))
 
-fun duration(ms: Long) = num(ms.coerceAtLeast(0) / 3600000.0, 2)
+@Composable
+fun duration(ms: Long): String {
+    val p = durationParts(ms)
+    val hours = tr("hours")
+    val minutes = tr("minutes")
+    val seconds = tr("seconds")
+    return buildList {
+            if (p.hours > 0) add(num(p.hours.toDouble(), 0) + " " + hours)
+            if (p.hours > 0 || p.minutes > 0) add(num(p.minutes.toDouble(), 0) + " " + minutes)
+            add(num(p.seconds.toDouble(), 0) + " " + seconds)
+        }
+        .joinToString(" · ")
+}
 
 @Composable
 fun Heading(key: String) {
@@ -294,9 +306,7 @@ fun OutingCard(o: Outing, now: Long, onClick: () -> Unit) {
                     " " +
                     tr("km") +
                     " · " +
-                    duration((o.endedAt ?: now) - o.startedAt) +
-                    " " +
-                    tr("hours")
+                    duration((o.endedAt ?: now) - o.startedAt)
             )
             if (o.endedAt == null) Text(tr("active"), color = MaterialTheme.colorScheme.primary)
         }

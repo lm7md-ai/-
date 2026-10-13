@@ -20,24 +20,74 @@ interface TileProvider {
 }
 
 class HybridTiles(private val c: Context) : TileProvider {
+    @Volatile var onlineEnabled = false
+
+    private fun offlineTile(file: File, z: Int, x: Int, y: Int): ByteArray? {
+        if (!file.exists()) return null
+        return try {
+            SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                for (level in z downTo 7) {
+                    val factor = 1 shl (z - level)
+                    val parentX = x / factor
+                    val parentY = y / factor
+                    val data =
+                        db.rawQuery(
+                                "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
+                                arrayOf(
+                                    level.toString(),
+                                    parentX.toString(),
+                                    ((1 shl level) - 1 - parentY).toString(),
+                                ),
+                            )
+                            .use { if (it.moveToFirst()) it.getBlob(0) else null } ?: continue
+                    if (level == z) return data
+                    val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size) ?: return null
+                    val size = (bitmap.width / factor).coerceAtLeast(1)
+                    val cropped =
+                        Bitmap.createBitmap(
+                            bitmap,
+                            ((x % factor) * bitmap.width / factor).coerceAtMost(
+                                bitmap.width - size
+                            ),
+                            ((y % factor) * bitmap.height / factor).coerceAtMost(
+                                bitmap.height - size
+                            ),
+                            size,
+                            size,
+                        )
+                    val scaled = Bitmap.createScaledBitmap(cropped, 256, 256, true)
+                    val bytes = java.io.ByteArrayOutputStream()
+                    scaled.compress(Bitmap.CompressFormat.PNG, 100, bytes)
+                    if (scaled !== cropped) scaled.recycle()
+                    if (cropped !== bitmap) cropped.recycle()
+                    bitmap.recycle()
+                    return bytes.toByteArray()
+                }
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     override fun load(z: Int, x: Int, y: Int): ByteArray? {
         val offline = File(c.filesDir, "offline.mbtiles")
-        if (offline.exists())
-            try {
-                SQLiteDatabase.openDatabase(offline.path, null, SQLiteDatabase.OPEN_READONLY).use {
-                    db ->
-                    db.rawQuery(
-                            "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
-                            arrayOf(z.toString(), x.toString(), ((1 shl z) - 1 - y).toString()),
-                        )
-                        .use { if (it.moveToFirst()) return it.getBlob(0) }
+        offlineTile(offline, z, x, y)?.let {
+            return it
+        }
+        runCatching { OfflineMapStore.bundled(c) }
+            .getOrNull()
+            ?.let { bundled ->
+                offlineTile(bundled, z, x, y)?.let {
+                    return it
                 }
-            } catch (_: Exception) {}
+            }
         val dir = File(c.filesDir, "tiles").apply { mkdirs() }
         val file = File(dir, "$z-$x-$y.png")
         val expires = File(dir, "$z-$x-$y.expiry")
         val expiry = expires.takeIf { it.exists() }?.readText()?.toLongOrNull() ?: 0
         if (file.exists() && expiry > System.currentTimeMillis()) return file.readBytes()
+        if (!onlineEnabled) return if (file.exists()) file.readBytes() else null
         return try {
             val connection =
                 URL("https://tile.openstreetmap.org/$z/$x/$y.png").openConnection()
@@ -84,7 +134,16 @@ class HybridTiles(private val c: Context) : TileProvider {
 }
 
 class RouteMapView(c: Context) : View(c) {
-    private val provider: TileProvider = HybridTiles(c)
+    private val provider = HybridTiles(c)
+
+    fun online(enabled: Boolean) {
+        if (provider.onlineEnabled != enabled) {
+            provider.onlineEnabled = enabled
+            failed.clear()
+            invalidate()
+        }
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(2))
     private val tiles = android.util.LruCache<String, Bitmap>(80)
     private val loading = mutableSetOf<String>()
@@ -93,9 +152,11 @@ class RouteMapView(c: Context) : View(c) {
     var events: List<JourneyEvent> = emptyList()
     var places: List<SavedPlace> = emptyList()
     var selected: Pair<Double, Double>? = null
+    var lastSelection: Pair<Double, Double>? = null
     var polygonDraft: List<Pair<Double, Double>> = emptyList()
     var onPick: ((Double, Double) -> Unit)? = null
     private var zoom = 11
+    private val tilePixels = 256.0 * resources.displayMetrics.density
     private var lat = 21.55
     private var lon = 39.6
     private var centered = false
@@ -147,7 +208,7 @@ class RouteMapView(c: Context) : View(c) {
                         zoom = (zoom + 1).coerceAtMost(18)
                         factor = 1f
                     } else if (factor < 0.7f) {
-                        zoom = (zoom - 1).coerceAtLeast(3)
+                        zoom = (zoom - 1).coerceAtLeast(7)
                         factor = 1f
                     }
                     invalidate()
@@ -164,27 +225,36 @@ class RouteMapView(c: Context) : View(c) {
     }
 
     fun fit() {
-        if (points.isNotEmpty() && !centered) {
-            lat = points.map { it.latitude }.average()
-            lon = points.map { it.longitude }.average()
-            val span =
-                max(
-                    points.maxOf { it.latitude } - points.minOf { it.latitude },
-                    points.maxOf { it.longitude } - points.minOf { it.longitude },
-                )
-            zoom = if (span > 0.1) 9 else 14
+        if (points.isNotEmpty() && !centered && width > 0 && height > 0) {
+            val south = points.minOf { it.latitude }
+            val north = points.maxOf { it.latitude }
+            val west = points.minOf { it.longitude }
+            val east = points.maxOf { it.longitude }
+            lat = (south + north) / 2
+            lon = (west + east) / 2
+            for (level in 16 downTo 7) {
+                zoom = level
+                val a = world(north, west)
+                val b = world(south, east)
+                if (b.first - a.first <= width * .8 && b.second - a.second <= height * .8) break
+            }
             centered = true
         }
     }
 
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        fit()
+    }
+
     private fun world(a: Double, b: Double): Pair<Double, Double> {
-        val n = 256.0 * (1 shl zoom)
+        val n = tilePixels * (1 shl zoom)
         val r = a.coerceIn(-85.0, 85.0) * PI / 180
         return ((b + 180) / 360 * n) to ((1 - ln(tan(r) + 1 / cos(r)) / PI) / 2 * n)
     }
 
     private fun coordinate(x: Double, y: Double): Pair<Double, Double> {
-        val n = 256.0 * (1 shl zoom)
+        val n = tilePixels * (1 shl zoom)
         return (atan(sinh(PI * (1 - 2 * y / n))) * 180 / PI) to (x / n * 360 - 180)
     }
 
@@ -213,17 +283,18 @@ class RouteMapView(c: Context) : View(c) {
         val left = center.first - width / 2
         val top = center.second - height / 2
         var drawn = false
-        for (x in floor(left / 256).toInt()..floor((left + width) / 256).toInt()) for (y in
-            floor(top / 256).toInt()..floor((top + height) / 256).toInt()) {
+        for (x in
+            floor(left / tilePixels).toInt()..floor((left + width) / tilePixels).toInt()) for (y in
+            floor(top / tilePixels).toInt()..floor((top + height) / tilePixels).toInt()) {
             if (x !in 0 until (1 shl zoom) || y !in 0 until (1 shl zoom)) continue
             val key = "$zoom/$x/$y"
             val bitmap = tiles.get(key)
             if (bitmap != null) {
                 destinationRect.set(
-                    (x * 256 - left).toFloat(),
-                    (y * 256 - top).toFloat(),
-                    ((x + 1) * 256 - left).toFloat(),
-                    ((y + 1) * 256 - top).toFloat(),
+                    (x * tilePixels - left).toFloat(),
+                    (y * tilePixels - top).toFloat(),
+                    ((x + 1) * tilePixels - left).toFloat(),
+                    ((y + 1) * tilePixels - top).toFloat(),
                 )
                 canvas.drawBitmap(bitmap, null, destinationRect, paint)
                 drawn = true
@@ -285,7 +356,8 @@ class RouteMapView(c: Context) : View(c) {
                 canvas.drawPath(path, paint)
             } else {
                 val radius =
-                    (p.radius / (156543.03392 * cos(p.latitude * PI / 180) / (1 shl zoom)))
+                    (p.radius / (156543.03392 * cos(p.latitude * PI / 180) / (1 shl zoom)) *
+                            resources.displayMetrics.density)
                         .toFloat()
                 canvas.drawCircle(xy.first, xy.second, radius, paint)
             }
@@ -336,6 +408,11 @@ fun RouteMap(
     polygon: List<Pair<Double, Double>> = emptyList(),
     onPick: ((Double, Double) -> Unit)? = null,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val preferences by remember {
+        (context.applicationContext as sa.rihla.RihlaApp).settings.flow
+    }
+        .collectAsState(initial = sa.rihla.data.Preferences())
     AndroidView(
         factory = { RouteMapView(it) },
         modifier = modifier,
@@ -346,8 +423,12 @@ fun RouteMap(
             v.selected = selected
             v.polygonDraft = polygon
             v.onPick = onPick
+            v.online(preferences.onlineMaps)
             v.fit()
-            if (points.isEmpty() && selected != null) v.center(selected.first, selected.second)
+            if (points.isEmpty() && selected != null && v.lastSelection != selected) {
+                v.center(selected.first, selected.second)
+                v.lastSelection = selected
+            }
             v.invalidate()
         },
     )

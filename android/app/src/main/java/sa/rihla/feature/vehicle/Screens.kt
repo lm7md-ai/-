@@ -32,7 +32,15 @@ fun VehicleScreen(data: ScreenData) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Heading("car_name")
-            MetricsList(metrics(data, periodBounds(Period.ALL)))
+            val m = metrics(data, periodBounds(Period.ALL))
+            MetricsList(m)
+            CostPerKilometer(data)
+            val estimated = estimateTotals(data.outings, data.settings, m.economy)
+            Metric(
+                "estimated_fuel_cost",
+                numberRange(estimated.first / 100.0, estimated.second / 100.0) + " " + tr("sar"),
+            )
+            Text(tr("estimate_not_expense"))
         }
     }
 }

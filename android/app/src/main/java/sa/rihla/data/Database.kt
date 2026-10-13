@@ -12,6 +12,11 @@ data class Outing(
     val automatic: Boolean = false,
     val automaticEnd: Boolean = false,
     val classification: String = "OTHER",
+    @ColumnInfo(defaultValue = "0") val fuelPriceHalala: Long = 0,
+    @ColumnInfo(defaultValue = "0") val consumptionMinMl: Long = 0,
+    @ColumnInfo(defaultValue = "0") val consumptionMaxMl: Long = 0,
+    @ColumnInfo(defaultValue = "'UNKNOWN'") val estimateSource: String = "UNKNOWN",
+    @ColumnInfo(defaultValue = "'91'") val fuelGrade: String = "91",
     @Embedded val state: EngineState = EngineState(),
 )
 
@@ -179,6 +184,10 @@ interface JourneyDao {
     @Query("SELECT MAX(createdAt) FROM fuel WHERE createdAt<:time")
     suspend fun lastFuelTime(time: Long): Long?
 
+    @Query("SELECT * FROM fuel ORDER BY createdAt") suspend fun fuelRecords(): List<FuelFillUp>
+
+    @Query("SELECT * FROM expenses") suspend fun expenseRecords(): List<Expense>
+
     @Query(
         "SELECT EXISTS(SELECT 1 FROM points WHERE uncertainGap=1 AND recordedAt>:start AND recordedAt<=:end)"
     )
@@ -217,7 +226,7 @@ interface JourneyDao {
             Expense::class,
             FuelFillUp::class,
         ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class JourneyDatabase : RoomDatabase() {
@@ -230,5 +239,19 @@ val MIGRATION_1_2 =
             db.execSQL("CREATE INDEX IF NOT EXISTS index_outings_endedAt ON outings (endedAt)")
             db.execSQL("ALTER TABLE points ADD COLUMN uncertainGap INTEGER NOT NULL DEFAULT 0")
             db.execSQL("UPDATE points SET uncertainGap=breakBefore")
+        }
+    }
+
+val MIGRATION_2_3 =
+    object : androidx.room.migration.Migration(2, 3) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE outings ADD COLUMN stillDrivingMs INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE outings ADD COLUMN fuelPriceHalala INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE outings ADD COLUMN consumptionMinMl INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE outings ADD COLUMN consumptionMaxMl INTEGER NOT NULL DEFAULT 0")
+            db.execSQL(
+                "ALTER TABLE outings ADD COLUMN estimateSource TEXT NOT NULL DEFAULT 'UNKNOWN'"
+            )
+            db.execSQL("ALTER TABLE outings ADD COLUMN fuelGrade TEXT NOT NULL DEFAULT '91'")
         }
     }

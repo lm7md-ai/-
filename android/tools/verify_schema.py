@@ -9,6 +9,7 @@ root = Path(__file__).resolve().parents[1]
 schemas = root / 'app/schemas/sa.rihla.data.JourneyDatabase'
 v1 = json.loads((schemas / '1.json').read_text())['database']
 v2 = json.loads((schemas / '2.json').read_text())['database']
+v3 = json.loads((schemas / '3.json').read_text())['database']
 db = sqlite3.connect(':memory:')
 db.execute('PRAGMA foreign_keys=ON')
 for entity in v1['entities']:
@@ -41,8 +42,8 @@ else:
 print('PASS: singleton active-slot constraint')
 
 source = (root / 'app/src/main/java/sa/rihla/data/Database.kt').read_text()
-migration = source[source.index('val MIGRATION_1_2'):]
-for sql in re.findall(r'db.execSQL\("([^"\n]+)"\)', migration):
+migration = source[source.index('val MIGRATION_1_2'):source.index('val MIGRATION_2_3')]
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', migration):
     db.execute(sql)
 assert db.execute('SELECT startedAt FROM outings WHERE id=1').fetchone()[0] == 1234
 assert db.execute('SELECT uncertainGap FROM points WHERE id=1').fetchone()[0] == 1
@@ -53,6 +54,16 @@ for entity in v2['entities']:
     indexes = {row[1] for row in db.execute(f'PRAGMA index_list(`{entity["tableName"]}`)')}
     assert all(i['name'] in indexes for i in entity.get('indices', []))
 print('PASS: migration preserves rows and matches exported schema 2')
+
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_2_3'):]):
+    db.execute(sql)
+for entity in v3['entities']:
+    actual = {row[1]: (row[2], bool(row[3])) for row in db.execute(f'PRAGMA table_info(`{entity["tableName"]}`)')}
+    expected = {f['columnName']: (f['affinity'], f.get('notNull', False)) for f in entity['fields']}
+    assert actual == expected, entity['tableName']
+assert db.execute('SELECT startedAt,fuelPriceHalala,consumptionMinMl,estimateSource FROM outings').fetchone() == (1234, 0, 0, 'UNKNOWN')
+assert db.execute('SELECT amountHalala FROM expenses').fetchone()[0] == 12345
+print('PASS: migration 2→3 preserves existing outings/spending and marks missing cost snapshots')
 
 db.execute('DELETE FROM outings WHERE id=1')
 for table in ('points', 'events', 'active_slot'):

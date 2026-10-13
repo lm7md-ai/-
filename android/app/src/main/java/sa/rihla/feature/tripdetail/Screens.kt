@@ -52,22 +52,25 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
             Metric("distance", num(o.state.meters / 1000) + " " + tr("km"))
             Metric(
                 "total_time",
-                duration((o.endedAt ?: data.now) - o.startedAt) + " " + tr("hours"),
+                duration((o.endedAt ?: data.now) - o.startedAt),
             )
-            Metric("driving_time", duration(o.state.drivingMs) + " " + tr("hours"))
+            Metric("driving_time", duration(o.state.drivingMs))
             Metric(
                 "stopped_time",
                 duration(
                     o.state.stoppedMs +
                         if (o.state.stopStart > 0) data.now - o.state.stopStart else 0
-                ) + " " + tr("hours"),
+                ),
             )
             Metric(
                 "university_time",
                 duration(
                     o.state.universityMs +
-                        if (o.state.visitConfirmed) data.now - o.state.universityArrival else 0
-                ) + " " + tr("hours"),
+                        if (o.state.visitConfirmed)
+                            (o.state.universityExit.takeIf { it > 0 } ?: data.now) -
+                                o.state.universityArrival
+                        else 0
+                ),
             )
             Metric(
                 "total_spending",
@@ -77,6 +80,7 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
                 ) + " " + tr("sar"),
             )
             if (o.state.gapMs > 0) Text(tr("gap_notice"))
+            EstimatedCostCard(o, data)
         }
         item {
             Heading("classification")
@@ -93,7 +97,7 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
         items(events.filter { it.type != "DRIVE" }) { e ->
             Metric(
                 if (e.type == "VISIT") "visit" else "stop",
-                stamp(e.startedAt) + " · " + duration(e.endedAt - e.startedAt) + " " + tr("hours"),
+                stamp(e.startedAt) + " · " + duration(e.endedAt - e.startedAt),
             )
         }
         item {

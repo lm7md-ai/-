@@ -57,3 +57,4 @@ if [ ! -f local.properties ]; then printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local
 ./gradlew --no-daemon --max-workers=2 assembleDebug testDebugUnitTest lintDebug
 
 python3 tools/verify_schema.py
+python3 tools/verify_offline_map.py

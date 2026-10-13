@@ -79,7 +79,8 @@ fun ExpenseDialog(
     var category by remember { mutableStateOf("FUEL") }
     var amount by remember { mutableStateOf("") }
     var liters by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf("") }
+    var price by remember { mutableStateOf((data.settings.fuelPriceHalala / 100.0).toString()) }
+    var grade by remember { mutableStateOf(data.settings.fuelGrade) }
     var full by remember { mutableStateOf(false) }
     var time by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var outing by remember { mutableStateOf(initialOuting) }
@@ -100,6 +101,18 @@ fun ExpenseDialog(
                 }
                 FormField("amount", amount, { amount = it })
                 if (category == "FUEL") {
+                    Row {
+                        listOf("91", "95").forEach { g ->
+                            FilterChip(
+                                grade == g,
+                                {
+                                    grade = g
+                                    price = (saudiPrice(g) / 100.0).toString()
+                                },
+                                label = { Text(tr("grade_" + g)) },
+                            )
+                        }
+                    }
                     Text(tr("expense_hint"))
                     FormField("liters", liters, { liters = it })
                     FormField("price", price, { price = it })

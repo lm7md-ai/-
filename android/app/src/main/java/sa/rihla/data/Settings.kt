@@ -12,6 +12,12 @@ data class Preferences(
     val auto: Boolean = false,
     val onboarded: Boolean = false,
     val offlineAttribution: String = "",
+    val onlineMaps: Boolean = false,
+    val fuelGrade: String = "91",
+    val fuelPriceHalala: Long = 218,
+    val engine: String = "UNKNOWN",
+    val customConsumptionMl: Long = 8000,
+    val useMeasured: Boolean = true,
 )
 
 class Settings(private val context: Context) {
@@ -22,6 +28,12 @@ class Settings(private val context: Context) {
                 it[booleanPreferencesKey("auto")] ?: false,
                 it[booleanPreferencesKey("onboarded")] ?: false,
                 it[stringPreferencesKey("attribution")] ?: "",
+                it[booleanPreferencesKey("online_maps")] ?: false,
+                it[stringPreferencesKey("fuel_grade")] ?: "91",
+                it[longPreferencesKey("fuel_price")] ?: 218,
+                it[stringPreferencesKey("engine")] ?: "UNKNOWN",
+                it[longPreferencesKey("custom_consumption")] ?: 8000,
+                it[booleanPreferencesKey("use_measured")] ?: true,
             )
         }
 
@@ -39,6 +51,28 @@ class Settings(private val context: Context) {
 
     suspend fun attribution(value: String) {
         context.store.edit { it[stringPreferencesKey("attribution")] = value }
+    }
+
+    suspend fun onlineMaps(value: Boolean) {
+        context.store.edit { it[booleanPreferencesKey("online_maps")] = value }
+    }
+
+    suspend fun costSettings(
+        grade: String,
+        price: Long,
+        engine: String,
+        consumption: Long,
+        measured: Boolean,
+    ) {
+        require(grade in listOf("91", "95") && price in 1..10000 && consumption in 1000..30000)
+        require(engine in listOf("UNKNOWN", "LANCER_16_MANUAL", "LANCER_20_CVT", "CUSTOM"))
+        context.store.edit {
+            it[stringPreferencesKey("fuel_grade")] = grade
+            it[longPreferencesKey("fuel_price")] = price
+            it[stringPreferencesKey("engine")] = engine
+            it[longPreferencesKey("custom_consumption")] = consumption
+            it[booleanPreferencesKey("use_measured")] = measured
+        }
     }
 
     suspend fun clear() {

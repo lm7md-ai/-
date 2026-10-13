@@ -44,12 +44,12 @@ fun MetricsList(m: Metrics) {
     Metric("university_trips", num(m.universityTrips.toDouble(), 0))
     Metric("visits", num(m.visits.toDouble(), 0))
     Metric("distance", num(m.meters / 1000) + " " + tr("km"))
-    Metric("driving_time", duration(m.drivingMs) + " " + tr("hours"))
-    Metric("stopped_time", duration(m.stoppedMs) + " " + tr("hours"))
-    Metric("university_time", duration(m.universityMs) + " " + tr("hours"))
+    Metric("driving_time", duration(m.drivingMs))
+    Metric("stopped_time", duration(m.stoppedMs))
+    Metric("university_time", duration(m.universityMs))
     Metric(
         "average_visit",
-        if (m.visits > 0) duration(m.universityMs / m.visits) + " " + tr("hours") else tr("empty"),
+        if (m.visits > 0) duration(m.universityMs / m.visits) else tr("empty"),
     )
     listOf(
             "average_travel" to m.averageTravelMs,
@@ -57,7 +57,7 @@ fun MetricsList(m: Metrics) {
             "longest" to m.longestMs,
         )
         .forEach { (key, v) ->
-            Metric(key, v?.let { duration(it) + " " + tr("hours") } ?: tr("empty"))
+            Metric(key, v?.let { duration(it) } ?: tr("empty"))
         }
     Metric("fuel", num(m.fuel / 100.0, 2) + " " + tr("sar"))
     Metric("food", num(m.food / 100.0, 2) + " " + tr("sar"))
@@ -96,6 +96,20 @@ fun StatisticsScreen(data: ScreenData) {
         }
         item {
             MetricsList(m)
+            val bounds = periodBounds(period)
+            val estimated =
+                estimateTotals(
+                    data.outings.filter {
+                        it.startedAt >= bounds.first && it.startedAt < bounds.second
+                    },
+                    data.settings,
+                    m.economy,
+                )
+            Metric(
+                "estimated_fuel_cost",
+                numberRange(estimated.first / 100.0, estimated.second / 100.0) + " " + tr("sar"),
+            )
+            Text(tr("estimate_not_expense"))
             Text(tr("stats_policy"))
             if (period != Period.ALL) {
                 Heading("comparison")
@@ -111,9 +125,17 @@ fun StatisticsScreen(data: ScreenData) {
                 Metric(
                     "travel_change",
                     if (m.averageTravelMs != null && previous.averageTravelMs != null)
-                        num((m.averageTravelMs - previous.averageTravelMs) / 60000.0) +
-                            " " +
-                            tr("minutes")
+                        if (m.averageTravelMs == previous.averageTravelMs) tr("comparison_equal")
+                        else
+                            tr(
+                                if (m.averageTravelMs < previous.averageTravelMs)
+                                    "comparison_faster"
+                                else "comparison_slower"
+                            ) +
+                                " " +
+                                duration(
+                                    kotlin.math.abs(m.averageTravelMs - previous.averageTravelMs)
+                                )
                     else tr("no_comparison"),
                 )
             }

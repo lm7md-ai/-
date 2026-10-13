@@ -70,6 +70,7 @@ data class EngineState(
     val visits: Int = 0,
     val gapMs: Long = 0,
     val startedUniversity: Boolean = false,
+    val stillDrivingMs: Long = 0,
 )
 
 data class Event(
@@ -132,23 +133,35 @@ class TrackingEngine {
                 events += Event("STOP", s.stopStart, f.time, s.stillLat, s.stillLon)
                 n = n.copy(stoppedMs = s.stoppedMs + f.time - s.stopStart, segmentStart = f.time)
             } else if (!gap) n = n.copy(drivingMs = s.drivingMs + dt)
-            n = n.copy(stillSince = 0, stopStart = 0, homeSince = 0, phase = "TRACKING_DRIVING")
+            n =
+                n.copy(
+                    stillSince = 0,
+                    stillDrivingMs = 0,
+                    stopStart = 0,
+                    homeSince = 0,
+                    phase = "TRACKING_DRIVING",
+                )
         } else {
             if (s.stopStart == 0L && !gap) n = n.copy(drivingMs = s.drivingMs + dt)
             val nearby = s.stillSince > 0 && distance(s.stillLat, s.stillLon, f.lat, f.lon) <= 50
             val since = if (nearby) s.stillSince else f.time
+            val stationaryCredit =
+                if (nearby) s.stillDrivingMs + (if (s.stopStart == 0L && !gap) dt else 0L) else 0L
             n =
                 n.copy(
                     stillSince = since,
                     stillLat = if (nearby) s.stillLat else f.lat,
                     stillLon = if (nearby) s.stillLon else f.lon,
+                    stillDrivingMs = stationaryCredit,
                 )
             if (s.stopStart == 0L && f.time - since >= 180_000) {
                 events += Event("DRIVE", s.segmentStart, since)
                 n =
                     n.copy(
                         stopStart = since,
-                        drivingMs = (n.drivingMs - (f.time - since)).coerceAtLeast(0),
+                        // Roll back only time actually credited; a GPS gap must not erase previous
+                        // driving.
+                        drivingMs = (n.drivingMs - stationaryCredit).coerceAtLeast(0),
                     )
             }
             n = n.copy(phase = if (n.stopStart > 0) "TRACKING_STOPPED" else "DRIVING_DETECTED")

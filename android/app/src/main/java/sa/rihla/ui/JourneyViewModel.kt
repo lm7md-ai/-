@@ -152,6 +152,24 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
         work { app.settings.theme(value) }
     }
 
+    fun onlineMaps(value: Boolean) {
+        work { app.settings.onlineMaps(value) }
+    }
+
+    fun costSettings(
+        grade: String,
+        price: String,
+        engine: String,
+        consumption: String,
+        measured: Boolean,
+    ): Boolean {
+        val p = decimalUnits(price, 2) ?: return false
+        val c = decimalUnits(consumption, 3) ?: return false
+        if (p !in 1..10000 || c !in 1000..30000) return false
+        work { app.settings.costSettings(grade, p, engine, c, measured) }
+        return true
+    }
+
     fun automatic(value: Boolean) {
         work {
             app.settings.automatic(value)

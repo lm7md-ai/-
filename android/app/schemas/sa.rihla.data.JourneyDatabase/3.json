@@ -1,0 +1,737 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "40108bb4bdfa2361a10dc83535276a11",
+    "entities": [
+      {
+        "tableName": "outings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `automatic` INTEGER NOT NULL, `automaticEnd` INTEGER NOT NULL, `classification` TEXT NOT NULL, `fuelPriceHalala` INTEGER NOT NULL DEFAULT 0, `consumptionMinMl` INTEGER NOT NULL DEFAULT 0, `consumptionMaxMl` INTEGER NOT NULL DEFAULT 0, `estimateSource` TEXT NOT NULL DEFAULT 'UNKNOWN', `fuelGrade` TEXT NOT NULL DEFAULT '91', `phase` TEXT NOT NULL, `lastLat` REAL, `lastLon` REAL, `lastTime` INTEGER NOT NULL, `lastAccuracy` REAL NOT NULL, `meters` REAL NOT NULL, `drivingMs` INTEGER NOT NULL, `stoppedMs` INTEGER NOT NULL, `segmentStart` INTEGER NOT NULL, `stillSince` INTEGER NOT NULL, `stillLat` REAL NOT NULL, `stillLon` REAL NOT NULL, `stopStart` INTEGER NOT NULL, `homeSince` INTEGER NOT NULL, `universityArrival` INTEGER NOT NULL, `universityExit` INTEGER NOT NULL, `visitConfirmed` INTEGER NOT NULL, `startedHome` INTEGER NOT NULL, `originKnown` INTEGER NOT NULL, `leftHome` INTEGER NOT NULL, `universityCounted` INTEGER NOT NULL, `homeToUniversityMs` INTEGER NOT NULL, `universityMs` INTEGER NOT NULL, `visits` INTEGER NOT NULL, `gapMs` INTEGER NOT NULL, `startedUniversity` INTEGER NOT NULL, `stillDrivingMs` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "startedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "endedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "automatic",
+            "columnName": "automatic",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "automaticEnd",
+            "columnName": "automaticEnd",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "classification",
+            "columnName": "classification",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fuelPriceHalala",
+            "columnName": "fuelPriceHalala",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "consumptionMinMl",
+            "columnName": "consumptionMinMl",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "consumptionMaxMl",
+            "columnName": "consumptionMaxMl",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "estimateSource",
+            "columnName": "estimateSource",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'UNKNOWN'"
+          },
+          {
+            "fieldPath": "fuelGrade",
+            "columnName": "fuelGrade",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'91'"
+          },
+          {
+            "fieldPath": "state.phase",
+            "columnName": "phase",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.lastLat",
+            "columnName": "lastLat",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "state.lastLon",
+            "columnName": "lastLon",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "state.lastTime",
+            "columnName": "lastTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.lastAccuracy",
+            "columnName": "lastAccuracy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.meters",
+            "columnName": "meters",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.drivingMs",
+            "columnName": "drivingMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.stoppedMs",
+            "columnName": "stoppedMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.segmentStart",
+            "columnName": "segmentStart",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.stillSince",
+            "columnName": "stillSince",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.stillLat",
+            "columnName": "stillLat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.stillLon",
+            "columnName": "stillLon",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.stopStart",
+            "columnName": "stopStart",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.homeSince",
+            "columnName": "homeSince",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.universityArrival",
+            "columnName": "universityArrival",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.universityExit",
+            "columnName": "universityExit",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.visitConfirmed",
+            "columnName": "visitConfirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.startedHome",
+            "columnName": "startedHome",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.originKnown",
+            "columnName": "originKnown",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.leftHome",
+            "columnName": "leftHome",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.universityCounted",
+            "columnName": "universityCounted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.homeToUniversityMs",
+            "columnName": "homeToUniversityMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.universityMs",
+            "columnName": "universityMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.visits",
+            "columnName": "visits",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.gapMs",
+            "columnName": "gapMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.startedUniversity",
+            "columnName": "startedUniversity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state.stillDrivingMs",
+            "columnName": "stillDrivingMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outings_startedAt",
+            "unique": false,
+            "columnNames": [
+              "startedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outings_startedAt` ON `${TABLE_NAME}` (`startedAt`)"
+          },
+          {
+            "name": "index_outings_endedAt",
+            "unique": false,
+            "columnNames": [
+              "endedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outings_endedAt` ON `${TABLE_NAME}` (`endedAt`)"
+          }
+        ]
+      },
+      {
+        "tableName": "active_slot",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`singleton` INTEGER NOT NULL, `outingId` INTEGER NOT NULL, PRIMARY KEY(`singleton`), FOREIGN KEY(`outingId`) REFERENCES `outings`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "singleton",
+            "columnName": "singleton",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outingId",
+            "columnName": "outingId",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "singleton"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_active_slot_outingId",
+            "unique": true,
+            "columnNames": [
+              "outingId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_active_slot_outingId` ON `${TABLE_NAME}` (`outingId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "outings",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "outingId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "points",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `outingId` INTEGER NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `accuracy` REAL NOT NULL, `speed` REAL NOT NULL, `altitude` REAL NOT NULL, `bearing` REAL NOT NULL, `recordedAt` INTEGER NOT NULL, `breakBefore` INTEGER NOT NULL, `distanceDelta` REAL NOT NULL, `uncertainGap` INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(`outingId`) REFERENCES `outings`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outingId",
+            "columnName": "outingId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accuracy",
+            "columnName": "accuracy",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speed",
+            "columnName": "speed",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "altitude",
+            "columnName": "altitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bearing",
+            "columnName": "bearing",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordedAt",
+            "columnName": "recordedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "breakBefore",
+            "columnName": "breakBefore",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "distanceDelta",
+            "columnName": "distanceDelta",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uncertainGap",
+            "columnName": "uncertainGap",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_points_outingId_recordedAt",
+            "unique": true,
+            "columnNames": [
+              "outingId",
+              "recordedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_points_outingId_recordedAt` ON `${TABLE_NAME}` (`outingId`, `recordedAt`)"
+          },
+          {
+            "name": "index_points_recordedAt",
+            "unique": false,
+            "columnNames": [
+              "recordedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_points_recordedAt` ON `${TABLE_NAME}` (`recordedAt`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "outings",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "outingId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `outingId` INTEGER NOT NULL, `type` TEXT NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `confirmed` INTEGER NOT NULL, FOREIGN KEY(`outingId`) REFERENCES `outings`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outingId",
+            "columnName": "outingId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "startedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "endedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confirmed",
+            "columnName": "confirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_events_outingId_type_startedAt",
+            "unique": true,
+            "columnNames": [
+              "outingId",
+              "type",
+              "startedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_events_outingId_type_startedAt` ON `${TABLE_NAME}` (`outingId`, `type`, `startedAt`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "outings",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "outingId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "places",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`type` TEXT NOT NULL, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `radius` REAL NOT NULL, `polygon` TEXT NOT NULL, PRIMARY KEY(`type`))",
+        "fields": [
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "radius",
+            "columnName": "radius",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "polygon",
+            "columnName": "polygon",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "type"
+          ]
+        }
+      },
+      {
+        "tableName": "expenses",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `outingId` INTEGER, `category` TEXT NOT NULL, `amountHalala` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, FOREIGN KEY(`outingId`) REFERENCES `outings`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outingId",
+            "columnName": "outingId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "category",
+            "columnName": "category",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountHalala",
+            "columnName": "amountHalala",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_expenses_outingId",
+            "unique": false,
+            "columnNames": [
+              "outingId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_expenses_outingId` ON `${TABLE_NAME}` (`outingId`)"
+          },
+          {
+            "name": "index_expenses_createdAt",
+            "unique": false,
+            "columnNames": [
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_expenses_createdAt` ON `${TABLE_NAME}` (`createdAt`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "outings",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "outingId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "fuel",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `expenseId` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `litersMl` INTEGER NOT NULL, `priceHalala` INTEGER NOT NULL, `full` INTEGER NOT NULL, `trackedMeters` REAL NOT NULL, `reliable` INTEGER NOT NULL, FOREIGN KEY(`expenseId`) REFERENCES `expenses`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expenseId",
+            "columnName": "expenseId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "litersMl",
+            "columnName": "litersMl",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priceHalala",
+            "columnName": "priceHalala",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "full",
+            "columnName": "full",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackedMeters",
+            "columnName": "trackedMeters",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reliable",
+            "columnName": "reliable",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_fuel_expenseId",
+            "unique": true,
+            "columnNames": [
+              "expenseId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_fuel_expenseId` ON `${TABLE_NAME}` (`expenseId`)"
+          },
+          {
+            "name": "index_fuel_createdAt",
+            "unique": false,
+            "columnNames": [
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_fuel_createdAt` ON `${TABLE_NAME}` (`createdAt`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "expenses",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "expenseId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '40108bb4bdfa2361a10dc83535276a11')"
+    ]
+  }
+}

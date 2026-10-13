@@ -143,6 +143,7 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData) {
         Action("configure_home") { place = "HOME" }
         Action("configure_university") { place = "UNIVERSITY" }
         Text(tr("no_official_boundary"))
+        FuelCostSettings(vm, data)
         PermissionsPanel(vm)
         OfflineImport(vm, data)
         Heading("privacy")
@@ -322,6 +323,13 @@ fun OfflineImport(vm: JourneyViewModel, data: ScreenData) {
                 }
         }
     Heading("offline_map")
+    Text(tr("bundled_map_ready"))
+    Text(sa.rihla.map.OfflineMapStore.Attribution, style = MaterialTheme.typography.labelSmall)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Switch(data.settings.onlineMaps, { vm.onlineMaps(it) })
+        Text(tr("online_map_optional"))
+    }
+    Text(tr("offline_default_explanation"))
     Text(tr("offline_explanation"))
     FormField("offline_attribution", source, { source = it }, false)
     Row(verticalAlignment = Alignment.CenterVertically) {
