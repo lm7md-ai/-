@@ -51,8 +51,11 @@ fun num(v: Double, digits: Int = 1) =
 
 fun day(t: Long) = Instant.ofEpochMilli(t).atZone(SaudiZone).toLocalDate()
 
-fun stamp(t: Long) =
-    DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm", Arabic)
+fun stamp(t: Long, seconds: Boolean = false) =
+    DateTimeFormatter.ofPattern(
+            if (seconds) "d MMM yyyy · HH:mm:ss" else "d MMM yyyy · HH:mm",
+            Arabic,
+        )
         .format(Instant.ofEpochMilli(t).atZone(SaudiZone))
 
 @Composable
@@ -140,6 +143,12 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
     val data by vm.state.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    if (!data.loaded) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
     LaunchedEffect(data.active?.id) {
         if (data.active != null && TrackingService.fineAllowed(context))
             TrackingService.launch(context)

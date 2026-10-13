@@ -7,6 +7,31 @@ import sa.rihla.ui.outingEstimate
 
 class TripCostsTest {
     @Test
+    fun idleScreenStillUpdatesAtSaudiMidnightWithoutSecondTicks() {
+        val beforeMidnight = java.time.Instant.parse("2026-10-13T20:59:59.500Z").toEpochMilli()
+        assertEquals(500L, screenRefreshDelay(beforeMidnight, false))
+        assertEquals(1000L, screenRefreshDelay(beforeMidnight, true))
+        assertEquals(86400000L, screenRefreshDelay(beforeMidnight + 500, false))
+    }
+
+    @Test
+    fun confirmedAutomaticVehicleUsesExplicitProvisionalOrMeasuredConsumption() {
+        assertEquals("LANCER_16_AT", Preferences().engine)
+        assertEquals(
+            ConsumptionProfile(8000, 8000, "PROVISIONAL"),
+            consumptionProfile("LANCER_16_AT", 8000, null),
+        )
+        assertEquals(
+            ConsumptionProfile(9200, 9200, "PROVISIONAL"),
+            consumptionProfile("LANCER_16_AT", 9200, null),
+        )
+        assertEquals(
+            "MEASURED",
+            consumptionProfile("LANCER_16_AT", 8000, Economy(10.0, 10.0, .2)).source,
+        )
+    }
+
+    @Test
     fun confirmingStopAfterGpsGapDoesNotEraseDrivingTime() {
         val engine = TrackingEngine()
         var state = engine.accept(EngineState(), Fix(21.5, 39.2, 1000000, 5.0), null, null).state

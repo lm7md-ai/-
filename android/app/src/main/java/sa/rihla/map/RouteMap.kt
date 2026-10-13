@@ -13,6 +13,8 @@ import java.net.URL
 import kotlin.math.*
 import kotlinx.coroutines.*
 import sa.rihla.R
+import sa.rihla.core.StopDetails
+import sa.rihla.core.hitStop
 import sa.rihla.data.*
 
 interface TileProvider {
@@ -150,6 +152,8 @@ class RouteMapView(c: Context) : View(c) {
     private val failed = mutableMapOf<String, Long>()
     var points: List<RoutePoint> = emptyList()
     var events: List<JourneyEvent> = emptyList()
+    var stops: List<StopDetails> = emptyList()
+    var onStopPick: ((StopDetails) -> Unit)? = null
     var places: List<SavedPlace> = emptyList()
     var selected: Pair<Double, Double>? = null
     var lastSelection: Pair<Double, Double>? = null
@@ -163,6 +167,8 @@ class RouteMapView(c: Context) : View(c) {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val destinationRect = RectF()
     private val routePath = Path()
+    private var routePoints: List<RoutePoint>? = null
+    private var routeViewport: List<Double> = emptyList()
     private val areaPath = Path()
     private val gestures =
         GestureDetector(
@@ -190,6 +196,19 @@ class RouteMapView(c: Context) : View(c) {
 
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                     val p = world(lat, lon)
+                    if (onPick == null) {
+                        val stop =
+                            hitStop(stops, e.x, e.y, 24f * resources.displayMetrics.density) { a, b
+                                ->
+                                val marker = world(a, b)
+                                (marker.first - p.first + width / 2).toFloat() to
+                                    (marker.second - p.second + height / 2).toFloat()
+                            }
+                        if (stop != null) {
+                            onStopPick?.invoke(stop)
+                            return true
+                        }
+                    }
                     val coord = coordinate(p.first + e.x - width / 2, p.second + e.y - height / 2)
                     onPick?.invoke(coord.first, coord.second)
                     return true
@@ -326,11 +345,16 @@ class RouteMapView(c: Context) : View(c) {
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = 6f
         val route = routePath
-        route.reset()
-        points.forEachIndexed { i, p ->
-            val v = screen(p.latitude, p.longitude)
-            if (i == 0 || p.breakBefore) route.moveTo(v.first, v.second)
-            else route.lineTo(v.first, v.second)
+        val viewport = listOf(left, top, zoom.toDouble())
+        if (routePoints !== points || routeViewport != viewport) {
+            route.reset()
+            points.forEachIndexed { i, p ->
+                val v = screen(p.latitude, p.longitude)
+                if (i == 0 || p.breakBefore) route.moveTo(v.first, v.second)
+                else route.lineTo(v.first, v.second)
+            }
+            routePoints = points
+            routeViewport = viewport
         }
         canvas.drawPath(route, paint)
         places.forEach { p ->
@@ -384,6 +408,11 @@ class RouteMapView(c: Context) : View(c) {
         events
             .filter { it.type == "STOP" }
             .forEach { marker(it.latitude, it.longitude, Color.rgb(208, 128, 16)) }
+        stops
+            .filter { it.endedAt == null }
+            .forEach {
+                marker(it.latitude, it.longitude, Color.rgb(208, 128, 16))
+            }
         selected?.let { marker(it.first, it.second, Color.RED) }
         paint.color = Color.argb(225, 255, 255, 255)
         canvas.drawRect(0f, height - 42f, width.toFloat(), height.toFloat(), paint)
@@ -406,6 +435,8 @@ fun RouteMap(
     modifier: Modifier = Modifier,
     selected: Pair<Double, Double>? = null,
     polygon: List<Pair<Double, Double>> = emptyList(),
+    stops: List<StopDetails> = emptyList(),
+    onStopPick: ((StopDetails) -> Unit)? = null,
     onPick: ((Double, Double) -> Unit)? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -417,19 +448,28 @@ fun RouteMap(
         factory = { RouteMapView(it) },
         modifier = modifier,
         update = { v ->
+            val changed =
+                v.points != points ||
+                    v.events != events ||
+                    v.places != places ||
+                    v.selected != selected ||
+                    v.polygonDraft != polygon ||
+                    v.stops != stops
             v.points = points
             v.events = events
             v.places = places
             v.selected = selected
             v.polygonDraft = polygon
             v.onPick = onPick
+            v.stops = stops
+            v.onStopPick = onStopPick
             v.online(preferences.onlineMaps)
             v.fit()
             if (points.isEmpty() && selected != null && v.lastSelection != selected) {
                 v.center(selected.first, selected.second)
                 v.lastSelection = selected
             }
-            v.invalidate()
+            if (changed) v.invalidate()
         },
     )
 }

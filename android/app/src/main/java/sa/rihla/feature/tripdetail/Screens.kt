@@ -36,9 +36,18 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
     val events by
         remember(o.id) { vm.repo.dao.events(o.id) }.collectAsStateWithLifecycle(emptyList())
     var deleting by remember { mutableStateOf(false) }
+    val stops = remember(o, events) { stopDetails(o, events) }
+    var selectedStop by remember(o.id) { mutableStateOf<Long?>(null) }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            RouteMap(points, events, data.places, Modifier.fillMaxWidth().height(320.dp))
+            RouteMap(
+                points,
+                events,
+                data.places,
+                Modifier.fillMaxWidth().height(320.dp),
+                stops = stops,
+                onStopPick = { selectedStop = it.id },
+            )
             Text(tr("attribution"), style = MaterialTheme.typography.labelSmall)
             if (data.settings.offlineAttribution.isNotEmpty())
                 Text(data.settings.offlineAttribution, style = MaterialTheme.typography.labelSmall)
@@ -94,7 +103,18 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
                 }
             }
         }
-        items(events.filter { it.type != "DRIVE" }) { e ->
+        items(stops, key = { "stop-${it.id}" }) { stop ->
+            Card(Modifier.fillMaxWidth().clickable { selectedStop = stop.id }) {
+                Column(Modifier.padding(12.dp)) {
+                    Metric(
+                        "stop",
+                        stamp(stop.startedAt) + " · " + duration(stop.durationMs(data.now)),
+                    )
+                    Text(tr("tap_stop_details"))
+                }
+            }
+        }
+        items(events.filter { it.type == "VISIT" }) { e ->
             Metric(
                 if (e.type == "VISIT") "visit" else "stop",
                 stamp(e.startedAt) + " · " + duration(e.endedAt - e.startedAt),
@@ -107,4 +127,51 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
         }
     }
     if (deleting) Confirm("delete_confirmation", { deleting = false }) { vm.delete(o.id) }
+    stops
+        .firstOrNull { it.id == selectedStop }
+        ?.let { stop ->
+            AlertDialog(
+                onDismissRequest = { selectedStop = null },
+                title = { Text(tr("stop_details")) },
+                text = {
+                    Column(
+                        Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Metric("arrival_time", stamp(stop.startedAt, seconds = true))
+                        Metric(
+                            "departure_time",
+                            stop.endedAt?.let { stamp(it, seconds = true) } ?: tr("still_stopped"),
+                        )
+                        Metric("stopped_time", duration(stop.durationMs(data.now)))
+                        Metric("latitude", num(stop.latitude, 6))
+                        Metric("longitude", num(stop.longitude, 6))
+                        Metric("classification", tr(o.classification))
+                        val expenses =
+                            data.expenses.filter {
+                                it.outingId == o.id &&
+                                    it.createdAt >= stop.startedAt &&
+                                    it.createdAt < (stop.endedAt ?: data.now + 1)
+                            }
+                        Metric(
+                            "stop_spending",
+                            num(expenses.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
+                        )
+                        expenses.forEach {
+                            Metric(
+                                it.category.lowercase(),
+                                stamp(it.createdAt) +
+                                    " · " +
+                                    num(it.amountHalala / 100.0, 2) +
+                                    " " +
+                                    tr("sar"),
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { selectedStop = null }) { Text(tr("done")) }
+                },
+            )
+        }
 }

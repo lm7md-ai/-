@@ -5,6 +5,19 @@ import java.math.RoundingMode
 
 data class DurationParts(val hours: Long, val minutes: Long, val seconds: Long)
 
+fun screenRefreshDelay(now: Long, active: Boolean): Long {
+    if (active) return 1000
+    val midnight =
+        java.time.Instant.ofEpochMilli(now)
+            .atZone(SaudiZone)
+            .toLocalDate()
+            .plusDays(1)
+            .atStartOfDay(SaudiZone)
+            .toInstant()
+            .toEpochMilli()
+    return (midnight - now).coerceAtLeast(1)
+}
+
 fun durationParts(milliseconds: Long): DurationParts {
     val seconds = milliseconds.coerceAtLeast(0) / 1000
     return DurationParts(seconds / 3600, seconds / 60 % 60, seconds % 60)
@@ -32,6 +45,14 @@ fun consumptionProfile(
     if (engine == "CUSTOM" && customMlPer100Km in 1000..30000)
         return ConsumptionProfile(customMlPer100Km, customMlPer100Km, "CUSTOM")
     return when (engine) {
+        // No verified combined rating for this user's 4A92 + 4-speed automatic.
+        // Explicit provisional input, replaced by reliable personal fill-up measurements.
+        "LANCER_16_AT" ->
+            ConsumptionProfile(
+                customMlPer100Km.coerceIn(1000, 30000),
+                customMlPer100Km.coerceIn(1000, 30000),
+                "PROVISIONAL",
+            )
         // UNKNOWN includes the published 1.6 manual and 2.0 CVT variants, not an asserted engine.
         "LANCER_16_MANUAL" -> ConsumptionProfile(5500, 5500, "REFERENCE")
         "LANCER_20_CVT" -> ConsumptionProfile(7800, 7800, "REFERENCE")

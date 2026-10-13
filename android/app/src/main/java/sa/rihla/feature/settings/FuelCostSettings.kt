@@ -42,11 +42,11 @@ fun FuelCostSettings(vm: JourneyViewModel, data: ScreenData) {
     FormField("price", price, { price = it })
     Heading("consumption_basis")
     Column {
-        listOf("UNKNOWN", "LANCER_16_MANUAL", "LANCER_20_CVT", "CUSTOM").forEach { e ->
+        listOf("LANCER_16_AT", "CUSTOM").forEach { e ->
             FilterChip(engine == e, { engine = e }, label = { Text(tr("engine_" + e.lowercase())) })
         }
     }
-    if (engine == "CUSTOM") FormField("l_100", custom, { custom = it })
+    FormField("l_100", custom, { custom = it })
     Row(verticalAlignment = Alignment.CenterVertically) {
         Switch(measured, { measured = it })
         Text(tr("prefer_measured"))

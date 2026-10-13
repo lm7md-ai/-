@@ -207,5 +207,16 @@ fun textResource(key: String): Int =
         "estimated_consumption_km" -> R.string.estimated_consumption_km
         "estimated_cost_km" -> R.string.estimated_cost_km
         "liters_per_km" -> R.string.liters_per_km
+        "stop_details" -> R.string.stop_details
+        "tap_stop_details" -> R.string.tap_stop_details
+        "arrival_time" -> R.string.arrival_time
+        "departure_time" -> R.string.departure_time
+        "still_stopped" -> R.string.still_stopped
+        "latitude" -> R.string.latitude
+        "longitude" -> R.string.longitude
+        "stop_spending" -> R.string.stop_spending
+        "vehicle_specs" -> R.string.vehicle_specs
+        "engine_lancer_16_at" -> R.string.engine_lancer_16_at
+        "basis_provisional" -> R.string.basis_provisional
         else -> error("Unknown UI text resource: $key")
     }

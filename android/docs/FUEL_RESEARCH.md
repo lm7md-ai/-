@@ -17,8 +17,8 @@ dated Aramco reference; confirm/save it before starting the next outing.
 
 ## Lancer 2016 reference consumption
 
-The user's engine/transmission is **unknown** and they may use either fuel grade.
-Do not infer their engine from model year or from the gasoline grade.
+The owner has now supplied a **1.6L 4A92, 4-speed automatic** profile. They may
+use either fuel grade (91 minimum). This replaces the earlier unknown profile.
 
 Auto-Data lists these international variants covering 2015–2017:
 
@@ -31,16 +31,18 @@ Sources:
 - https://www.auto-data.net/en/mitsubishi-lancer-ix-facelift-2015-1.6-mivec-117hp-33293
 - https://www.auto-data.net/en/mitsubishi-lancer-ix-facelift-2015-2.0-148hp-cvt-29739
 
-These are third-party reference specifications for different-market versions,
-**not a verified rating of the user's Saudi-market vehicle**. The 1.6 manual
-figure must not be applied as a precise figure to a 1.6 automatic. The unknown
-profile displays a **reference interval**, 5.5–7.8 L/100 km; it is not a guaranteed
-real-world upper/lower bound. Traffic, air conditioning, driving style, vehicle
-condition, and transmission can produce consumption outside that interval.
+These are third-party specifications for different-market versions,
+**not a verified rating of the user's vehicle**. Neither figure is used as the
+new default for the confirmed automatic car. Attempts to retrieve matching
+official Mitsubishi specifications/brochures did not produce a verified
+combined-consumption value. Failed URLs and unrelated search results are not
+evidence for a precise number.
 
-Settings offers the explicit manual/CVT references, a custom figure, and an
-enabled-by-default preference for sufficiently supported personal full-tank
-measurements. Personal measurements replace the reference range once available.
+Settings now offers the confirmed vehicle profile, an editable consumption
+input, and custom calibration. Its initial 8L/100km is labeled **PROVISIONAL**
+in the UI: it is an assumption, not a researched manufacturer specification.
+Reliable full-tank measurements are preferred by default. The supplied VIN
+is not saved or published. Old archived cost inputs are preserved.
 
 ## Automatic estimates
 
@@ -48,8 +50,8 @@ Liters = GPS distance in km × consumption in L/100 km ÷ 100.
 Cost = liters × the chosen SAR/liter price. Currency uses decimal arithmetic
 and rounds to the nearest halala only at the final outing cost.
 
-For a 100 km outing with an unknown engine, the published reference interval
-produces **11.99–17.00 SAR with PG91**, or **12.82–18.17 SAR with PG95**.
+For a 100km outing at the provisional 8L/100km input, the estimate is
+**17.44 SAR with PG91**, or **18.64 SAR with PG95**.
 These are estimates, not actual purchases. They are displayed separately from
 expense totals so fuel fills are never counted twice.
 

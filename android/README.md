@@ -2,7 +2,7 @@
 
 A native, Arabic-first, local-first personal driving journal for one Mitsubishi Lancer 2016. The existing website in the repository root is independent of this Android project.
 
-Version 1.1 bundles a ready-to-use Jeddah–Makkah offline map, displays durations
+Version 1.2 retains the ready-to-use Jeddah–Makkah offline map, displays durations
 as hours/minutes/seconds, and estimates trip fuel costs using saved Saudi fuel
 prices and either personal consumption or an explicitly labeled reference range.
 
@@ -102,7 +102,7 @@ Zero distance, insufficient full tanks, or detected unreliable intervals display
 
 See [the researched sources and assumptions](docs/FUEL_RESEARCH.md). Aramco's October 2026 retail prices were checked on 13 October: PG91 **2.18 SAR/L**, PG95 **2.33 SAR/L**. Both are saved offline and editable.
 
-The owner's engine/transmission is unknown. Initial estimates therefore use an explicitly labeled **reference range** of 5.5–7.8 L/100 km (0.055–0.078 L/km), based on different international Lancer variants covering 2016. This is not a certified rating or a guaranteed real-world consumption range for the owner's car. Settings lets the owner select the exact researched manual/CVT variant or supply a custom value. Valid personal full-tank consumption is preferred when available.
+The owner confirmed a Lancer EX 2016, 1.6L 4A92, 4-speed automatic. The earlier manual/CVT choices are no longer used for this vehicle. No official consumption rating matching this exact configuration was verified: estimates start with an explicitly labeled, editable **provisional input** of 8L/100km, then prefer reliable personal full-tank measurements. This is not a manufacturer rating. See [safe update and data preservation](UPDATE.md) before upgrading version 1.0.
 
 Trip estimates use recorded kilometers × consumption × selected price. Estimates are shown live, in trip detail, monthly/all-period statistics, and the vehicle dashboard, separately from actual paid expenses. They never create fictitious expenses or count fuel fills twice. New outings archive their inputs at start; changing prices later does not reprice them. Old outings use current inputs with an explicit label. Fuel-entry forms prefill the selected price and provide PG91/PG95 switches while retaining manual price entry.
 
@@ -114,4 +114,4 @@ Outing metrics belong to the outing's **start date**; expenses belong to their o
 
 ## Verification
 
-Twenty-six lightweight unit tests cover tracking transitions, GPS filtering, fuel formulas, duration carries, Saudi prices, automatic cost ranges/rounding, archived cost stability, and the stop-after-GPS-gap regression. SQLite checks verify both migrations and deletion integrity. Offline-map checks validate all 20,321 PNG tiles and representative regional coverage without any network access. Build/lint results and remaining device checks are recorded in `VERIFICATION.md`.
+Unit tests cover tracking transitions, GPS filtering, fuel formulas, duration carries, Saudi prices, cost rounding, archived cost stability, and the stop-after-GPS-gap regression. Robolectric tests exercise actual Room migrations from schemas 1–3 and Android map tapping. SQLite checks verify migrations and deletion integrity. The safe-update tests reject wrong signatures and verify backups including uncheckpointed WAL records. Offline-map checks validate all 20,321 PNG tiles and representative regional coverage without network access. Build/lint results and remaining device checks are recorded in `VERIFICATION.md`.

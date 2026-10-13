@@ -17,6 +17,7 @@ data class ScreenData(
     val places: List<SavedPlace> = emptyList(),
     val settings: Preferences = Preferences(),
     val now: Long = System.currentTimeMillis(),
+    val loaded: Boolean = false,
 ) {
     val active
         get() = outings.firstOrNull { it.endedAt == null }
@@ -95,12 +96,21 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
     val app = application as RihlaApp
     val repo = app.repository
     private val trackingIntent = android.content.Intent(app, TrackingService::class.java)
-    private val clock = flow {
-        while (true) {
-            emit(System.currentTimeMillis())
-            delay(1000)
-        }
-    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val clock =
+        repo.dao
+            .observeOutings()
+            .map { outings -> outings.any { it.endedAt == null } }
+            .distinctUntilChanged()
+            .flatMapLatest { active ->
+                flow {
+                    while (true) {
+                        val now = System.currentTimeMillis()
+                        emit(now)
+                        delay(screenRefreshDelay(now, active))
+                    }
+                }
+            }
     val state =
         combine(
                 repo.dao.observeOutings(),
@@ -109,7 +119,7 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
                 repo.dao.placesFlow(),
                 app.settings.flow,
             ) { o, e, f, p, s ->
-                ScreenData(o, e, f, p, s)
+                ScreenData(o, e, f, p, s, loaded = true)
             }
             .combine(clock) { d, t -> d.copy(now = t) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScreenData())
@@ -119,6 +129,8 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             try {
                 block()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 error.value = "operation_failed"
             }

@@ -41,6 +41,7 @@ class TrackingService : Service() {
     private var candidate: Fix? = null
     private var autoPending = false
     private var slow = false
+    private var registeredInterval: Long? = null
     private val callback =
         object : LocationCallback() {
             override fun onLocationResult(r: LocationResult) {
@@ -168,13 +169,15 @@ class TrackingService : Service() {
 
     @Suppress("MissingPermission")
     private fun requestUpdates() {
-        client.removeLocationUpdates(callback)
-        native.removeUpdates(listener)
         if (!fineAllowed(this)) {
             stopSelf()
             return
         }
         val interval = if (slow) 30000L else 5000L
+        if (registeredInterval == interval) return
+        client.removeLocationUpdates(callback)
+        native.removeUpdates(listener)
+        registeredInterval = interval
         val request =
             LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
                 .setMinUpdateIntervalMillis(if (slow) 15000L else 2000L)
@@ -196,6 +199,7 @@ class TrackingService : Service() {
 
     @Suppress("MissingPermission")
     private fun nativeUpdates(interval: Long) {
+        if (registeredInterval != interval) return
         try {
             native.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,

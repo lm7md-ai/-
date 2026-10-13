@@ -15,7 +15,7 @@ data class Preferences(
     val onlineMaps: Boolean = false,
     val fuelGrade: String = "91",
     val fuelPriceHalala: Long = 218,
-    val engine: String = "UNKNOWN",
+    val engine: String = "LANCER_16_AT",
     val customConsumptionMl: Long = 8000,
     val useMeasured: Boolean = true,
 )
@@ -31,7 +31,7 @@ class Settings(private val context: Context) {
                 it[booleanPreferencesKey("online_maps")] ?: false,
                 it[stringPreferencesKey("fuel_grade")] ?: "91",
                 it[longPreferencesKey("fuel_price")] ?: 218,
-                it[stringPreferencesKey("engine")] ?: "UNKNOWN",
+                if (it[stringPreferencesKey("engine")] == "CUSTOM") "CUSTOM" else "LANCER_16_AT",
                 it[longPreferencesKey("custom_consumption")] ?: 8000,
                 it[booleanPreferencesKey("use_measured")] ?: true,
             )
@@ -65,7 +65,7 @@ class Settings(private val context: Context) {
         measured: Boolean,
     ) {
         require(grade in listOf("91", "95") && price in 1..10000 && consumption in 1000..30000)
-        require(engine in listOf("UNKNOWN", "LANCER_16_MANUAL", "LANCER_20_CVT", "CUSTOM"))
+        require(engine in listOf("LANCER_16_AT", "CUSTOM"))
         context.store.edit {
             it[stringPreferencesKey("fuel_grade")] = grade
             it[longPreferencesKey("fuel_price")] = price

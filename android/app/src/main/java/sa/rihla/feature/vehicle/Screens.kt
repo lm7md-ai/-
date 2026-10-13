@@ -32,6 +32,7 @@ fun VehicleScreen(data: ScreenData) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Heading("car_name")
+            Text(tr("vehicle_specs"))
             val m = metrics(data, periodBounds(Period.ALL))
             MetricsList(m)
             CostPerKilometer(data)

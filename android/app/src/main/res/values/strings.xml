@@ -176,7 +176,7 @@
   <string name="estimate_not_expense">تقدير الوقود المستهلك حسب المسافة؛ لا يضاف إلى المبالغ المدفوعة حتى لا تُحسب تعبئة البنزين مرتين.</string>
   <string name="legacy_estimate">هذا المشوار قديم: التقدير يستخدم الإعدادات الحالية.</string>
   <string name="automatic_cost">الحساب التلقائي للوقود</string>
-  <string name="unknown_engine_explanation">إذا لم تعرف المحرك، اتركه غير محدد؛ ستظهر التكلفة كنطاق تقديري. اختر نوع البنزين قبل بدء المشوار.</string>
+  <string name="unknown_engine_explanation">سيارتك لانسر EX ٢٠١٦ بمحرك ١٫٦ وقير أوتوماتيك ٤ سرعات. اختر البنزين ٩١ أو ٩٥ قبل المشوار؛ لا يلزم تغيير المحرك.</string>
   <string name="fuel_price_verified">أسعار أرامكو لأكتوبر ٢٠٢٦: ٩١ = ٢٫١٨، و٩٥ = ٢٫٣٣ ريال/لتر. تحقق منها في ١٣ أكتوبر ٢٠٢٦. يمكنك تعديل السعر لاحقًا دون اتصال.</string>
   <string name="consumption_basis">مرجع استهلاك السيارة</string>
   <string name="engine_unknown">لا أعرف المحرك — نطاق مرجعي</string>
@@ -184,7 +184,7 @@
   <string name="engine_lancer_20_cvt">لانسر ٢٫٠ CVT — ٧٫٨ لتر/١٠٠ كم</string>
   <string name="engine_custom">إدخال استهلاك مخصص</string>
   <string name="prefer_measured">استخدم استهلاكي الحقيقي عند توفر بيانات كافية</string>
-  <string name="reference_explanation">الأرقام المرجعية من Auto-Data لنسخ ٢٠١٥–٢٠١٧ في أسواق مختلفة. لا تثبت نسخة محركك أو استهلاكها في ظروف السعودية؛ المكيف والزحام والقيادة تؤثر على النتيجة. تُحفظ تسعيرة ومرجع كل مشوار جديد عند بدايته.</string>
+  <string name="reference_explanation">لم نتحقق من رقم رسمي يطابق محرك ١٫٦ مع قير ٤ سرعات. البداية ٨ لتر/١٠٠ كم افتراض قابل للتعديل وليست مواصفة المصنع. لا نستخدم رقم النسخة اليدوية أو CVT لسيارتك. بعد تعبئات كاملة ومسافة موثوقة يستخدم التطبيق استهلاكك المحسوب تلقائيًا. المكيف والزحام يؤثران على الاستهلاك. تُحفظ تسعيرة ومرجع كل مشوار جديد عند بدايته.</string>
   <string name="invalid_cost_settings">أدخل سعرًا موجبًا واستهلاكًا بين ١ و٣٠ لترًا لكل ١٠٠ كم.</string>
   <string name="save_cost_settings">حفظ إعدادات التكلفة</string>
   <string name="bundled_map_ready">خريطة تفصيلية لجدة ومكة ومحيط الجامعة والطريق بينهما مضمّنة وتعمل من أول تشغيل دون إنترنت.</string>
@@ -196,4 +196,15 @@
   <string name="estimated_consumption_km">الاستهلاك التقديري لكل كيلومتر</string>
   <string name="estimated_cost_km">تكلفة الوقود التقديرية لكل كيلومتر</string>
   <string name="liters_per_km">لتر/كم</string>
+  <string name="stop_details">تفاصيل التوقف</string>
+  <string name="tap_stop_details">اضغط لعرض تفاصيل التوقف</string>
+  <string name="arrival_time">وقت الوصول</string>
+  <string name="departure_time">وقت المغادرة</string>
+  <string name="still_stopped">التوقف مستمر</string>
+  <string name="latitude">خط العرض</string>
+  <string name="longitude">خط الطول</string>
+  <string name="stop_spending">المصاريف المسجلة خلال التوقف</string>
+  <string name="vehicle_specs">لانسر EX ٢٠١٦ · محرك ١٫٦ MIVEC ‏4A92 · سعة ١٥٩٠ سم³ · قير أوتوماتيك ٤ سرعات · دفع أمامي · ١١٧ حصان · عزم ١٥٤ نيوتن متر · خزان ٥٩ لتر · بنزين ٩١ كحد أدنى</string>
+  <string name="engine_lancer_16_at">لانسر ١٫٦ أوتوماتيك ٤ سرعات</string>
+  <string name="basis_provisional">افتراض مبدئي قابل للتعديل — ليس رقم المصنع</string>
 </resources>
