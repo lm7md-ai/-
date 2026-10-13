@@ -11,6 +11,25 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
     private val engine = TrackingEngine()
     private val lock = Mutex()
 
+    suspend fun updateDetails(
+        id: Long,
+        title: String? = null,
+        note: String? = null,
+        toggleFavorite: Boolean = false,
+    ) = lock.withLock {
+        db.withTransaction {
+            val previous = dao.details(id) ?: TripDetails(id)
+            require((title?.length ?: 0) <= 80 && (note?.length ?: 0) <= 2000)
+            dao.details(
+                previous.copy(
+                    title = title?.trim() ?: previous.title,
+                    note = note?.trim() ?: previous.note,
+                    favorite = if (toggleFavorite) !previous.favorite else previous.favorite,
+                )
+            )
+        }
+    }
+
     suspend fun importSms(packageName: String, body: String, receivedAt: Long): Boolean =
         lock.withLock {
             val preferences = settings.flow.first()

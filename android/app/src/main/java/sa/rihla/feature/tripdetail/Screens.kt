@@ -38,14 +38,48 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
     var deleting by remember { mutableStateOf(false) }
     val stops = remember(o, events) { stopDetails(o, events) }
     var selectedStop by remember(o.id) { mutableStateOf<Long?>(null) }
+    var editing by remember { mutableStateOf(false) }
+    val details = data.details.find { it.outingId == o.id } ?: TripDetails(o.id)
+    var replay by remember(o.id) { mutableStateOf(false) }
+    var cursor by remember(o.id) { mutableIntStateOf(0) }
+    val previewPoints =
+        remember(points, replay, cursor) {
+            if (replay) points.take(cursor.coerceIn(0, points.lastIndex.coerceAtLeast(0)) + 1)
+            else points
+        }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    details.title.takeIf { it.isNotBlank() } ?: tr(o.classification),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { vm.favorite(o.id) }) {
+                    Icon(
+                        if (details.favorite) androidx.compose.material.icons.Icons.Default.Star
+                        else androidx.compose.material.icons.Icons.Default.StarBorder,
+                        tr("favorite"),
+                    )
+                }
+                IconButton(onClick = { editing = true }) {
+                    Icon(androidx.compose.material.icons.Icons.Default.Edit, tr("edit_journey"))
+                }
+            }
+            if (details.note.isNotBlank()) Text(details.note)
             RouteMap(
-                points,
-                events,
+                previewPoints,
+                if (replay)
+                    events.filter { it.startedAt <= (previewPoints.lastOrNull()?.recordedAt ?: 0L) }
+                else events,
                 data.places,
                 Modifier.fillMaxWidth().height(320.dp),
-                stops = stops,
+                stops =
+                    if (replay)
+                        stops.filter {
+                            it.startedAt <= (previewPoints.lastOrNull()?.recordedAt ?: 0L)
+                        }
+                    else stops,
                 onStopPick = { selectedStop = it.id },
             )
             Text(tr("attribution"), style = MaterialTheme.typography.labelSmall)
@@ -53,6 +87,52 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
                 Text(data.settings.offlineAttribution, style = MaterialTheme.typography.labelSmall)
             Text(tr("route_legend"))
             Text(tr("map_controls"), style = MaterialTheme.typography.labelSmall)
+            if (o.endedAt != null && points.size > 1) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(
+                        replay,
+                        {
+                            replay = it
+                            cursor = if (it) 0 else points.lastIndex
+                        },
+                    )
+                    Text(tr("route_replay"))
+                }
+                if (replay) {
+                    Slider(
+                        cursor.toFloat(),
+                        { cursor = it.toInt() },
+                        valueRange = 0f..points.lastIndex.toFloat(),
+                    )
+                    previewPoints.lastOrNull()?.let { point ->
+                        Text(
+                            stamp(point.recordedAt, seconds = true) +
+                                " · " +
+                                num(point.speed * 3.6) +
+                                " " +
+                                tr("km_hour")
+                        )
+                    }
+                }
+            }
+            ExportDocument(
+                vm,
+                "export_gpx",
+                "rihla-route-${o.id}.gpx",
+                "application/gpx+xml",
+                enabled = points.isNotEmpty(),
+            ) {
+                routeGpx(points)
+            }
+            if (points.isNotEmpty()) {
+                MetricGrid(
+                    listOf(
+                        "recorded_points" to num(points.size.toDouble(), 0),
+                        "gps_accuracy" to
+                            (num(points.map { it.accuracy }.average()) + " " + tr("meters_unit")),
+                    )
+                )
+            }
         }
         item {
             Metric("started", stamp(o.startedAt))
@@ -127,6 +207,41 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
         }
     }
     if (deleting) Confirm("delete_confirmation", { deleting = false }) { vm.delete(o.id) }
+    if (editing) {
+        var title by remember(details) { mutableStateOf(details.title) }
+        var note by remember(details) { mutableStateOf(details.note) }
+        AlertDialog(
+            onDismissRequest = { editing = false },
+            title = { Text(tr("edit_journey")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        title,
+                        { if (it.length <= 80) title = it },
+                        label = { Text(tr("journey_title")) },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        note,
+                        { if (it.length <= 2000) note = it },
+                        label = { Text(tr("journey_note")) },
+                        minLines = 3,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.tripDetails(o.id, title, note)
+                        editing = false
+                    }
+                ) {
+                    Text(tr("save"))
+                }
+            },
+            dismissButton = { TextButton(onClick = { editing = false }) { Text(tr("cancel")) } },
+        )
+    }
     stops
         .firstOrNull { it.id == selectedStop }
         ?.let { stop ->

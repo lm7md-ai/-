@@ -17,6 +17,7 @@ import tempfile
 from datetime import datetime, timezone
 
 PACKAGE = "sa.rihla"
+SUPPORTED_PACKAGES = {PACKAGE, "sa.rihla.next"}
 
 def command(*args):
     return subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
@@ -32,7 +33,7 @@ def apk_info(path):
     return package[1], int(package[2]), certs
 
 def compatible(installed, candidate):
-    if installed[0] != PACKAGE or candidate[0] != PACKAGE:
+    if installed[0] not in SUPPORTED_PACKAGES or candidate[0] != installed[0]:
         raise ValueError("Unexpected application ID; installed app is unchanged")
     if installed[2] != candidate[2]:
         raise ValueError("Signing certificates differ. Backup saved; update refused. Do not uninstall the old app.")
@@ -68,9 +69,10 @@ def main():
     args = parser.parse_args()
     adb = ["adb"] + (["-s", args.serial] if args.serial else [])
     candidate = apk_info(args.apk.resolve())
-    if candidate[0] != PACKAGE:
+    if candidate[0] not in SUPPORTED_PACKAGES:
         raise ValueError("Unexpected candidate application ID")
-    paths = command(*adb, "shell", "pm", "path", PACKAGE).decode().splitlines()
+    package = candidate[0]
+    paths = command(*adb, "shell", "pm", "path", package).decode().splitlines()
     base = next((p.removeprefix("package:") for p in paths if p.endswith("/base.apk")), None)
     if not base:
         raise ValueError("Installed Rihla base APK was not found")
@@ -79,8 +81,8 @@ def main():
         command(*adb, "pull", base, str(installed_path))
         installed = apk_info(installed_path)
     # Stop writes first so DB + WAL + preferences represent a stable snapshot.
-    command(*adb, "shell", "am", "force-stop", PACKAGE)
-    archive = command(*adb, "exec-out", "run-as", PACKAGE, "tar", "-cf", "-", "databases", "files")
+    command(*adb, "shell", "am", "force-stop", package)
+    archive = command(*adb, "exec-out", "run-as", package, "tar", "-cf", "-", "databases", "files")
     count = validate_backup(archive)
     args.backup_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     filename = args.backup_dir / ("rihla-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + ".tar")

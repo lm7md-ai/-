@@ -1,48 +1,69 @@
 package sa.rihla.feature.history
 
-import android.content.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.*
-import androidx.compose.ui.unit.*
-import com.google.android.gms.location.*
-import java.time.*
-import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import sa.rihla.core.*
-import sa.rihla.data.*
-import sa.rihla.feature.calendar.*
-import sa.rihla.feature.dashboard.*
-import sa.rihla.feature.expenses.*
-import sa.rihla.feature.history.*
-import sa.rihla.feature.onboarding.*
-import sa.rihla.feature.settings.*
-import sa.rihla.feature.statistics.*
-import sa.rihla.feature.tripdetail.*
-import sa.rihla.feature.vehicle.*
-import sa.rihla.tracking.*
+import sa.rihla.core.Period
 import sa.rihla.ui.*
 
 @Composable
 fun History(data: ScreenData, onOpen: (Long) -> Unit) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (data.outings.isEmpty()) item { Text(tr("empty")) }
-        data.outings
-            .groupBy { day(it.startedAt) }
-            .forEach { (date, list) ->
-                item {
-                    Text(
-                        date.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Arabic)),
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(top = 12.dp),
+    var query by rememberSaveable { mutableStateOf("") }
+    var favorite by rememberSaveable { mutableStateOf(false) }
+    var recent by rememberSaveable { mutableStateOf(false) }
+    var sort by rememberSaveable { mutableStateOf("RECENT") }
+    val from = if (recent) periodBounds(Period.MONTH).first else 0L
+    val list =
+        remember(data.outings, data.details, query, favorite, from, sort) {
+            filterOutings(data.outings, data.details, query, favorite, from, sort)
+        }
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
+        item {
+            OutlinedTextField(
+                query,
+                { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text(tr("search_journeys")) },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+            )
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FilterChip(favorite, { favorite = !favorite }, label = { Text(tr("favorites")) })
+                FilterChip(recent, { recent = !recent }, label = { Text(tr("this_month")) })
+                listOf(
+                        "RECENT" to "sort_recent",
+                        "DISTANCE" to "sort_distance",
+                        "DURATION" to "sort_duration",
                     )
-                }
-                items(list, key = { it.id }) { o -> OutingCard(o, data.now) { onOpen(o.id) } }
+                    .forEach { (value, label) ->
+                        FilterChip(sort == value, { sort = value }, label = { Text(tr(label)) })
+                    }
             }
+            Text(
+                num(list.size.toDouble(), 0) + " " + tr("journeys_found"),
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        if (list.isEmpty()) item { EmptyPanel("no_results", "search_hint") }
+        items(list, key = { it.id }) { outing ->
+            OutingCard(outing, data.now, data.details.find { it.outingId == outing.id }) {
+                onOpen(outing.id)
+            }
+        }
     }
 }

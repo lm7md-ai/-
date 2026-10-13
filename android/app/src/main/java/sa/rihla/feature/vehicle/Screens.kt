@@ -31,8 +31,10 @@ import sa.rihla.ui.*
 fun VehicleScreen(data: ScreenData) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
-            Heading("car_name")
-            Text(tr("vehicle_specs"))
+            Panel("car_name", androidx.compose.material.icons.Icons.Default.DirectionsCar) {
+                StatusPill(tr("engine_lancer_16_at"))
+                Text(tr("vehicle_specs"))
+            }
             val m = metrics(data, periodBounds(Period.ALL))
             MetricsList(m)
             CostPerKilometer(data)

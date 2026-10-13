@@ -226,5 +226,67 @@ fun textResource(key: String): Int =
         "sms_app_missing" -> R.string.sms_app_missing
         "sms_import_limits" -> R.string.sms_import_limits
         "sms_imported" -> R.string.sms_imported
+        "brand_caption" -> R.string.brand_caption
+        "more" -> R.string.more
+        "your_space" -> R.string.your_space
+        "local_first_caption" -> R.string.local_first_caption
+        "ready_for_road" -> R.string.ready_for_road
+        "live_journey" -> R.string.live_journey
+        "hero_headline" -> R.string.hero_headline
+        "hero_subtitle" -> R.string.hero_subtitle
+        "manual_mode" -> R.string.manual_mode
+        "this_month" -> R.string.this_month
+        "no_journeys_yet" -> R.string.no_journeys_yet
+        "first_journey_hint" -> R.string.first_journey_hint
+        "favorite" -> R.string.favorite
+        "favorites" -> R.string.favorites
+        "search_journeys" -> R.string.search_journeys
+        "sort_recent" -> R.string.sort_recent
+        "sort_distance" -> R.string.sort_distance
+        "sort_duration" -> R.string.sort_duration
+        "journeys_found" -> R.string.journeys_found
+        "no_results" -> R.string.no_results
+        "search_hint" -> R.string.search_hint
+        "monthly_budget" -> R.string.monthly_budget
+        "budget_hint" -> R.string.budget_hint
+        "budget_exceeded" -> R.string.budget_exceeded
+        "budget_remaining" -> R.string.budget_remaining
+        "seven_day_spending" -> R.string.seven_day_spending
+        "tap_chart_day" -> R.string.tap_chart_day
+        "file_saved" -> R.string.file_saved
+        "working" -> R.string.working
+        "backup_tools" -> R.string.backup_tools
+        "backup_explanation" -> R.string.backup_explanation
+        "export_backup" -> R.string.export_backup
+        "restore_backup" -> R.string.restore_backup
+        "backup_privacy" -> R.string.backup_privacy
+        "backup_invalid" -> R.string.backup_invalid
+        "backup_restored" -> R.string.backup_restored
+        "restore_empty_only" -> R.string.restore_empty_only
+        "device_readiness" -> R.string.device_readiness
+        "gps_signal" -> R.string.gps_signal
+        "enabled" -> R.string.enabled
+        "disabled" -> R.string.disabled
+        "background_battery" -> R.string.background_battery
+        "unrestricted" -> R.string.unrestricted
+        "system_managed" -> R.string.system_managed
+        "redmagic_help" -> R.string.redmagic_help
+        "battery_settings" -> R.string.battery_settings
+        "quick_start" -> R.string.quick_start
+        "route_replay" -> R.string.route_replay
+        "km_hour" -> R.string.km_hour
+        "export_gpx" -> R.string.export_gpx
+        "recorded_points" -> R.string.recorded_points
+        "gps_accuracy" -> R.string.gps_accuracy
+        "meters_unit" -> R.string.meters_unit
+        "edit_journey" -> R.string.edit_journey
+        "journey_title" -> R.string.journey_title
+        "journey_note" -> R.string.journey_note
+        "wallet_caption" -> R.string.wallet_caption
+        "visible_spending" -> R.string.visible_spending
+        "search_expenses" -> R.string.search_expenses
+        "export_csv" -> R.string.export_csv
+        "search_expense_hint" -> R.string.search_expense_hint
+        "legacy_transfer_help" -> R.string.legacy_transfer_help
         else -> error("Unknown UI text resource: $key")
     }

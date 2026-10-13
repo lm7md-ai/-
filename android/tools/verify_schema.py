@@ -11,6 +11,7 @@ v1 = json.loads((schemas / '1.json').read_text())['database']
 v2 = json.loads((schemas / '2.json').read_text())['database']
 v3 = json.loads((schemas / '3.json').read_text())['database']
 v4 = json.loads((schemas / '4.json').read_text())['database']
+v5 = json.loads((schemas / '5.json').read_text())['database']
 db = sqlite3.connect(':memory:')
 db.execute('PRAGMA foreign_keys=ON')
 for entity in v1['entities']:
@@ -66,7 +67,7 @@ assert db.execute('SELECT startedAt,fuelPriceHalala,consumptionMinMl,estimateSou
 assert db.execute('SELECT amountHalala FROM expenses').fetchone()[0] == 12345
 print('PASS: migration 2→3 preserves existing outings/spending and marks missing cost snapshots')
 
-for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_3_4'):]):
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_3_4'):source.index('val MIGRATION_4_5')]):
     db.execute(sql)
 for entity in v4['entities']:
     actual = {row[1]: (row[2], bool(row[3])) for row in db.execute(f'PRAGMA table_info(`{entity["tableName"]}`)')}
@@ -76,8 +77,17 @@ assert db.execute('SELECT amountHalala,source,merchant,importKey FROM expenses')
 assert db.execute('SELECT COUNT(*) FROM imported_sms').fetchone()[0] == 0
 print('PASS: migration 3→4 preserves historical expenses and adds SMS deduplication')
 
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_4_5'):]):
+    db.execute(sql)
+for entity in v5['entities']:
+    actual = {row[1]: (row[2], bool(row[3])) for row in db.execute(f'PRAGMA table_info(`{entity["tableName"]}`)')}
+    expected = {f['columnName']: (f['affinity'], f.get('notNull', False)) for f in entity['fields']}
+    assert actual == expected, entity['tableName']
+db.execute("INSERT INTO trip_details VALUES (1,'trip','note',1)")
+print('PASS: migration 4→5 adds trip titles, notes and favorites without altering old rows')
+
 db.execute('DELETE FROM outings WHERE id=1')
-for table in ('points', 'events', 'active_slot'):
+for table in ('points', 'events', 'active_slot', 'trip_details'):
     assert db.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
 assert db.execute('SELECT outingId,amountHalala FROM expenses').fetchone() == (None, 12345)
 assert db.execute('SELECT COUNT(*) FROM fuel').fetchone()[0] == 1

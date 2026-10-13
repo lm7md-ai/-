@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.*
@@ -33,15 +34,66 @@ import sa.rihla.ui.*
 @Composable
 fun ExpensesScreen(data: ScreenData, vm: JourneyViewModel, onAdd: () -> Unit) {
     var deleting by remember { mutableStateOf<Long?>(null) }
+    var query by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("ALL") }
+    val visible =
+        remember(data.expenses, query, category) {
+            data.expenses.filter {
+                (category == "ALL" ||
+                    it.category == category ||
+                    (category == "SMS" && it.source == "SMS_NOTIFICATION")) &&
+                    (query.isBlank() ||
+                        it.merchant.contains(query.trim(), true) ||
+                        normalizeSms(query).trim() in (it.amountHalala / 100.0).toString())
+            }
+        }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
+            Hero(
+                tr("wallet_caption"),
+                num(visible.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
+                tr("visible_spending"),
+                "add_expense",
+                onAdd,
+            )
+            OutlinedTextField(
+                query,
+                { query = it },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(tr("search_expenses")) },
+            )
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(
+                        "ALL" to "all",
+                        "FUEL" to "fuel",
+                        "FOOD" to "food",
+                        "OTHER" to "other",
+                        "SMS" to "sms_imported",
+                    )
+                    .forEach { (value, label) ->
+                        FilterChip(
+                            category == value,
+                            { category = value },
+                            label = { Text(tr(label)) },
+                        )
+                    }
+            }
+            ExportDocument(vm, "export_csv", "rihla-expenses.csv", "text/csv") {
+                expensesCsv(visible)
+            }
+            SpendingChart(data.expenses, day(data.now))
             Action("add_expense", click = onAdd)
             Metric(
                 "total_spending",
                 num(data.expenses.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
             )
         }
-        items(data.expenses, key = { it.id }) { e ->
+        if (visible.isEmpty()) item { EmptyPanel("no_results", "search_expense_hint") }
+        items(visible, key = { it.id }) { e ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
@@ -98,17 +150,21 @@ fun ExpenseDialog(
     onDismiss: () -> Unit,
 ) {
     val c = LocalContext.current
-    var category by remember { mutableStateOf("FUEL") }
-    var amount by remember { mutableStateOf("") }
-    var liters by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf((data.settings.fuelPriceHalala / 100.0).toString()) }
-    var grade by remember { mutableStateOf(data.settings.fuelGrade) }
-    var full by remember { mutableStateOf(false) }
-    var time by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var outing by remember { mutableStateOf(initialOuting) }
+    var category by rememberSaveable { mutableStateOf("FUEL") }
+    var amount by rememberSaveable { mutableStateOf("") }
+    var liters by rememberSaveable { mutableStateOf("") }
+    var price by rememberSaveable {
+        mutableStateOf((data.settings.fuelPriceHalala / 100.0).toString())
+    }
+    var grade by rememberSaveable { mutableStateOf(data.settings.fuelGrade) }
+    var full by rememberSaveable { mutableStateOf(false) }
+    var time by rememberSaveable { mutableLongStateOf(System.currentTimeMillis()) }
+    var outing by rememberSaveable { mutableStateOf(initialOuting) }
     var invalid by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.padding(horizontal = 24.dp),
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
         title = { Text(tr("add_expense")) },
         text = {
             Column(

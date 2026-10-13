@@ -146,6 +146,13 @@ data class FuelFillUp(
 
 @Dao
 interface JourneyDao {
+    @Query("SELECT * FROM trip_details") fun detailsFlow(): Flow<List<TripDetails>>
+
+    @Query("SELECT * FROM trip_details WHERE outingId=:id")
+    suspend fun details(id: Long): TripDetails?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun details(value: TripDetails)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun claimSms(receipt: ImportedSms): Long
 
     @Query("DELETE FROM imported_sms") suspend fun clearImportedSms()
@@ -246,8 +253,9 @@ interface JourneyDao {
             Expense::class,
             FuelFillUp::class,
             ImportedSms::class,
+            TripDetails::class,
         ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class JourneyDatabase : RoomDatabase() {
@@ -294,3 +302,31 @@ val MIGRATION_3_4 =
 
 @Entity(tableName = "imported_sms")
 data class ImportedSms(@PrimaryKey val key: String, val receivedAt: Long)
+
+@Entity(
+    tableName = "trip_details",
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = Outing::class,
+                parentColumns = ["id"],
+                childColumns = ["outingId"],
+                onDelete = ForeignKey.CASCADE,
+            )
+        ],
+)
+data class TripDetails(
+    @PrimaryKey val outingId: Long,
+    val title: String = "",
+    val note: String = "",
+    val favorite: Boolean = false,
+)
+
+val MIGRATION_4_5 =
+    object : androidx.room.migration.Migration(4, 5) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS trip_details (outingId INTEGER NOT NULL, title TEXT NOT NULL, note TEXT NOT NULL, favorite INTEGER NOT NULL, PRIMARY KEY(outingId), FOREIGN KEY(outingId) REFERENCES outings(id) ON UPDATE NO ACTION ON DELETE CASCADE)"
+            )
+        }
+    }

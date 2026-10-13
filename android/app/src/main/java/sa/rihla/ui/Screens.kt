@@ -5,17 +5,19 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -76,23 +78,30 @@ fun duration(ms: Long): String {
 fun Heading(key: String) {
     Text(
         tr(key),
-        style = MaterialTheme.typography.titleLarge,
+        style = MaterialTheme.typography.titleMedium,
         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
     )
 }
 
 @Composable
 fun Metric(key: String, value: String) {
-    Card(Modifier.fillMaxWidth()) {
+    Surface(Modifier.fillMaxWidth().padding(vertical = 3.dp), shape = RoundedCornerShape(16.dp)) {
         Row(
             Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(tr(key), modifier = Modifier.weight(1f))
+            Text(
+                tr(key),
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
             Text(
                 value,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.End,
             )
         }
     }
@@ -100,7 +109,14 @@ fun Metric(key: String, value: String) {
 
 @Composable
 fun Action(key: String, enabled: Boolean = true, click: () -> Unit) {
-    Button(onClick = click, enabled = enabled, modifier = Modifier.fillMaxWidth()) { Text(tr(key)) }
+    Button(
+        onClick = click,
+        enabled = enabled,
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).heightIn(min = 52.dp),
+    ) {
+        Text(tr(key))
+    }
 }
 
 @Composable
@@ -162,7 +178,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
             "LIGHT" -> false
             else -> isSystemInDarkTheme()
         }
-    SideEffect {
+    LaunchedEffect(dark, context) {
         (context as? android.app.Activity)?.let { activity ->
             androidx.core.view.WindowCompat.getInsetsController(
                     activity.window,
@@ -174,24 +190,20 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                 }
         }
     }
-    val colors =
-        if (dark) darkColorScheme(primary = Color(0xFF7AD8C7), secondary = Color(0xFFEBC17B))
-        else
-            lightColorScheme(
-                primary = Color(0xFF126F65),
-                secondary = Color(0xFF85642B),
-                background = Color(0xFFF6F8F5),
-            )
+    val colors = journeyColors(dark)
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        MaterialTheme(colorScheme = colors) {
-            Surface(Modifier.fillMaxSize()) {
-                var page by remember { mutableStateOf("dashboard") }
-                var selected by remember { mutableStateOf<Long?>(null) }
+        MaterialTheme(colorScheme = colors, typography = NewTypography, shapes = NewShapes) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                var page by rememberSaveable { mutableStateOf("dashboard") }
+                var selected by rememberSaveable { mutableStateOf<Long?>(null) }
+                LaunchedEffect(selected, data.outings) {
+                    if (selected != null && data.outings.none { it.id == selected }) selected = null
+                }
                 BackHandler(enabled = selected != null || page != "dashboard") {
                     if (selected != null) selected = null else page = "dashboard"
                 }
-                var expense by remember { mutableStateOf(false) }
-                var expenseOuting by remember { mutableStateOf<Long?>(null) }
+                var expense by rememberSaveable { mutableStateOf(false) }
+                var expenseOuting by rememberSaveable { mutableStateOf<Long?>(null) }
                 if (!data.settings.onboarded) Onboarding(vm, data)
                 else
                     Scaffold(
@@ -205,11 +217,28 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                         Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("history"))
                                     }
                                 }
-                                Text(
-                                    tr(if (selected != null) "detail" else page),
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    modifier = Modifier.weight(1f),
-                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        tr("brand_caption"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text(
+                                        tr(
+                                            if (selected != null) "detail"
+                                            else if (page == "settings") "more" else page
+                                        ),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        page = "calendar"
+                                        selected = null
+                                    }
+                                ) {
+                                    Icon(Icons.Default.CalendarMonth, tr("calendar"))
+                                }
                                 IconButton(
                                     onClick = {
                                         page = "settings"
@@ -227,6 +256,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                         "history" to Icons.Default.Route,
                                         "statistics" to Icons.Default.BarChart,
                                         "expenses" to Icons.Default.Payments,
+                                        "settings" to Icons.Default.GridView,
                                     )
                                     .forEach { (key, icon) ->
                                         NavigationBarItem(
@@ -236,28 +266,18 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                                 selected = null
                                             },
                                             icon = { Icon(icon, tr(key)) },
-                                            label = { Text(tr(key)) },
+                                            label = {
+                                                Text(
+                                                    tr(if (key == "settings") "more" else key),
+                                                    maxLines = 1,
+                                                )
+                                            },
                                         )
                                     }
                             }
                         },
                     ) { padding ->
                         Column(Modifier.padding(padding).padding(horizontal = 16.dp)) {
-                            Row(
-                                Modifier.horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                listOf("calendar", "vehicle", "settings").forEach { key ->
-                                    FilterChip(
-                                        selected = page == key,
-                                        onClick = {
-                                            page = key
-                                            selected = null
-                                        },
-                                        label = { Text(tr(key)) },
-                                    )
-                                }
-                            }
                             val o = data.outings.find { it.id == selected }
                             if (o != null)
                                 OutingDetail(vm, data, o) {
@@ -286,7 +306,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                             expenseOuting = data.active?.id
                                             expense = true
                                         }
-                                    "settings" -> SettingsScreen(vm, data)
+                                    "settings" -> SettingsScreen(vm, data) { page = it }
                                 }
                         }
                     }
@@ -305,11 +325,38 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
 }
 
 @Composable
-fun OutingCard(o: Outing, now: Long, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+fun OutingCard(o: Outing, now: Long, details: TripDetails? = null, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(22.dp),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(tr(o.classification), style = MaterialTheme.typography.titleMedium)
-            Text(stamp(o.startedAt))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Route,
+                    null,
+                    modifier = Modifier.padding(end = 10.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    details?.title?.takeIf { it.isNotBlank() } ?: tr(o.classification),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (details?.favorite == true)
+                    Icon(
+                        Icons.Default.Star,
+                        tr("favorite"),
+                        tint = MaterialTheme.colorScheme.secondary,
+                    )
+            }
+            Text(
+                stamp(o.startedAt),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 num(o.state.meters / 1000) +
                     " " +
@@ -318,6 +365,14 @@ fun OutingCard(o: Outing, now: Long, onClick: () -> Unit) {
                     duration((o.endedAt ?: now) - o.startedAt)
             )
             if (o.endedAt == null) Text(tr("active"), color = MaterialTheme.colorScheme.primary)
+            if (!details?.note.isNullOrBlank())
+                Text(
+                    details.note,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
         }
     }
 }

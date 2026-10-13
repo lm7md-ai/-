@@ -20,6 +20,7 @@ data class Preferences(
     val useMeasured: Boolean = true,
     val smsImport: Boolean = false,
     val smsImportSince: Long = 0,
+    val monthlyBudgetHalala: Long = 0,
 )
 
 class Settings(private val context: Context) {
@@ -38,6 +39,7 @@ class Settings(private val context: Context) {
                 it[booleanPreferencesKey("use_measured")] ?: true,
                 it[booleanPreferencesKey("sms_import")] ?: false,
                 it[longPreferencesKey("sms_import_since")] ?: 0,
+                it[longPreferencesKey("monthly_budget")] ?: 0,
             )
         }
 
@@ -89,5 +91,10 @@ class Settings(private val context: Context) {
                 it[longPreferencesKey("sms_import_since")] = System.currentTimeMillis()
             it[booleanPreferencesKey("sms_import")] = enabled
         }
+    }
+
+    suspend fun budget(value: Long) {
+        require(value in 0..100_000_000)
+        context.store.edit { it[longPreferencesKey("monthly_budget")] = value }
     }
 }

@@ -32,12 +32,15 @@ fun Onboarding(vm: JourneyViewModel, data: ScreenData) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Heading("welcome")
+        Hero(tr("brand_caption"), tr("welcome"), tr("hero_subtitle"), "quick_start") {
+            vm.onboard()
+        }
         when (stage) {
             0 -> {
                 Text(tr("intro"), style = MaterialTheme.typography.bodyLarge)
                 Text(tr("privacy"))
                 Action("permissions") { stage = 1 }
+                DataTools(vm, data)
             }
             1 -> {
                 PermissionsPanel(vm)

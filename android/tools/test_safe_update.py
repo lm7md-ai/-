@@ -22,6 +22,9 @@ class SafeUpdateTest(unittest.TestCase):
 
     def test_only_newer_same_package_same_signer_is_accepted(self):
         compatible(("sa.rihla", 1, {"old"}), ("sa.rihla", 3, {"old"}))
+        compatible(("sa.rihla.next", 20, {"old"}), ("sa.rihla.next", 21, {"old"}))
+        with self.assertRaises(ValueError):
+            compatible(("sa.rihla", 1, {"old"}), ("sa.rihla.next", 20, {"old"}))
         for candidate in (("other.app", 3, {"old"}), ("sa.rihla", 3, {"new"}), ("sa.rihla", 1, {"old"})):
             with self.assertRaises(ValueError):
                 compatible(("sa.rihla", 1, {"old"}), candidate)

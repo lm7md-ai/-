@@ -113,13 +113,27 @@ fun PermissionsPanel(vm: JourneyViewModel) {
 }
 
 @Composable
-fun SettingsScreen(vm: JourneyViewModel, data: ScreenData) {
+fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) -> Unit = {}) {
     var place by remember { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        Hero(tr("brand_caption"), tr("your_space"), tr("local_first_caption"), "vehicle") {
+            navigate("vehicle")
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = { navigate("calendar") }, modifier = Modifier.weight(1f)) {
+                Text(tr("calendar"))
+            }
+            OutlinedButton(onClick = { navigate("vehicle") }, modifier = Modifier.weight(1f)) {
+                Text(tr("vehicle"))
+            }
+        }
+        BudgetSettings(vm, data)
+        DataTools(vm, data)
+        DeviceReadiness(data)
         Heading("theme")
         Row {
             listOf("SYSTEM", "LIGHT", "DARK").forEach { v ->

@@ -1,11 +1,26 @@
 import java.net.URI
 
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.plugin.compose"); id("com.google.devtools.ksp") }
+val ownerKeystore = providers.environmentVariable("RIHLA_SIGNING_KEYSTORE").orNull
 android {
  namespace = "sa.rihla"; compileSdk = 37
  compileSdkMinor = 2
  buildToolsVersion = "37.0.0"
- defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 4; versionName = "1.3" }
+ defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 20; versionName = "2.0" }
+ flavorDimensions += "edition"
+ productFlavors {
+  create("classic") { dimension = "edition" }
+  create("next") { dimension = "edition"; applicationIdSuffix = ".next" }
+ }
+ if (ownerKeystore != null) {
+  signingConfigs.create("owner") {
+   storeFile = file(ownerKeystore)
+   storePassword = providers.environmentVariable("RIHLA_STORE_PASSWORD").orElse("android").get()
+   keyAlias = providers.environmentVariable("RIHLA_KEY_ALIAS").orElse("androiddebugkey").get()
+   keyPassword = providers.environmentVariable("RIHLA_KEY_PASSWORD").orElse("android").get()
+  }
+  buildTypes.getByName("debug").signingConfig = signingConfigs.getByName("owner")
+ }
  bundle { language { enableSplit = false } }
  buildFeatures { compose = true }
  testOptions {
@@ -42,4 +57,6 @@ dependencies {
  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
  testImplementation("junit:junit:4.13.2")
  testImplementation("org.robolectric:robolectric:4.17")
+ testImplementation("androidx.compose.ui:ui-test-junit4")
+ debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

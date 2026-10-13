@@ -9,11 +9,11 @@
  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
  <queries><intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="sms"/></intent></queries>
- <application android:name=".RihlaApp" android:label="@string/app_name" android:icon="@drawable/ic_launcher" android:theme="@style/AppTheme" android:supportsRtl="true" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false">
- <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
- <service android:name=".tracking.TrackingService" android:exported="false" android:foregroundServiceType="location"/>
- <service android:name=".sms.PurchaseNotificationService" android:label="@string/sms_import" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"><intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter></service>
- <receiver android:name=".tracking.DetectionReceiver" android:exported="false"/>
- <receiver android:name=".tracking.BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter></receiver>
+ <application android:name="sa.rihla.RihlaApp" android:label="@string/app_name" android:icon="@drawable/ic_launcher" android:theme="@style/AppTheme" android:supportsRtl="true" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false">
+ <activity android:name="sa.rihla.MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+ <service android:name="sa.rihla.tracking.TrackingService" android:exported="false" android:foregroundServiceType="location"/>
+ <service android:name="sa.rihla.sms.PurchaseNotificationService" android:label="@string/sms_import" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"><intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter></service>
+ <receiver android:name="sa.rihla.tracking.DetectionReceiver" android:exported="false"/>
+ <receiver android:name="sa.rihla.tracking.BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter></receiver>
  </application>
 </manifest>

@@ -54,7 +54,7 @@ PY
 fi
 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$ANDROID_HOME" 'platforms;android-37.2' 'build-tools;37.0.0' 'platform-tools' < <(for RIHLA_INDEX in {1..100}; do printf 'y\n'; done)
 if [ ! -f local.properties ]; then printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties; fi
-./gradlew --no-daemon --max-workers=2 assembleDebug testDebugUnitTest lintDebug
+./gradlew --no-daemon --max-workers=2 assembleClassicDebug assembleNextDebug testNextDebugUnitTest lintClassicDebug lintNextDebug
 
 python3 tools/verify_schema.py
 python3 tools/verify_offline_map.py

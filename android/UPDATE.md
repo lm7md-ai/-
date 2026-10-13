@@ -1,5 +1,27 @@
 # Updating without losing journeys
 
+## Version 2.0 from the published 1.3 installation
+
+The user has moved their data into 1.3. The primary `releases/app-v2.0.apk`
+therefore keeps `sa.rihla` and the name **مشواري**. Its signature matches the
+published 1.3 APK, its versionCode increases from 4 to 20, and Room explicitly
+migrates the database to schema 5. Install over 1.3 without uninstalling or clearing
+storage. No transfer between applications is needed. Finish the active outing first.
+
+The original 1.0 key is still unavailable. For phones that remain on conflicting
+1.0, `releases/app-v2.0-independent.apk` targets `sa.rihla.next`, installs beside
+the old app, and requires [Windows USB local transfer](docs/WINDOWS_MIGRATION.md)
+or the [phone-only alternative](docs/PHONE_MIGRATION.md). It cannot automatically
+read the old private database. Both editions support JSON backup/restore.
+The reported package-conflict message suggests a signer mismatch, but that exact
+phone's certificate/install error has not been inspected. Do not uninstall the old
+installation or clear its storage to overcome it. `tools/verify_release.py`
+checks the explicit edition, version and retained certificate before publication;
+classic publication additionally requires comparison with the verified 1.3 baseline.
+
+The following section describes the older same-package update workflow, still
+applicable when an installed version and candidate have compatible signatures.
+
 Version 1.3 keeps application ID `sa.rihla`, the `journeys.db` filename,
 DataStore settings, and explicit Room migrations 1 → 2 → 3 → 4. No destructive
 migration or automatic clearing is enabled. Schema 4 adds expense import metadata
@@ -21,7 +43,7 @@ trusted computer. Install Android SDK `adb`, `aapt2`, and `apksigner`, add them
 to PATH (with Java available), then run:
 
 ```bash
-python3 tools/safe_update.py app-v1.3.apk --backup-dir /path/to/private-rihla-backups
+python3 tools/safe_update.py app-v2.0.apk --backup-dir /path/to/private-rihla-backups
 ```
 
 This tool reads the installed APK's signature, stops writes, takes a private

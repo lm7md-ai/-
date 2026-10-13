@@ -2,20 +2,43 @@
 
 A native, Arabic-first, local-first personal driving journal for one Mitsubishi Lancer 2016. The existing website in the repository root is independent of this Android project.
 
-Version 1.3 adds automatic purchase expenses from SMS notifications, retains the
-Jeddah–Makkah offline map, displays durations as hours/minutes/seconds, and estimates
-trip fuel costs using saved Saudi prices and personal or provisional consumption.
+Version 2.0 rebuilds the Arabic interface with blue/mint light and dark themes,
+a trip dashboard, compact metric grids, interactive daily spending, monthly budgets,
+search/sorting, trip titles/notes/favorites, route timeline scrubbing, GPX/CSV exports,
+local backup/restore, and device readiness checks. Offline maps and SMS purchase
+import remain available. [Download the APK and view screenshots](../releases/README.md).
+
+The main **مشواري** download (`app-v2.0.apk`, `sa.rihla`) updates the published 1.3
+APK in place with the same verified certificate and explicit Room migrations.
+The user has already moved historical data into 1.3; no cross-package transfer is
+needed for this update. Finish the active outing and install over 1.3 without uninstalling.
+An alternative `app-v2.0-independent.apk` uses `sa.rihla.next` for installations
+still blocked by the original 1.0 signature conflict. That alternative installs
+separately and needs explicit local transfer. [Windows USB instructions](docs/WINDOWS_MIGRATION.md)
+and a ready-to-run ZIP include Python/ADB and keep verified backups; a
+[phone-only alternative](docs/PHONE_MIGRATION.md) uses wireless ADB. Neither tool
+uninstalls or clears the old app. The original version-1.0 key is unavailable here.
 
 ## Build and run
 
 Requirements: JDK 17 or newer with `javac`, Android SDK platform 37.2 and build-tools 37.0.0. Open this directory in Android Studio, let Gradle sync, and run on an Android 8+ device. Automatic recognition requires Google Play Services; manual recording has an Android GPS fallback.
 
 ```sh
-./gradlew assembleDebug testDebugUnitTest lintDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleClassicDebug testNextDebugUnitTest lintClassicDebug
+adb install -r app/build/outputs/apk/classic/debug/app-classic-debug.apk
 ```
 
-Debug builds are for personal testing. Sign a release build with your own key before distributing it. There are no API keys, billing accounts, routing APIs, cloud accounts, ads, analytics, or remote journey storage.
+Debug builds are for personal testing. Sign a release build with your own key before wider distribution. There are no API keys, billing accounts, routing APIs, cloud accounts, ads, analytics, or remote journey storage.
+
+`assembleNextDebug` builds the independent alternative under `sa.rihla.next`.
+Direct updates require the installed package's matching signing key.
+The optional secure file variable `RIHLA_SIGNING_KEYSTORE` selects an existing key;
+`RIHLA_STORE_PASSWORD`, `RIHLA_KEY_ALIAS`, and `RIHLA_KEY_PASSWORD` configure it.
+Android debug-key defaults apply when those three variables are absent. Keep the
+private key securely outside Git. `tools/verify_release.py` requires an explicit
+`--edition classic --previous ../releases/app-v1.3.apk` or `--edition next`.
+It rejects a changed certificate, wrong package, and incompatible classic baseline.
+Future updates must retain the same key; an arbitrary regenerated debug key is incompatible.
 
 ## Architecture
 
@@ -84,7 +107,16 @@ Room tables: outings (persistent reducer state), active_slot, route points (inde
 
 Outing deletion cascades route/events and clears expense links, preserving actual money spent. Fuel estimates that predate a deletion are invalidated, preventing a changed distance baseline from producing plausible but incorrect results. Full deletion stops tracking/detection, removes all Room data, resets preferences, and deletes imported tiles/cache. There is no coordinate logging or backup/sync integration. Android backup is disabled, and Android 12+ extraction rules exclude app data from cloud backup and device transfer.
 
-Exported Room schemas 1–4 are retained in `app/schemas`. The explicit 1→2 migration adds the outing end-time index and GPS uncertainty flag. The 2→3 migration adds saved trip fuel-price/consumption/source fields and the stationary-time credit counter without deleting rows. The 3→4 migration adds expense import metadata and persistent SMS receipt fingerprints. Legacy outings are explicitly marked as lacking archived cost inputs. There is no destructive migration fallback.
+Exported Room schemas 1–5 are retained in `app/schemas`. The explicit 1→2 migration adds the outing end-time index and GPS uncertainty flag. The 2→3 migration adds archived cost fields and the stationary-time credit counter. The 3→4 migration adds expense import metadata and SMS receipt fingerprints. The 4→5 migration adds trip titles, notes and favorites through a separate cascading table. No migration deletes historical rows or uses a destructive fallback.
+
+Local JSON backups contain database records, including saved places, GPS points,
+events, fuel links and annotations. Restore is atomic and accepts only an empty
+destination, so existing journeys cannot be overwritten. Malformed references,
+unsupported schema versions, unexpected tables and negative expenses are rejected.
+UI import is capped at 100 MiB. Theme/budget/permission settings and map files are
+not in the portable JSON; the legacy transfer tool additionally retains the complete
+original private-file archive locally. CSV protects spreadsheet formula fields;
+GPX separates tracks at recorded GPS gaps rather than inventing continuity.
 
 ## Spending and fuel
 

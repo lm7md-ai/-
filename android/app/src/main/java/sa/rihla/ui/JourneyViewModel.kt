@@ -18,6 +18,7 @@ data class ScreenData(
     val settings: Preferences = Preferences(),
     val now: Long = System.currentTimeMillis(),
     val loaded: Boolean = false,
+    val details: List<TripDetails> = emptyList(),
 ) {
     val active
         get() = outings.firstOrNull { it.endedAt == null }
@@ -122,6 +123,7 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
                 ScreenData(o, e, f, p, s, loaded = true)
             }
             .combine(clock) { d, t -> d.copy(now = t) }
+            .combine(repo.dao.detailsFlow()) { d, details -> d.copy(details = details) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScreenData())
     val error = MutableStateFlow<String?>(null)
 
@@ -139,6 +141,21 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
 
     fun start() {
         if (!TrackingService.launch(app)) error.value = "tracking_failed"
+    }
+
+    fun favorite(id: Long) {
+        work { repo.updateDetails(id, toggleFavorite = true) }
+    }
+
+    fun tripDetails(id: Long, title: String, note: String) {
+        work { repo.updateDetails(id, title, note) }
+    }
+
+    fun budget(value: String): Boolean {
+        val amount = decimalUnits(value, 2) ?: return false
+        if (amount !in 0..100_000_000) return false
+        work { app.settings.budget(amount) }
+        return true
     }
 
     fun end() {

@@ -95,7 +95,29 @@ fun StatisticsScreen(data: ScreenData) {
             }
         }
         item {
-            MetricsList(m)
+            MetricGrid(
+                listOf(
+                    "distance" to (num(m.meters / 1000) + " " + tr("km")),
+                    "total_spending" to (num(m.total / 100.0, 2) + " " + tr("sar")),
+                    "outings_count" to num(m.outings.toDouble(), 0),
+                    "driving_time" to duration(m.drivingMs),
+                    "stopped_time" to duration(m.stoppedMs),
+                    "university_time" to duration(m.universityMs),
+                    "average_travel" to (m.averageTravelMs?.let { duration(it) } ?: tr("empty")),
+                    "fastest" to (m.fastestMs?.let { duration(it) } ?: tr("empty")),
+                )
+            )
+            Heading("seven_day_spending")
+            SpendingChart(data.expenses, day(data.now))
+            Panel("total_spending", androidx.compose.material.icons.Icons.Default.Payments) {
+                Metric("fuel", num(m.fuel / 100.0, 2) + " " + tr("sar"))
+                Metric("food", num(m.food / 100.0, 2) + " " + tr("sar"))
+                Metric("other", num(m.other / 100.0, 2) + " " + tr("sar"))
+                Metric("longest", m.longestMs?.let { duration(it) } ?: tr("empty"))
+                Metric("visits", num(m.visits.toDouble(), 0))
+                Metric("university_trips", num(m.universityTrips.toDouble(), 0))
+            }
+            Panel("fuel_economy") { EconomyCard(m.economy) }
             val bounds = periodBounds(period)
             val estimated =
                 estimateTotals(
