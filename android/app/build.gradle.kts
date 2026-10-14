@@ -6,7 +6,7 @@ android {
  namespace = "sa.rihla"; compileSdk = 37
  compileSdkMinor = 2
  buildToolsVersion = "37.0.0"
- defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 30; versionName = "3.0" }
+ defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 31; versionName = "3.1" }
  sourceSets.getByName("main").assets.setSrcDirs(listOf("src/main/countryAssets"))
  flavorDimensions += "edition"
  productFlavors {

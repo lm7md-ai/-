@@ -22,8 +22,8 @@ fun smsNotificationTexts(notification: Notification, postedAt: Long): List<SmsNo
             Notification.EXTRA_MESSAGES,
             Bundle::class.java,
         )
-    if (messages != null)
-        return messages
+    if (messages != null) {
+        val extracted = messages
             .filterIsInstance<Bundle>()
             .mapNotNull {
                 val body = it.getCharSequence("text")?.toString() ?: return@mapNotNull null
@@ -32,9 +32,12 @@ fun smsNotificationTexts(notification: Notification, postedAt: Long): List<SmsNo
                 SmsNotificationText(body, time)
             }
             .sortedBy { it.receivedAt }
+        if (extracted.isNotEmpty()) return extracted
+    }
     val body =
-        notification.extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
-            ?: notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        notification.extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.takeIf { it.isNotBlank() }
+            ?: notification.extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.joinToString("\n")?.takeIf { it.isNotBlank() }
+            ?: notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.takeIf { it.isNotBlank() }
             ?: return emptyList()
     val time = notification.`when`.takeIf { it in 1..postedAt } ?: postedAt
     return listOf(SmsNotificationText(body, time))
@@ -42,6 +45,16 @@ fun smsNotificationTexts(notification: Notification, postedAt: Long): List<SmsNo
 
 class PurchaseNotificationService : NotificationListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        SmsHealth.write(this, "listener", "connected")
+    }
+
+    override fun onListenerDisconnected() {
+        SmsHealth.write(this, "listener", "disconnected")
+        requestRebind(ComponentName(this, PurchaseNotificationService::class.java))
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName != Telephony.Sms.getDefaultSmsPackage(this)) return
@@ -51,11 +64,12 @@ class PurchaseNotificationService : NotificationListenerService() {
         scope.launch {
             try {
                 messages.forEach { message ->
-                    app.repository.importSms(sbn.packageName, message.body, message.receivedAt)
+                    SmsHealth.import(app, sbn.packageName, message.body, message.receivedAt)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
+                SmsHealth.write(this@PurchaseNotificationService, "result", "error")
                 // A failed import must not crash tracking or log a private message.
             }
         }

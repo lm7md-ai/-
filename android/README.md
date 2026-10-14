@@ -137,8 +137,10 @@ Zero distance, insufficient full tanks, or detected unreliable intervals display
 
 ## Automatic fuel-cost estimates
 
-SMS purchases can now be imported locally from the default Messages application's
-notifications after opt-in notification access. Clear SAR purchase amounts appear
+SMS purchases can be imported locally through opt-in RECEIVE_SMS for new messages
+or notification access to the default Messages application's notifications. Version
+3.1 also supports explicitly pasting a missed message; see [the hotfix guide](docs/HOTFIX_3_1.md).
+Clear SAR purchase amounts appear
 in the ledger with merchant/source, classification controls and deletion.
 OTP/refund/declined/ambiguous messages are skipped. See [setup, behavior and limits](docs/SMS_IMPORT.md).
 

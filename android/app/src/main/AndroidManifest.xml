@@ -8,6 +8,8 @@
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+ <uses-permission android:name="android.permission.RECEIVE_SMS"/>
+ <uses-feature android:name="android.hardware.telephony" android:required="false"/>
  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
  <queries><intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="sms"/></intent></queries>
@@ -16,7 +18,9 @@
  <service android:name="sa.rihla.tracking.TrackingService" android:exported="false" android:foregroundServiceType="location"/>
  <service android:name="sa.rihla.sms.PurchaseNotificationService" android:label="@string/sms_import" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"><intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter></service>
  <receiver android:name="sa.rihla.tracking.DetectionReceiver" android:exported="false"/>
+ <receiver android:name="sa.rihla.tracking.HomeGeofenceReceiver" android:exported="false"/>
+ <receiver android:name="sa.rihla.sms.PurchaseSmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS"><intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED"/></intent-filter></receiver>
  <receiver android:name="sa.rihla.tracking.CarBluetoothReceiver" android:exported="true"><intent-filter><action android:name="android.bluetooth.device.action.ACL_CONNECTED"/></intent-filter></receiver>
- <receiver android:name="sa.rihla.tracking.BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/></intent-filter></receiver>
+ <receiver android:name="sa.rihla.tracking.BootReceiver" android:exported="true"><intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/><action android:name="android.intent.action.MY_PACKAGE_REPLACED"/></intent-filter></receiver>
  </application>
 </manifest>

@@ -27,6 +27,10 @@ object Detection {
 
     @Suppress("MissingPermission")
     fun register(c: Context, enabled: Boolean, onFailure: (Exception) -> Unit = {}) {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            val app = c.applicationContext as? RihlaApp ?: return@launch
+            HomeGeofences.register(c, enabled, app.repository.dao.places().find { it.type == "HOME" }, onFailure)
+        }
         val client = ActivityRecognition.getClient(c)
         if (!enabled) {
             client.removeActivityTransitionUpdates(pending(c))
@@ -82,11 +86,18 @@ class DetectionReceiver : BroadcastReceiver() {
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
-        if (i.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (i.action !in listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED)) return
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                Detection.register(c, (c.applicationContext as RihlaApp).settings.flow.first().auto)
+                val app = c.applicationContext as RihlaApp
+                Detection.register(c, app.settings.flow.first().auto)
+                HomeGeofences.restore(c)
+                if (app.repository.dao.active() != null && TrackingService.backgroundAllowed(c))
+                    TrackingService.launch(c)
+                if (sa.rihla.sms.PurchaseNotificationService.allowed(c))
+                    android.service.notification.NotificationListenerService.requestRebind(
+                        ComponentName(c, sa.rihla.sms.PurchaseNotificationService::class.java))
             } finally {
                 pending.finish()
             }

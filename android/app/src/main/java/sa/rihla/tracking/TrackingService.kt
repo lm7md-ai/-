@@ -52,7 +52,7 @@ class TrackingService : Service() {
         )
     }
 
-    private var candidate: Fix? = null
+    private val candidate = DrivingCandidate()
     private var autoPending = false
     private var slow = false
     private var registeredInterval: Long? = null
@@ -104,30 +104,25 @@ class TrackingService : Service() {
                 .build()
         try {
             startForeground(10, notification)
+            health(this, "running")
         } catch (_: SecurityException) {
+            health(this, "permission")
             stopSelf()
             return
         } catch (_: IllegalStateException) {
+            health(this, "blocked")
             stopSelf()
             return
         }
         scope.launch {
             for (f in queue) {
                 if (autoPending && app.repository.dao.active() == null) {
-                    if (f.accuracy > 40) continue
-                    val first = candidate
-                    if (first == null) {
-                        candidate = f
-                        continue
-                    }
-                    val dt = f.time - first.time
-                    if (drivingEvidence(first, f)) {
+                    val first = candidate.accept(f)
+                    if (first != null) {
                         app.repository.start(true, first.time)
                         app.repository.record(first)
                         autoPending = false
-                    } else if (dt > 120000) {
-                        stopSelf()
-                        break
+                        health(this@TrackingService, "running")
                     } else continue
                 }
                 if (app.repository.record(f)) {
@@ -180,15 +175,19 @@ class TrackingService : Service() {
             return START_NOT_STICKY
         }
         scope.launch {
+            // Repeated activity/geofence triggers must not discard the evidence already collected.
+            if (i?.getBooleanExtra("automatic", false) == true && autoPending && registeredInterval != null)
+                return@launch
             autoPending =
                 i?.getBooleanExtra("automatic", false) == true &&
                     app.repository.dao.active() == null
-            if (autoPending) candidate = null
+            if (autoPending) candidate.reset()
+            health(this@TrackingService, if (autoPending) "checking_driving" else "running")
             precise = app.settings.flow.first().preciseTracking
             pendingTimeout?.cancel()
             if (autoPending)
                 pendingTimeout = scope.launch {
-                    delay(150_000)
+                    delay(600_000)
                     if (app.repository.dao.active() == null) stopSelf()
                 }
             if (!autoPending && app.repository.dao.active() == null) {
@@ -278,9 +277,16 @@ class TrackingService : Service() {
                 )
                 true
             } catch (_: IllegalStateException) {
+                health(c, "blocked")
                 false
             } catch (_: SecurityException) {
+                health(c, "permission")
                 false
             }
+
+        private fun health(c: Context, status: String) {
+            c.getSharedPreferences("tracking_health", Context.MODE_PRIVATE).edit()
+                .putString("service", status).putLong("updated", System.currentTimeMillis()).apply()
+        }
     }
 }

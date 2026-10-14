@@ -13,6 +13,19 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35], application = Application::class)
 class SmsNotificationTest {
     @Test
+    fun emptyMessagingArrayFallsBackToFullTextAndInboxLinesAreSupported() {
+        val notification = Notification()
+        notification.`when` = 0
+        notification.extras = Bundle().apply {
+            putParcelableArray(Notification.EXTRA_MESSAGES, emptyArray<Bundle>())
+            putCharSequence(Notification.EXTRA_BIG_TEXT, "")
+            putCharSequenceArray(Notification.EXTRA_TEXT_LINES, arrayOf("شراء PoS", "بـSR 32", "لـEXPRESS FOOD"))
+        }
+        val extracted = smsNotificationTexts(notification, 3000).single()
+        assertEquals(3000L, extracted.receivedAt)
+        assertEquals(sa.rihla.core.SmsPurchase(3200, "EXPRESS FOOD"), sa.rihla.core.PurchaseSmsParser.parse(extracted.body))
+    }
+    @Test
     @Config(sdk = [26])
     fun androidEightPermissionCheckRequiresThisExactListenerComponent() {
         val context = org.robolectric.RuntimeEnvironment.getApplication()

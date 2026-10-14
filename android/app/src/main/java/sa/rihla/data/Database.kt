@@ -183,6 +183,9 @@ interface JourneyDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun claimSms(receipt: ImportedSms): Long
 
+    @Query("SELECT * FROM imported_sms WHERE receivedAt BETWEEN :start AND :end")
+    suspend fun smsReceipts(start: Long, end: Long): List<ImportedSms>
+
     @Query("DELETE FROM imported_sms") suspend fun clearImportedSms()
 
     @Query("DELETE FROM expenses WHERE id=:id AND source='SMS_NOTIFICATION'")

@@ -263,3 +263,19 @@ fun drivingEvidence(first: Fix, next: Fix): Boolean {
     val moved = distance(first.lat, first.lon, next.lat, next.lon)
     return moved >= 60.0 && moved / (dt / 1000.0) <= 65.0
 }
+
+/** Rolling evidence window survives waiting at home or a red light after an automatic trigger. */
+class DrivingCandidate {
+    private var first: Fix? = null
+    fun reset() { first = null }
+    fun accept(f: Fix): Fix? {
+        if (f.accuracy !in 0.1..40.0) return null
+        val previous = first
+        if (previous == null || f.time - previous.time > 90_000) {
+            first = f
+            return null
+        }
+        if (f.time <= previous.time) return null
+        return previous.takeIf { drivingEvidence(it, f) }
+    }
+}

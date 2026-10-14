@@ -15,6 +15,36 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35], application = Application::class)
 class SmsImportTest {
     @Test
+    fun oldDeletedReceiptStillBlocksReimportAfterBankTimestampUpgrade() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), JourneyDatabase::class.java).build()
+        try {
+            val body = "شراء PoS\nبـSR 32\nلـEXPRESS FOOD\n26/10/14 16:51"
+            val arrival = java.time.Instant.parse("2026-10-14T13:51:20Z").toEpochMilli()
+            val normalized = sa.rihla.core.normalizeSms(body).replace(Regex("\\s+"), " ").trim()
+            val legacyKey = java.security.MessageDigest.getInstance("SHA-256")
+                .digest("test.messages\n$arrival\n$normalized".toByteArray())
+                .joinToString("") { "%02x".format(it.toInt() and 255) }
+            db.dao().claimSms(ImportedSms(legacyKey, arrival))
+            assertFalse(SmsExpenseImporter(db).import("test.messages", body, arrival + 20_000))
+            assertTrue(db.dao().expenseRecords().isEmpty())
+        } finally { db.close() }
+    }
+    @Test
+    fun rajhiSmsBroadcastAndNotificationSaveOneExpenseAtBankTime() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), JourneyDatabase::class.java).build()
+        try {
+            val body = "شراء PoS\nعبر5231;مدى-جوجل باي\nبـSR 32\nلـEXPRESS FOOD\n26/10/14 16:51"
+            val arrival = java.time.Instant.parse("2026-10-14T13:51:20Z").toEpochMilli()
+            val importer = SmsExpenseImporter(db)
+            assertTrue(importer.import("test.messages", body, arrival))
+            assertFalse(importer.import("test.messages", body, arrival + 20_000))
+            val saved = db.dao().expenseRecords().single()
+            assertEquals(3200L, saved.amountHalala)
+            assertEquals("EXPRESS FOOD", saved.merchant)
+            assertEquals(arrival - 20_000, saved.createdAt)
+        } finally { db.close() }
+    }
+    @Test
     fun enablingAndDisablingPreventsOldAndDisabledMessagesFromBeingImported() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         val db = Room.inMemoryDatabaseBuilder(context, JourneyDatabase::class.java).build()

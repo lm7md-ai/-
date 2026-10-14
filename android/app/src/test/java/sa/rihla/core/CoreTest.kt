@@ -5,6 +5,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CoreTest {
+    @Test
+    fun waitingMoreThanNinetySecondsDoesNotPermanentlyPreventAutomaticStart() {
+        val candidate = DrivingCandidate()
+        assertNull(candidate.accept(Fix(21.5, 39.2, 1_000_000, 5.0)))
+        assertNull(candidate.accept(Fix(21.5, 39.2, 1_100_000, 5.0)))
+        assertNotNull(candidate.accept(Fix(21.501, 39.2, 1_110_000, 5.0, 11.0)))
+        candidate.reset()
+        assertNull(candidate.accept(Fix(21.502, 39.2, 1_120_000, 5.0, 11.0)))
+    }
     private val engine = TrackingEngine()
     private val home = Area(21.5, 39.2, 200.0)
     private val uni = Area(21.52, 39.2, 300.0)

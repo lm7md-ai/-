@@ -5,6 +5,14 @@ import org.junit.Test
 
 class PurchaseSmsTest {
     @Test
+    fun actualRajhiGooglePayPurchaseExtractsAmountMerchantAndSaudiTime() {
+        val body = "شراء PoS\nعبر5231;مدى-جوجل باي\nبـSR 32\nلـEXPRESS FOOD\n26/10/14 16:51"
+        assertEquals(SmsPurchase(3200, "EXPRESS FOOD"), PurchaseSmsParser.parse(body))
+        val arrival = java.time.Instant.parse("2026-10-14T13:51:20Z").toEpochMilli()
+        assertEquals(java.time.Instant.parse("2026-10-14T13:51:00Z").toEpochMilli(), purchaseMessageTime(body, arrival))
+        assertEquals(arrival, purchaseMessageTime(body.replace("26/10/14", "26/99/14"), arrival))
+    }
+    @Test
     fun rajhiArabicSeparatesPurchaseFromCardAndBalance() {
         val body =
             "شراء عبر نقاط البيع\nبطاقة: 1234\nبمبلغ: 24.50 SAR\nلدى: TEST STORE\nفي: 2026-10-13 15:30\nالرصيد: 1000.00 SAR"

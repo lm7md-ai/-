@@ -272,6 +272,12 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
         work { app.settings.smsImport(value) }
     }
 
+    fun importPastedSms(body: String, result: (Boolean) -> Unit) {
+        work {
+            result(repo.importPastedSms(android.provider.Telephony.Sms.getDefaultSmsPackage(app) ?: "sms", body))
+        }
+    }
+
     fun categorizeImportedExpense(id: Long, category: String) {
         require(category in listOf("FUEL", "FOOD", "OTHER"))
         work { repo.dao.categorizeImportedExpense(id, category) }

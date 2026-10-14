@@ -1,5 +1,15 @@
 # Updating without losing journeys
 
+## Version 3.1 hotfix
+
+`releases/app-v3.1.apk` keeps package `sa.rihla`, the retained signing key and
+database schema 6; versionCode increases to 31. Install over published 1.3/2.0/3.0
+without uninstalling or clearing storage. Existing trips, receipts and preferences
+are retained. Finish the current trip before installing. A newly requested
+RECEIVE_SMS runtime permission remains optional and requires the user's Android
+permission grant. Use the independent APK only for an existing `sa.rihla.next`
+installation. See [SMS and home-trigger setup](docs/HOTFIX_3_1.md).
+
 ## Version 3.0
 
 The primary `releases/app-v3.0.apk` keeps the package/key of the published 1.3 and

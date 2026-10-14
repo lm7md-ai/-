@@ -1,4 +1,15 @@
-# Purchase expenses from SMS notifications — version 1.3
+# Purchase expenses from SMS — version 3.1
+
+Version 3.1 adds optional RECEIVE_SMS for new incoming messages, a paste-to-import
+dialog for missed messages, safe health codes, full-text notification fallbacks,
+listener rebind, and support for the owner's supplied Al Rajhi Google Pay format.
+Standalone Rajhi timestamps are interpreted in Asia/Riyadh and unify direct-SMS
+and notification receipt identities. Legacy receipt hashes, including deleted
+expenses, are honored. READ_SMS and the default SMS role are not requested.
+See [current setup and limitations](HOTFIX_3_1.md). The following describes the
+notification channel introduced in 1.3; direct reception does not require a visible
+notification, and current merchant rules and bank timestamps override the original
+OTHER classification and arrival-time behavior described below.
 
 Enable **تسجيل مشتريات الرسائل تلقائيًا** in Settings and grant Rihla notification
 access in Android's system screen. The feature is off by default. It processes
@@ -9,7 +20,7 @@ role, banking login, network service, or periodic background polling is used.
 The owner uses Al Rajhi. Tests cover representative Arabic/English purchase
 layouts with card suffixes, SAR amounts, merchants, timestamps and available
 balances. These fixtures are synthetic; the owner's exact message template
-has not been supplied. A format that cannot be parsed confidently is skipped.
+was supplied for the 3.1 regression tests. A format that cannot be parsed confidently is skipped.
 
 ## Recording behavior
 

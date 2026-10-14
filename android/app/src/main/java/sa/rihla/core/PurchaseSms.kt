@@ -4,6 +4,18 @@ import java.math.BigDecimal
 
 data class SmsPurchase(val amountHalala: Long, val merchant: String)
 
+/** Rajhi's standalone Saudi local timestamp gives both delivery channels one receipt identity. */
+fun purchaseMessageTime(body: String, receivedAt: Long): Long {
+    val line = Regex("(?m)^\\s*([0-9]{2}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2})\\s*$")
+        .find(normalizeSms(body))?.groupValues?.get(1) ?: return receivedAt
+    return try {
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("uu/MM/dd HH:mm")
+            .withResolverStyle(java.time.format.ResolverStyle.STRICT)
+        java.time.LocalDateTime.parse(line, formatter).atZone(java.time.ZoneId.of("Asia/Riyadh"))
+            .toInstant().toEpochMilli().takeIf { it > 0 && it <= receivedAt + 120_000 } ?: receivedAt
+    } catch (_: java.time.DateTimeException) { receivedAt }
+}
+
 fun normalizeSms(text: String): String = buildString {
     text.forEach { char ->
         when {
@@ -45,7 +57,7 @@ object PurchaseSmsParser {
         Regex("(?:مبلغ|قيمة|amount|ب|for)[\\s:=\\-]*$", RegexOption.IGNORE_CASE)
     private val merchant =
         Regex(
-            "(?:^|\\n|[;؛])\\s*(?:لدى|عند|التاجر|merchant|at)\\s*[:=]?\\s*([^\\n;؛]+)",
+            "(?:^|\\n|[;؛])\\s*(?:لدى|عند|التاجر|merchant|at|ل)\\s*[:=]?\\s*([^\\n;؛]+)",
             RegexOption.IGNORE_CASE,
         )
 

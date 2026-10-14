@@ -154,11 +154,35 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                     data.settings.auto ||
                         (TrackingService.backgroundAllowed(LocalContext.current) &&
                             (Detection.available(LocalContext.current) ||
+                                data.places.any { it.type == "HOME" } ||
                                 data.settings.bluetoothAddress.isNotBlank())),
             )
             Text(tr("auto_tracking"))
         }
         Text(tr("tracking_limits"))
+        val trackingContext = LocalContext.current
+        var homeStatus by remember { mutableStateOf("") }
+        var serviceStatus by remember { mutableStateOf("") }
+        LaunchedEffect(Unit) {
+            while (true) {
+                homeStatus = trackingContext.getSharedPreferences("tracking_health", android.content.Context.MODE_PRIVATE).getString("home", "").orEmpty()
+                serviceStatus = trackingContext.getSharedPreferences("tracking_health", android.content.Context.MODE_PRIVATE).getString("service", "").orEmpty()
+                delay(5000)
+            }
+        }
+        Text("محفّز مغادرة البيت: " + when (homeStatus) {
+            "registered" -> "مسجل لدى النظام"
+            "error" -> "تعذر التسجيل؛ راجع إذن الموقع الدائم وخدمات Google"
+            else -> "غير مسجل؛ حدد البيت وفعّل الموقع الدائم والتتبع التلقائي"
+        })
+        Text("تبدأ محاولة التتبع عند مغادرة نطاق البيت، ثم يؤكد GPS القيادة. تنتهي الرحلة بعد توقف ثابت داخل نطاق البيت لمدة 5 دقائق. قد يؤخر النظام محفّز النطاق، ويحتاج GPS إلى إشارة صالحة.", style = MaterialTheme.typography.bodySmall)
+        Text("آخر حالة تشغيل التتبع: " + when (serviceStatus) {
+            "checking_driving" -> "بدأ فحص القيادة"
+            "running" -> "شُغّلت خدمة تسجيل المسار"
+            "permission" -> "منع النظام الخدمة بسبب إذن الموقع"
+            "blocked" -> "منع النظام بدء الخدمة في الخلفية"
+            else -> "لم تُشغّل الخدمة بعد"
+        })
         Action("configure_home") { place = "HOME" }
         Action("configure_university") { place = "UNIVERSITY" }
         Text(tr("no_official_boundary"))
@@ -179,6 +203,13 @@ fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
     val context = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
     var enabling by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var pasting by remember { mutableStateOf(false) }
+    var pasted by remember { mutableStateOf("") }
+    var pasteResult by remember { mutableStateOf<String?>(null) }
+    val smsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        refresh++
+        if (granted) vm.smsImport(true)
+    }
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             refresh++
@@ -197,6 +228,7 @@ fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     val allowed = refresh >= 0 && sa.rihla.sms.PurchaseNotificationService.allowed(context)
+    val direct = refresh >= 0 && sa.rihla.sms.PurchaseSmsReceiver.allowed(context)
     val messagesApp = android.provider.Telephony.Sms.getDefaultSmsPackage(context)
     Heading("sms_import")
     Text(tr("sms_import_explanation"))
@@ -204,7 +236,7 @@ fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
         Switch(
             data.settings.smsImport,
             { enabled ->
-                if (!enabled || allowed) vm.smsImport(enabled)
+                if (!enabled || allowed || direct) vm.smsImport(enabled)
                 else {
                     enabling = true
                     launcher.launch(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -215,8 +247,41 @@ fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
         Text(tr("sms_import"))
     }
     Metric("sms_access", tr(if (allowed) "allowed" else "denied"))
+    Text(if (direct) "استقبال الرسائل الجديدة مباشرة: مسموح" else "استقبال الرسائل الجديدة مباشرة: غير مسموح")
+    Button(onClick = { smsPermission.launch(Manifest.permission.RECEIVE_SMS) }) {
+        Text("تفعيل استقبال رسائل الشراء مباشرة")
+    }
+    Text("بإذنك، يُستخرج المبلغ والتاجر من رسائل الشراء الجديدة على الجهاز، دون رفع الرسائل أو حفظ نصها. لا يقرأ هذا الإذن الرسائل السابقة. إذا منع الهاتف الإذن، استخدم إشعارات الرسائل أو الصق الرسالة هنا.", style = MaterialTheme.typography.bodySmall)
+    LaunchedEffect(Unit) { while (true) { delay(5000); refresh++ } }
+    val health = context.getSharedPreferences("sms_health", android.content.Context.MODE_PRIVATE)
+    val lastResult = when (health.getString("result", null)) {
+        "imported" -> "تم تسجيل عملية شراء"
+        "unrecognized" -> "وصل نص، لكنه لم يتضمن عملية شراء واضحة؛ قد يكون إشعارًا مخفيًا"
+        "duplicate_or_disabled" -> "عملية مكررة أو الاستيراد متوقف أو الرسالة أقدم من التفعيل"
+        "error" -> "تعذر حفظ العملية؛ الصق الرسالة لإعادة المحاولة"
+        else -> "لم يستقبل التطبيق نص رسالة حتى الآن"
+    }
+    Text("حالة الاستقبال: $lastResult")
+    Text("اتصال قارئ الإشعارات: " + when (health.getString("listener", null)) {
+        "connected" -> "متصل"
+        "disconnected" -> "إعادة اتصال مطلوبة"
+        else -> "لم يتأكد الاتصال"
+    })
+    Button(onClick = { pasting = true; pasteResult = null }) { Text("إضافة رسالة شراء فائتة") }
+    if (pasting) Dialog(onDismissRequest = { pasting = false; pasted = "" }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxWidth().padding(24.dp), shape = MaterialTheme.shapes.large) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("الصق رسالة الشراء")
+                OutlinedTextField(value = pasted, onValueChange = { pasted = it.take(10000) }, modifier = Modifier.fillMaxWidth(), minLines = 4)
+                Text("يُستخدم تاريخ رسالة الراجحي إن وُجد، وتُمنع إضافة نفس الرسالة مرتين.")
+                pasteResult?.let { Text(it) }
+                Button(onClick = { vm.importPastedSms(pasted) { ok -> pasteResult = if (ok) "تم تسجيل العملية" else "الرسالة مكررة أو لا تتضمن مبلغ شراء واضحًا" } }, enabled = pasted.isNotBlank()) { Text("استخراج وتسجيل") }
+                TextButton(onClick = { pasting = false; pasted = "" }) { Text("إغلاق") }
+            }
+        }
+    }
     if (messagesApp == null) Text(tr("sms_app_missing"))
-    if (data.settings.smsImport && !allowed) Text(tr("sms_access_required"))
+    if (data.settings.smsImport && !allowed && !direct) Text(tr("sms_access_required"))
     Action("sms_access_settings") {
         launcher.launch(Intent(AndroidSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
     }

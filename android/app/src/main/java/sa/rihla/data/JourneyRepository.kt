@@ -44,6 +44,10 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
             SmsExpenseImporter(db).import(packageName, body, receivedAt)
         }
 
+    suspend fun importPastedSms(packageName: String, body: String): Boolean = lock.withLock {
+        SmsExpenseImporter(db).import(packageName, body, System.currentTimeMillis())
+    }
+
     suspend fun start(automatic: Boolean, startedAt: Long = System.currentTimeMillis()): Long =
         lock.withLock {
             db.withTransaction {

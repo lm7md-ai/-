@@ -169,7 +169,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
         if (data.active != null && TrackingService.fineAllowed(context))
             TrackingService.launch(context)
     }
-    LaunchedEffect(data.settings.auto) {
+    LaunchedEffect(data.settings.auto, data.places.find { it.type == "HOME" }) {
         Detection.register(context, data.settings.auto) { vm.error.value = "detection_failed" }
     }
     val dark =
