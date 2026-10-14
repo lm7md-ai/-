@@ -155,10 +155,11 @@ fun FormField(key: String, value: String, onChange: (String) -> Unit, decimal: B
 }
 
 @Composable
-fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
+fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
     val data by vm.state.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val audioPlayback by sa.rihla.audio.AudioLive.state.collectAsStateWithLifecycle()
     if (!data.loaded) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -196,6 +197,9 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 var page by rememberSaveable { mutableStateOf("dashboard") }
                 var selected by rememberSaveable { mutableStateOf<Long?>(null) }
+                LaunchedEffect(audioRequest) {
+                    if (audioRequest > 0) { page = "audio"; selected = null }
+                }
                 LaunchedEffect(selected, data.outings) {
                     if (selected != null && data.outings.none { it.id == selected }) selected = null
                 }
@@ -232,6 +236,11 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                     )
                                 }
                                 IconButton(
+                                    onClick = { page = "audio"; selected = null }
+                                ) {
+                                    Icon(Icons.Default.Headphones, "الصوتيات")
+                                }
+                                IconButton(
                                     onClick = {
                                         page = "calendar"
                                         selected = null
@@ -258,6 +267,9 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                             }
                         },
                         bottomBar = {
+                            Column {
+                            if (audioPlayback.id.isNotBlank())
+                                sa.rihla.audio.AudioMiniPlayer(onOpen = { page = "audio"; selected = null })
                             NavigationBar {
                                 listOf(
                                         "dashboard" to Icons.Default.Home,
@@ -282,6 +294,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                             },
                                         )
                                     }
+                            }
                             }
                         },
                     ) { padding ->
@@ -308,6 +321,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel()) {
                                     "history" -> History(data) { selected = it }
                                     "calendar" -> CalendarScreen(data) { selected = it }
                                     "map" -> sa.rihla.map.MapScreen(vm, data)
+                                    "audio" -> sa.rihla.audio.AudioScreen()
                                     "statistics" -> StatisticsScreen(data, vm) { selected = it }
                                     "vehicle" -> VehicleScreen(data)
                                     "expenses" ->

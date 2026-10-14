@@ -6,7 +6,7 @@ android {
  namespace = "sa.rihla"; compileSdk = 37
  compileSdkMinor = 2
  buildToolsVersion = "37.0.0"
- defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 32; versionName = "3.2" }
+ defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 40; versionName = "4.0" }
  sourceSets.getByName("main").assets.setSrcDirs(listOf("src/main/countryAssets"))
  flavorDimensions += "edition"
  productFlavors {
@@ -50,6 +50,9 @@ android {
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 dependencies {
+ implementation("androidx.media3:media3-exoplayer:1.11.1")
+ implementation("androidx.media3:media3-session:1.11.1")
+ implementation("androidx.documentfile:documentfile:1.1.0")
  implementation(platform("androidx.compose:compose-bom:2026.09.00"))
  implementation("androidx.activity:activity-compose:1.13.0")
  implementation("androidx.compose.material3:material3")

@@ -1,5 +1,18 @@
 # Updating without losing journeys
 
+## Version 4.0 audio library
+
+The signed non-debuggable main APK retains `sa.rihla` and the verified 1.3–3.2
+certificate, raising versionCode to 40. Install over the existing application
+without uninstalling or clearing storage, after ending any active trip.
+`journeys.db` stays at schema 6 and all historical migration paths remain.
+Audio uses its own `audio_library.db` schema 1; no journey/expense tables change.
+Sound and read-audio permissions are optional; SAF selection works without the
+whole-library permission. The mediaPlayback service is independent of tracking.
+Audio catalog export/restore is separate from journey backup; it stores file
+references, not original audio files or Android URI grants. [Audio guide](docs/AUDIO_4.md).
+The independent 4.0 APK updates only an existing `sa.rihla.next` installation.
+
 ## Version 3.2 audit fixes
 
 The published APK is now a signed, non-debuggable Release build. It retains the

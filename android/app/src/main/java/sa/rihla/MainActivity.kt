@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import sa.rihla.ui.RihlaRoot
 
 class MainActivity : ComponentActivity() {
+    private val audioRequest = androidx.compose.runtime.mutableIntStateOf(0)
     override fun attachBaseContext(newBase: android.content.Context) {
         val locale = java.util.Locale.forLanguageTag("ar-SA")
         val config = android.content.res.Configuration(newBase.resources.configuration)
@@ -18,6 +19,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { RihlaRoot() }
+        if (intent.getBooleanExtra("open_audio", false)) audioRequest.intValue++
+        setContent { RihlaRoot(audioRequest = audioRequest.intValue) }
+    }
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open_audio", false)) audioRequest.intValue++
     }
 }

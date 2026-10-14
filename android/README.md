@@ -2,6 +2,14 @@
 
 A native, Arabic-first, local-first personal driving journal for one Mitsubishi Lancer 2016. The existing website in the repository root is independent of this Android project.
 
+Version 4.0 adds a local Media3 audio library with SAF files/folders and optional
+MediaStore scanning; favorites, search, albums/artists and ordered playlists;
+background playback, notification/Bluetooth controls, resume/bookmarks, queue editing,
+speed, silence skipping and sleep timers. Optional native EQ/bass/virtual surround
+is capability-gated; stereo widening is a separate PCM16 processor, not discrete 7.1.
+Audio uses a separate Room database; journey schema 6 stays unchanged.
+[Audio guide](docs/AUDIO_4.md).
+
 Version 3.0 adds whole-Saudi offline roads/settlements, searchable places, map layers,
 speed coloring, distance measurements, bookmarks and point sharing; odometer-based
 full-tank economy; merchant rules, category budgets and confirmed recurring payments;
@@ -13,11 +21,11 @@ search/sorting, trip titles/notes/favorites, route timeline scrubbing, GPX/CSV e
 local backup/restore, and device readiness checks. Offline maps and SMS purchase
 import remain available. [Download the APK and view screenshots](../releases/README.md).
 
-The main **مشواري** download (`app-v3.0.apk`, `sa.rihla`) updates the published 1.3 and 2.0
+The main **مشواري** download (`app-v4.0.apk`, `sa.rihla`) updates the published 1.3 and 2.0
 APK in place with the same verified certificate and explicit Room migrations.
 The user has already moved historical data into 1.3; no cross-package transfer is
 needed for this update. Finish the active outing and install over 1.3 without uninstalling.
-An alternative `app-v3.0-independent.apk` uses `sa.rihla.next` for installations
+An alternative `app-v4.0-independent.apk` uses `sa.rihla.next` for installations
 still blocked by the original 1.0 signature conflict. That alternative installs
 separately and needs explicit local transfer. [Windows USB instructions](docs/WINDOWS_MIGRATION.md)
 and a ready-to-run ZIP include Python/ADB and keep verified backups; a
@@ -41,7 +49,7 @@ The optional secure file variable `RIHLA_SIGNING_KEYSTORE` selects an existing k
 `RIHLA_STORE_PASSWORD`, `RIHLA_KEY_ALIAS`, and `RIHLA_KEY_PASSWORD` configure it.
 Android debug-key defaults apply when those three variables are absent. Keep the
 private key securely outside Git. `tools/verify_release.py` requires an explicit
-`--edition classic --previous ../releases/app-v2.0.apk` or `--edition next`.
+`--edition classic --previous ../releases/app-v3.2.apk` or `--edition next`.
 It rejects a changed certificate, wrong package, and incompatible classic baseline.
 Future updates must retain the same key; an arbitrary regenerated debug key is incompatible.
 

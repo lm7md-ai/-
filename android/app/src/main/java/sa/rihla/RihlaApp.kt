@@ -5,6 +5,10 @@ import androidx.room.Room
 import sa.rihla.data.*
 
 class RihlaApp : Application() {
+    val audioDatabase by lazy {
+        Room.databaseBuilder(this, sa.rihla.audio.AudioDatabase::class.java, "audio_library.db").build()
+    }
+    val audio by lazy { sa.rihla.audio.AudioRepository(this, audioDatabase) }
     val database by lazy {
         Room.databaseBuilder(this, JourneyDatabase::class.java, "journeys.db")
             .addMigrations(

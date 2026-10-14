@@ -11,6 +11,7 @@ fun textResource(key: String): Int =
         }
     ) {
         "app_name" -> R.string.app_name
+        "audio" -> R.string.audio_title
         "map" -> R.string.map
         "tracking_channel" -> R.string.tracking_channel
         "tracking_active" -> R.string.tracking_active

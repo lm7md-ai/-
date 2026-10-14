@@ -136,6 +136,7 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
             Text("خريطة السعودية وأدوات المسار")
         }
         DataTools(vm, data)
+        Button(onClick = { navigate("audio") }, modifier = Modifier.fillMaxWidth()) { Text("مكتبة الصوتيات والمشغل") }
         DeviceReadiness(data)
         TrackingOptions(vm, data)
         Heading("theme")

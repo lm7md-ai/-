@@ -6,6 +6,11 @@
  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION"/>
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+ <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+ <uses-permission android:name="android.permission.WAKE_LOCK"/>
+ <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+ <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+ <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
  <uses-permission android:name="android.permission.RECEIVE_SMS"/>
@@ -14,8 +19,9 @@
  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
  <queries><intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="sms"/></intent></queries>
  <application android:name="sa.rihla.RihlaApp" android:label="@string/app_name" android:icon="@drawable/ic_launcher" android:theme="@style/AppTheme" android:supportsRtl="true" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="false">
- <activity android:name="sa.rihla.MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
+ <activity android:name="sa.rihla.MainActivity" android:exported="true" android:launchMode="singleTop"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
  <service android:name="sa.rihla.tracking.TrackingService" android:exported="false" android:foregroundServiceType="location"/>
+ <service android:name="sa.rihla.audio.AudioPlaybackService" android:exported="true" android:foregroundServiceType="mediaPlayback"><intent-filter><action android:name="androidx.media3.session.MediaSessionService"/></intent-filter></service>
  <service android:name="sa.rihla.sms.PurchaseNotificationService" android:label="@string/sms_import" android:exported="true" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"><intent-filter><action android:name="android.service.notification.NotificationListenerService"/></intent-filter></service>
  <receiver android:name="sa.rihla.tracking.DetectionReceiver" android:exported="false"/>
  <receiver android:name="sa.rihla.tracking.HomeGeofenceReceiver" android:exported="false"/>
