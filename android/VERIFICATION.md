@@ -1,28 +1,37 @@
-# Verification — version 3.1, 2026-10-14
+# Verification — version 3.2, 2026-10-14
 
 Toolchain: JDK 21, Gradle 9.8.0, AGP 9.4.1, Kotlin 2.4.20/KSP 2.3.12,
 Android platform 37.2/build-tools 37.0.0, Compose BOM 2026.09.00, Room 2.8.5,
 DataStore 1.2.1 and Robolectric 4.17. TLS, wrapper and source verification remain enabled.
 
 ```sh
-./gradlew assembleClassicDebug assembleNextDebug testClassicDebugUnitTest lintClassicDebug lintNextDebug
+./gradlew assembleClassicRelease assembleNextRelease testClassicDebugUnitTest lintClassicRelease lintNextRelease
 python3 tools/verify_schema.py
 python3 tools/verify_country_map.py
 python3 -m unittest discover -s tools -p 'test_*.py'
-python3 tools/verify_release.py app/build/outputs/apk/classic/debug/app-classic-debug.apk --edition classic --previous ../releases/app-v3.0.apk
-python3 tools/verify_release.py app/build/outputs/apk/next/debug/app-next-debug.apk --edition next
+python3 tools/verify_release.py app/build/outputs/apk/classic/release/app-classic-release.apk --edition classic --previous ../releases/app-v3.1.apk
+python3 tools/verify_release.py app/build/outputs/apk/next/release/app-next-release.apk --edition next
 ```
 
 | Check | Result |
 |---|---|
-| Android tests | 79 passed; 0 failures/errors/skipped |
-| Python transfer/signature/geometry tests | 12 passed |
-| Classic and next builds | Passed; versionCode 31, versionName 3.1 |
+| Android tests | 87 passed; 0 failures/errors/skipped |
+| Python transfer/signature/geometry tests | 13 passed |
+| Legacy server HTTP security tests | 4 passed; anonymous device access, oversized body, Host parsing and public dev-token binding checked |
+| Legacy Expo project | TypeScript check and web export passed; 7 static routes |
+| npm dependency audit | 29 unresolved advisories: 18 high, 11 moderate, 0 critical; semver-compatible fixes attempted; no forced SDK downgrade |
+| Classic and next builds | Passed; non-debuggable Release, versionCode 32, versionName 3.2 |
 | Both Android lint targets | 0 errors, 6 warnings per target; convenience/obsolete-SDK/newer-Gradle notices remain |
 | Supplied Rajhi Google Pay SMS | Exactly 3200 halalas and EXPRESS FOOD; Saudi bank time retained |
 | SMS delivery formats | Empty MessagingStyle falls back; InboxStyle multiline purchase extraction passes |
 | Cross-channel receipts | One dated bank message delivered at different times imports once; legacy deleted receipt still blocks import |
 | Automatic departure candidate | Waiting beyond 90 seconds rolls the confirmation window and subsequent driving starts |
+| Provider speed omission | Position-derived driving accepted; walking and uncertain drift rejected |
+| Tracking service | Repeated automatic trigger retains GPS evidence, creates one automatic trip and continues its route; synthetic accepted fixes in native Android simulation |
+| Disabled automatic setting | Delayed automatic trigger stops without creating a trip |
+| Current-location picker | Stale, mock and zero-accuracy fixes cannot set home |
+| Backup validation | Present non-array table, negative fuel, ended active trip and orphan active trip rejected transactionally |
+| Tile safety | Oversized stream stops at 2MB; invalid bytes and 4096px dimension rejected before full decode |
 | Home trigger configuration | Exit + entry, no synthetic initial departure, minimum wakeup radius 100m checked |
 | Historical Room migration | Every schema 1–5 opens as schema 6; all original column values retained |
 | SQLite schema constraints | Migrations through 6, cascade/unlink behavior and singleton active slot passed |
@@ -39,8 +48,8 @@ python3 tools/verify_release.py app/build/outputs/apk/next/debug/app-next-debug.
 | UI map | Navigation, zoom, measurement selection, loaded native map rendering and screenshots checked |
 | Stop taps | Existing coordinate-picking behavior retained; advanced map can select stops alongside point picking |
 | Existing behavior | SMS parser/deduplication, migrations, fuel/cost/duration calculations, backup rejection and UI restoration tests retained |
-| Main update identity | `sa.rihla`, same verified certificate as published 1.3/2.0/3.0; versionCode increases to 31 |
-| Independent identity | `sa.rihla.next`, same retained certificate; versionCode 31 |
+| Main update identity | `sa.rihla`, same verified certificate as published 1.3/2.0/3.0/3.1; versionCode increases to 32 |
+| Independent identity | `sa.rihla.next`, same retained certificate; versionCode 32 |
 
 ## Offline country data
 
@@ -73,10 +82,14 @@ The same-package main update preserves the installed 1.3/2.0 data. The independe
 edition updates only an existing next installation; cross-package transfer remains
 explicit and cannot bypass Android isolation or the unavailable original 1.0 key.
 
-Main APK: 87,514,374 bytes; SHA-256
-`cef70ac2e2504fdeb192607fc4ae9489452d4b1773d8bdaad02ead319635fb6b`.
-Independent APK: 87,060,707 bytes; SHA-256
-`80231ee631713de0b43b0784a13fd0f8d9c81e953a7d0ba4f4645dbb19961ccd`.
+Main APK: 80,037,355 bytes; SHA-256
+`bc084fecf8ac29497a081e84fa6b0047f3b8c290b0a04450aa7e7b0cf52d57ed`.
+Independent APK: 80,037,359 bytes; SHA-256
+`99445cca0fde2ea4a50c193af8b360809d05325a6dbaa27e5a200c5e750c8bf0`.
+
+Release uses the retained certificate for update compatibility; it is not a key
+rotation or a claim of Play Store signing readiness. Legacy run-as backup tools
+cannot read private data from this non-debuggable build; use in-app export.
 
 ## Hardware limits
 
@@ -96,4 +109,5 @@ while waiting, and GPS still confirms a five-minute stop before ending at home.
 
 The map screenshot is actual loaded native rendering of public OSM data in
 Robolectric. UI preview ledgers are empty; no user VIN, private routes or financial
-data are published. The web/Expo application code remains untouched.
+data are published. Legacy Expo UI code remains unchanged; its dependency lock,
+server security and CI server-test step were updated as described in the audit.

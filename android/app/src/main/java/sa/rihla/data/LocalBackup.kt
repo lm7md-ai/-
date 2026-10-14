@@ -95,7 +95,8 @@ class LocalBackup(private val database: JourneyDatabase) {
                     db.query("PRAGMA table_info(`$table`)").use { cursor ->
                         buildSet { while (cursor.moveToNext()) add(cursor.getString(1)) }
                     }
-                val rows = source.optJSONArray(table) ?: JSONArray()
+                // A missing legacy table is valid; a present table of the wrong type is not.
+                val rows = if (source.has(table)) source.getJSONArray(table) else JSONArray()
                 for (i in 0 until rows.length()) {
                     val row = rows.getJSONObject(i)
                     when (table) {
@@ -113,8 +114,9 @@ class LocalBackup(private val database: JourneyDatabase) {
                             )
                         "fuel" ->
                             require(
-                                row.isNull("odometerMeters") ||
-                                    row.getDouble("odometerMeters") in 0.0..1e10
+                                row.getLong("litersMl") > 0 && row.getLong("priceHalala") > 0 &&
+                                    row.getDouble("trackedMeters").isFinite() && row.getDouble("trackedMeters") >= 0 &&
+                                    (row.isNull("odometerMeters") || row.getDouble("odometerMeters") in 0.0..1e10)
                             )
                         "expenses" ->
                             require(
@@ -175,6 +177,12 @@ class LocalBackup(private val database: JourneyDatabase) {
                 }
             }
             db.query("PRAGMA foreign_key_check").use { require(!it.moveToFirst()) }
+            db.query("SELECT COUNT(*) FROM outings WHERE endedAt IS NULL").use {
+                require(it.moveToFirst() && it.getLong(0) <= 1)
+            }
+            db.query("SELECT outings.id FROM outings LEFT JOIN active_slot ON outings.id=active_slot.outingId WHERE (outings.endedAt IS NULL AND active_slot.outingId IS NULL) OR (outings.endedAt IS NOT NULL AND active_slot.outingId IS NOT NULL)").use {
+                require(!it.moveToFirst()) { "BACKUP_INVALID_ACTIVE_TRIP" }
+            }
             database.invalidationTracker.refreshAsync()
             preview
         }

@@ -13,9 +13,13 @@ const path = require('path');
 
 const PORT = Number(process.env.PORT || 8787);
 const TOKEN = process.env.ADMIN_TOKEN || 'dev-token';
+const HOST = process.env.HOST || (process.env.ADMIN_TOKEN ? '0.0.0.0' : '127.0.0.1');
+if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && TOKEN === 'dev-token') {
+  throw new Error('ADMIN_TOKEN مستقل مطلوب قبل إتاحة السيرفر على الشبكة');
+}
 const ROOT = path.join(__dirname, '..');
 const SEED_DIR = path.join(ROOT, 'content');
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DEVICES_DIR = path.join(DATA_DIR, 'devices');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const VERSION_FILE = path.join(DATA_DIR, '.version');
@@ -125,12 +129,20 @@ function authorized(req) {
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let raw = '';
+    const chunks = [];
+    let bytes = 0;
+    let oversized = false;
     req.on('data', (chunk) => {
-      raw += chunk;
-      if (raw.length > 4 * 1024 * 1024) reject(new Error('الحجم أكبر من 4MB'));
+      if (oversized) return;
+      bytes += chunk.length;
+      if (bytes > 4 * 1024 * 1024) {
+        oversized = true;
+        chunks.length = 0;
+        return reject(Object.assign(new Error('الحجم أكبر من 4MB'), { statusCode: 413 }));
+      }
+      chunks.push(chunk);
     });
-    req.on('end', () => resolve(raw));
+    req.on('end', () => { if (!oversized) resolve(Buffer.concat(chunks).toString('utf8')); });
     req.on('error', reject);
   });
 }
@@ -148,7 +160,13 @@ const MIME = {
 };
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  let url;
+  try {
+    // Routing needs only the path; an untrusted Host header must not crash URL parsing.
+    url = new URL(req.url, 'http://localhost');
+  } catch {
+    return json(res, 400, { error: 'عنوان طلب غير صالح' });
+  }
   const parts = url.pathname.split('/').filter(Boolean);
 
   if (req.method === 'OPTIONS') return json(res, 200, { ok: true });
@@ -188,6 +206,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (parts[0] === 'api' && parts[1] === 'devices') {
+      if (!authorized(req)) return json(res, 401, { error: 'رمز الوصول مطلوب لبيانات الأجهزة' });
       const id = sanitizeId(parts[2] || '');
       if (req.method === 'GET' && id) {
         const data = readIf(path.join(DEVICES_DIR, `${id}.json`), (raw) => JSON.parse(raw));
@@ -219,12 +238,13 @@ const server = http.createServer(async (req, res) => {
 
     return json(res, 404, { error: 'not found', hint: 'استخدم /admin للوحة التحكم و /api/content للتطبيق' });
   } catch (err) {
-    return json(res, 500, { error: err.message || String(err) });
+    return json(res, err.statusCode || 500, { error: err.message || String(err) });
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🛰  سيرفر المحتوى يعمل على http://localhost:${PORT}`);
-  console.log(`   لوحة التحكم: http://localhost:${PORT}/admin`);
-  console.log(`   رمز الوصول: ${TOKEN}`);
+server.listen(PORT, HOST, () => {
+  const boundPort = server.address().port;
+  console.log(`🛰  سيرفر المحتوى يعمل على http://localhost:${boundPort}`);
+  console.log(`   لوحة التحكم: http://localhost:${boundPort}/admin`);
+  console.log('   رمز الوصول مُعدّ؛ لا يُطبع في السجل');
 });

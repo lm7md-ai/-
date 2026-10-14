@@ -34,7 +34,7 @@ class HybridTiles(private val c: Context) : TileProvider {
                     val parentY = y / factor
                     val data =
                         db.rawQuery(
-                                "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?",
+                                "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=? AND length(tile_data)<=2000000",
                                 arrayOf(
                                     level.toString(),
                                     parentX.toString(),
@@ -42,6 +42,7 @@ class HybridTiles(private val c: Context) : TileProvider {
                                 ),
                             )
                             .use { if (it.moveToFirst()) it.getBlob(0) else null } ?: continue
+                    if (!TileImages.valid(data)) return null
                     if (level == z) return data
                     val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size) ?: return null
                     val size = (bitmap.width / factor).coerceAtLeast(1)
@@ -108,12 +109,8 @@ class HybridTiles(private val c: Context) : TileProvider {
                 }
                 if (connection.responseCode != 200)
                     return if (file.exists()) file.readBytes() else null
-                val bytes = connection.inputStream.use { it.readBytes() }
-                if (
-                    bytes.size > 2_000_000 ||
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size) == null
-                )
-                    return null
+                val bytes = connection.inputStream.use { TileImages.read(it) }
+                if (!TileImages.valid(bytes)) return null
                 val maxAge =
                     Regex("max-age=(\\d+)")
                         .find(connection.getHeaderField("Cache-Control") ?: "")
@@ -362,7 +359,7 @@ class RouteMapView(c: Context) : View(c) {
                 val z = zoom
                 scope.launch {
                     val bytes = provider.load(z, x, y)
-                    val b = bytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                    val b = bytes?.takeIf(TileImages::valid)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
                     withContext(Dispatchers.Main) {
                         loading -= key
                         if (b != null) tiles.put(key, b)

@@ -6,6 +6,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
+import android.os.SystemClock
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.*
@@ -15,6 +16,12 @@ import kotlinx.coroutines.*
 import sa.rihla.core.Fix
 
 object LocationPicker {
+    internal fun usable(l: Location): Boolean {
+        @Suppress("DEPRECATION")
+        val mock = if (android.os.Build.VERSION.SDK_INT >= 31) l.isMock else l.isFromMockProvider
+        return sa.rihla.core.usableLocation((SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000,
+            l.accuracy.toDouble(), mock)
+    }
     private fun fix(l: Location) =
         Fix(
             l.latitude,
@@ -51,7 +58,7 @@ object LocationPicker {
                                 .addOnSuccessListener {
                                     if (cont.isActive)
                                         cont.resume(
-                                            it?.takeIf { l -> l.accuracy <= 60 }?.let(::fix)
+                                            it?.takeIf(::usable)?.let(::fix)
                                         )
                                 }
                                 .addOnFailureListener { if (cont.isActive) cont.resume(null) }
@@ -68,7 +75,7 @@ object LocationPicker {
                 val listener =
                     object : LocationListener {
                         override fun onLocationChanged(l: Location) {
-                            if (l.accuracy <= 60 && cont.isActive) {
+                            if (usable(l) && cont.isActive) {
                                 manager.removeUpdates(this)
                                 cont.resume(fix(l))
                             }
@@ -80,7 +87,7 @@ object LocationPicker {
                     if (
                         last != null &&
                             System.currentTimeMillis() - last.time in 0..15000 &&
-                            last.accuracy <= 60
+                        usable(last)
                     )
                         cont.resume(fix(last))
                     else

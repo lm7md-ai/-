@@ -16,6 +16,46 @@ import sa.rihla.core.EngineState
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
 class BackupTest {
+    @Test
+    fun wrongTableTypeAndNegativeFuelRollbackRatherThanSilentlyLosingData() = runBlocking {
+        val source = database()
+        val target = database()
+        try {
+            seed(source)
+            val original = LocalBackup(source).export()
+            val malformed = JSONObject(original).apply {
+                getJSONObject("tables").put("fuel", JSONObject())
+            }
+            assertThrows(Exception::class.java) { runBlocking { LocalBackup(target).restore(malformed.toString()) } }
+            assertTrue(target.dao().outings().isEmpty())
+            val invalidFuel = JSONObject(original).apply {
+                getJSONObject("tables").getJSONArray("fuel").getJSONObject(0).put("litersMl", -1)
+            }
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { LocalBackup(target).restore(invalidFuel.toString()) } }
+            assertTrue(target.dao().expenseRecords().isEmpty())
+        } finally { source.close(); target.close() }
+    }
+
+    @Test
+    fun activeSlotCannotReferenceEndedTripAndActiveTripCannotLoseItsSlot() = runBlocking {
+        val source = database()
+        val target = database()
+        try {
+            seed(source)
+            val text = LocalBackup(source).export()
+            val endedActive = JSONObject(text).apply {
+                getJSONObject("tables").getJSONArray("active_slot")
+                    .put(JSONObject().put("singleton", 1).put("outingId", 1))
+            }
+            assertThrows(Exception::class.java) { runBlocking { LocalBackup(target).restore(endedActive.toString()) } }
+            assertTrue(target.dao().outings().isEmpty())
+            val orphanActive = JSONObject(text).apply {
+                getJSONObject("tables").getJSONArray("outings").getJSONObject(0).put("endedAt", JSONObject.NULL)
+            }
+            assertThrows(IllegalArgumentException::class.java) { runBlocking { LocalBackup(target).restore(orphanActive.toString()) } }
+            assertTrue(target.dao().outings().isEmpty())
+        } finally { source.close(); target.close() }
+    }
     private fun database() =
         Room.inMemoryDatabaseBuilder(
                 RuntimeEnvironment.getApplication(),

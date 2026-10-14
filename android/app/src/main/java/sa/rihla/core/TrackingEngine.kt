@@ -256,12 +256,17 @@ fun parsePolygon(text: String): List<Pair<Double, Double>> =
     }
 
 fun drivingEvidence(first: Fix, next: Fix): Boolean {
-    if (first.accuracy !in 0.1..40.0 || next.accuracy !in 0.1..40.0 || next.speed !in 3.0..65.0)
+    if (first.accuracy !in 0.1..40.0 || next.accuracy !in 0.1..40.0 || next.speed !in 0.0..65.0)
         return false
     val dt = next.time - first.time
     if (dt !in 8000L..90000L) return false
     val moved = distance(first.lat, first.lon, next.lat, next.lon)
-    return moved >= 60.0 && moved / (dt / 1000.0) <= 65.0
+    val derivedSpeed = moved / (dt / 1000.0)
+    // Some providers supply position without a speed field. A stricter derived threshold
+    // admits driving while excluding typical walking and stationary accuracy drift.
+    val driving = next.speed >= 3.0 || (next.speed == 0.0 && derivedSpeed >= 5.0 &&
+        moved > first.accuracy + next.accuracy + 20.0)
+    return driving && moved >= 60.0 && derivedSpeed <= 65.0
 }
 
 /** Rolling evidence window survives waiting at home or a red light after an automatic trigger. */

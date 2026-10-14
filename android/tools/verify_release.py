@@ -2,10 +2,14 @@
 """Verify the retained signing key and the explicitly selected edition before publication."""
 import argparse
 from pathlib import Path
-from safe_update import apk_info, compatible
+from safe_update import apk_info, compatible, command
 
 RELEASE_PACKAGE = "sa.rihla.next"
 RELEASE_CERTIFICATE = "c82d020159412f6dac6f0675f1b826f7335730bbe9b647224644f94937da8b34"
+
+def verify_build(metadata):
+    if "application-debuggable" in metadata.splitlines():
+        raise ValueError("Debuggable APK refused; build a signed release edition")
 
 def verify_identity(identity, edition="next", previous=None):
     package, version, certificates = identity
@@ -28,4 +32,5 @@ if __name__ == "__main__":
     if Path(args.apk).stat().st_size >= 100 * 1024 * 1024:
         raise ValueError("APK exceeds GitHub's 100 MiB file limit; compact the offline map before publishing")
     verify_identity(apk_info(args.apk), args.edition, apk_info(args.previous) if args.previous else None)
-    print("PASS: selected edition, valid signature, expected persistent certificate and increasing version")
+    verify_build(command("aapt2", "dump", "badging", args.apk).decode())
+    print("PASS: non-debuggable release, selected edition, valid signature, expected persistent certificate and increasing version")

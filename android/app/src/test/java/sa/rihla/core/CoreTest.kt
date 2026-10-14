@@ -6,6 +6,13 @@ import org.junit.Test
 
 class CoreTest {
     @Test
+    fun automaticDrivingCanUsePositionsWithoutProviderSpeedButRejectsWalkingAndUncertainty() {
+        val first = Fix(21.5, 39.2, 1_000_000, 5.0)
+        assertTrue(drivingEvidence(first, Fix(21.501, 39.2, 1_010_000, 5.0)))
+        assertFalse(drivingEvidence(first, Fix(21.501, 39.2, 1_050_000, 5.0)))
+        assertFalse(drivingEvidence(first.copy(accuracy = 40.0), Fix(21.5006, 39.2, 1_010_000, 40.0)))
+    }
+    @Test
     fun waitingMoreThanNinetySecondsDoesNotPermanentlyPreventAutomaticStart() {
         val candidate = DrivingCandidate()
         assertNull(candidate.accept(Fix(21.5, 39.2, 1_000_000, 5.0)))

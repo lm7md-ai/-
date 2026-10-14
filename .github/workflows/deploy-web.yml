@@ -48,6 +48,9 @@ jobs:
       - name: فحص الأنواع
         run: npm run typecheck
 
+      - name: فحص حماية خادم المحتوى
+        run: npm run test:server
+
       - name: بناء نسخة الويب
         run: npm run build:web
 

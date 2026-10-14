@@ -6,7 +6,7 @@ android {
  namespace = "sa.rihla"; compileSdk = 37
  compileSdkMinor = 2
  buildToolsVersion = "37.0.0"
- defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 31; versionName = "3.1" }
+ defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 32; versionName = "3.2" }
  sourceSets.getByName("main").assets.setSrcDirs(listOf("src/main/countryAssets"))
  flavorDimensions += "edition"
  productFlavors {
@@ -21,6 +21,12 @@ android {
    keyPassword = providers.environmentVariable("RIHLA_KEY_PASSWORD").orElse("android").get()
   }
   buildTypes.getByName("debug").signingConfig = signingConfigs.getByName("owner")
+ }
+ buildTypes.getByName("release") {
+  // Preserve installed-update compatibility while disabling debugger attachment.
+  signingConfig = signingConfigs.getByName(if (ownerKeystore != null) "owner" else "debug")
+  isDebuggable = false
+  isMinifyEnabled = false
  }
  bundle { language { enableSplit = false } }
  buildFeatures { compose = true }

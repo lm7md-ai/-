@@ -13,23 +13,29 @@ import com.google.android.gms.location.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import sa.rihla.MainActivity
 import sa.rihla.R
 import sa.rihla.RihlaApp
 import sa.rihla.core.*
 
 class TrackingService : Service() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, _ ->
+        health(this, "error")
+        stopSelf()
+    })
     private val queue = Channel<Fix>(Channel.UNLIMITED)
+    private val commandLock = Mutex()
     private val app
         get() = application as RihlaApp
 
     private val client by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private val native by lazy { getSystemService(LocationManager::class.java) }
     private val listener = LocationListener { l -> receive(l, "GPS") }
-    private var lastProviderFix = SystemClock.elapsedRealtime()
-    private var nativeActive = false
-    private var precise = false
+    @Volatile private var lastProviderFix = SystemClock.elapsedRealtime()
+    @Volatile private var nativeActive = false
+    @Volatile private var precise = false
     private var pendingTimeout: Job? = null
 
     private fun receive(l: android.location.Location, source: String) {
@@ -54,8 +60,8 @@ class TrackingService : Service() {
 
     private val candidate = DrivingCandidate()
     private var autoPending = false
-    private var slow = false
-    private var registeredInterval: Long? = null
+    @Volatile private var slow = false
+    @Volatile private var registeredInterval: Long? = null
     private val callback =
         object : LocationCallback() {
             override fun onLocationResult(r: LocationResult) {
@@ -116,27 +122,31 @@ class TrackingService : Service() {
         }
         scope.launch {
             for (f in queue) {
-                if (autoPending && app.repository.dao.active() == null) {
-                    val first = candidate.accept(f)
-                    if (first != null) {
-                        app.repository.start(true, first.time)
-                        app.repository.record(first)
-                        autoPending = false
-                        health(this@TrackingService, "running")
-                    } else continue
+                val ended = commandLock.withLock {
+                    if (autoPending && app.repository.dao.active() == null) {
+                        val first = candidate.accept(f)
+                        if (first != null) {
+                            app.repository.start(true, first.time)
+                            app.repository.record(first)
+                            autoPending = false
+                            health(this@TrackingService, "running")
+                        } else return@withLock false
+                    }
+                    if (app.repository.record(f)) {
+                        stopSelf()
+                        return@withLock true
+                    }
+                    val state = app.repository.dao.active()?.state ?: return@withLock false
+                    LiveTrackingHealth.state.value =
+                        LiveTrackingHealth.state.value.copy(accepted = state.lastTime == f.time)
+                    val shouldSlow = state.stopStart > 0
+                    if (shouldSlow != slow) {
+                        slow = shouldSlow
+                        withContext(Dispatchers.Main) { requestUpdates() }
+                    }
+                    false
                 }
-                if (app.repository.record(f)) {
-                    stopSelf()
-                    break
-                }
-                val state = app.repository.dao.active()?.state ?: continue
-                LiveTrackingHealth.state.value =
-                    LiveTrackingHealth.state.value.copy(accepted = state.lastTime == f.time)
-                val shouldSlow = state.stopStart > 0
-                if (shouldSlow != slow) {
-                    slow = shouldSlow
-                    withContext(Dispatchers.Main) { requestUpdates() }
-                }
+                if (ended) break
             }
         }
         scope.launch {
@@ -149,19 +159,21 @@ class TrackingService : Service() {
                 )
                     withContext(Dispatchers.Main) {
                         client.removeLocationUpdates(callback)
-                        nativeUpdates(registeredInterval!!)
+                        registeredInterval?.let { nativeUpdates(it) }
                     }
             }
         }
         scope.launch {
             app.settings.flow.collect { preferences ->
-                if (preferences.preciseTracking != precise) {
-                    precise = preferences.preciseTracking
-                    if (registeredInterval != null)
-                        withContext(Dispatchers.Main) { requestUpdates() }
+                commandLock.withLock {
+                    if (preferences.preciseTracking != precise) {
+                        precise = preferences.preciseTracking
+                        if (registeredInterval != null)
+                            withContext(Dispatchers.Main) { requestUpdates() }
+                    }
+                    if (!preferences.auto && autoPending && app.repository.dao.active() == null)
+                        stopSelf()
                 }
-                if (!preferences.auto && autoPending && app.repository.dao.active() == null)
-                    stopSelf()
             }
         }
     }
@@ -169,35 +181,47 @@ class TrackingService : Service() {
     override fun onStartCommand(i: Intent?, flags: Int, id: Int): Int {
         if (i?.action == "END") {
             scope.launch {
-                app.repository.end()
-                stopSelf()
+                commandLock.withLock {
+                    app.repository.end()
+                    stopSelf()
+                }
             }
             return START_NOT_STICKY
         }
         scope.launch {
-            // Repeated activity/geofence triggers must not discard the evidence already collected.
-            if (i?.getBooleanExtra("automatic", false) == true && autoPending && registeredInterval != null)
-                return@launch
-            autoPending =
-                i?.getBooleanExtra("automatic", false) == true &&
-                    app.repository.dao.active() == null
-            if (autoPending) candidate.reset()
-            health(this@TrackingService, if (autoPending) "checking_driving" else "running")
-            precise = app.settings.flow.first().preciseTracking
-            pendingTimeout?.cancel()
-            if (autoPending)
-                pendingTimeout = scope.launch {
-                    delay(600_000)
-                    if (app.repository.dao.active() == null) stopSelf()
-                }
-            if (!autoPending && app.repository.dao.active() == null) {
-                if (i == null) {
+            commandLock.withLock {
+                val preferences = app.settings.flow.first()
+                if (i?.getBooleanExtra("automatic", false) == true && !preferences.auto &&
+                    app.repository.dao.active() == null) {
                     stopSelf()
-                    return@launch
+                    return@withLock
                 }
-                app.repository.start(false)
+                // Repeated triggers must not discard the evidence already collected.
+                if (i?.getBooleanExtra("automatic", false) == true && autoPending && registeredInterval != null)
+                    return@withLock
+                autoPending =
+                    i?.getBooleanExtra("automatic", false) == true &&
+                        app.repository.dao.active() == null
+                if (autoPending) candidate.reset()
+                health(this@TrackingService, if (autoPending) "checking_driving" else "running")
+                precise = preferences.preciseTracking
+                pendingTimeout?.cancel()
+                if (autoPending)
+                    pendingTimeout = scope.launch {
+                        delay(600_000)
+                        commandLock.withLock {
+                            if (app.repository.dao.active() == null) stopSelf()
+                        }
+                    }
+                if (!autoPending && app.repository.dao.active() == null) {
+                    if (i == null) {
+                        stopSelf()
+                        return@withLock
+                    }
+                    app.repository.start(false)
+                }
+                withContext(Dispatchers.Main) { requestUpdates() }
             }
-            withContext(Dispatchers.Main) { requestUpdates() }
         }
         return START_STICKY
     }
@@ -252,8 +276,9 @@ class TrackingService : Service() {
     }
 
     override fun onDestroy() {
-        native.removeUpdates(listener)
-        client.removeLocationUpdates(callback)
+        registeredInterval = null
+        runCatching { native.removeUpdates(listener) }
+        runCatching { client.removeLocationUpdates(callback) }
         queue.close()
         scope.cancel()
         super.onDestroy()

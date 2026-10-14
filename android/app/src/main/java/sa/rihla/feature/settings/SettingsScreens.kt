@@ -181,6 +181,7 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
             "running" -> "شُغّلت خدمة تسجيل المسار"
             "permission" -> "منع النظام الخدمة بسبب إذن الموقع"
             "blocked" -> "منع النظام بدء الخدمة في الخلفية"
+            "error" -> "تعذرت متابعة التسجيل؛ افتح التطبيق لإعادة المحاولة"
             else -> "لم تُشغّل الخدمة بعد"
         })
         Action("configure_home") { place = "HOME" }
@@ -431,17 +432,12 @@ fun OfflineImport(vm: JourneyViewModel, data: ScreenData) {
                                                                 listOf("png", "jpg", "jpeg")
                                                     )
                                                 }
-                                            db.rawQuery("SELECT tile_data FROM tiles LIMIT 1", null)
+                                            db.rawQuery("SELECT tile_data FROM tiles WHERE length(tile_data)<=2000000 LIMIT 1", null)
                                                 .use {
                                                     require(it.moveToFirst())
                                                     val bytes = it.getBlob(0)
                                                     require(
-                                                        android.graphics.BitmapFactory
-                                                            .decodeByteArray(
-                                                                bytes,
-                                                                0,
-                                                                bytes.size,
-                                                            ) != null
+                                                        sa.rihla.map.TileImages.valid(bytes)
                                                     )
                                                 }
                                         }

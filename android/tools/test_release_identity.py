@@ -1,7 +1,11 @@
 import unittest
-from verify_release import RELEASE_CERTIFICATE, verify_identity
+from verify_release import RELEASE_CERTIFICATE, verify_identity, verify_build
 
 class ReleaseIdentityTest(unittest.TestCase):
+    def test_debugger_enabled_artifact_cannot_be_published(self):
+        verify_build("package: name='sa.rihla' versionCode='32'\n")
+        with self.assertRaises(ValueError):
+            verify_build("package: name='sa.rihla' versionCode='32'\napplication-debuggable\n")
     def test_classic_update_requires_compatible_verified_baseline(self):
         candidate = ("sa.rihla", 30, {RELEASE_CERTIFICATE})
         verify_identity(candidate, "classic", ("sa.rihla", 20, {RELEASE_CERTIFICATE}))

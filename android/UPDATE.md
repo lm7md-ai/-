@@ -1,5 +1,15 @@
 # Updating without losing journeys
 
+## Version 3.2 audit fixes
+
+The published APK is now a signed, non-debuggable Release build. It retains the
+certificate, package and database schema 6, raising versionCode to 32. Install
+over published 1.3/2.0/3.0/3.1 without uninstalling. No history is cleared. Optional
+Android permissions still require system grants. Finish the active trip first.
+Use the in-app export/restore tools for future backups; legacy Windows `run-as`
+transfer is intended for older debuggable APKs and cannot extract private files
+from 3.2. See [audit findings and phone acceptance checks](docs/AUDIT_3_2.md).
+
 ## Version 3.1 hotfix
 
 `releases/app-v3.1.apk` keeps package `sa.rihla`, the retained signing key and
