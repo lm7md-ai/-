@@ -1,6 +1,6 @@
 # تحميل مشواري
 
-**[تحميل مشواري 4.1 — APK للأندرويد، نحو 83 ميجابايت](https://raw.githubusercontent.com/m7mdxzx9/-/main/releases/app-v4.1.apk)**
+**[تحميل مشواري 4.1 — APK للأندرويد، نحو 83 ميجابايت](https://raw.githubusercontent.com/AI-Mohamed/-/main/releases/app-v4.1.apk)**
 
 تحديث بنفس الاسم والهوية والتوقيع لنسخ **1.3 و2.0 و3.x و4.0 المنشورة هنا**.
 أنه المشوار الجاري وثبّته فوق النسخة الموجودة دون حذف التطبيق أو مسح بياناته.
@@ -71,7 +71,7 @@
 ## النسخة المستقلة والملفات السابقة
 
 إذا ثبّتَّ نسخة باسم الحزمة `sa.rihla.next`، استخدم
-[تحديث 4.1 للنسخة المستقلة](https://raw.githubusercontent.com/m7mdxzx9/-/main/releases/app-v4.1-independent.apk).
+[تحديث 4.1 للنسخة المستقلة](https://raw.githubusercontent.com/AI-Mohamed/-/main/releases/app-v4.1-independent.apk).
 أما للمثبتين على 1.3 أو 2.0 أو 3.x أو 4.0 الأساسية، فاختاروا الرابط الأساسي أعلاه.
 النسخة الأولى ذات التوقيع المختلف تحتاج نقلًا محليًا؛ لا تُحذف لتجاوز التعارض.
 

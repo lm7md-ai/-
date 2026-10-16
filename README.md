@@ -1,6 +1,6 @@
 # مشواري للأندرويد
 
-[تحميل مشواري 4.1 (APK)](https://raw.githubusercontent.com/m7mdxzx9/-/main/releases/app-v4.1.apk)
+[تحميل مشواري 4.1 (APK)](https://raw.githubusercontent.com/AI-Mohamed/-/main/releases/app-v4.1.apk)
 — تحديث مباشر لنسخ 1.3 و2.0 و3.x و4.0 المنشورة بنفس الاسم والتوقيع، مع حفظ المشاوير والمصاريف.
 
 إصلاح 4.1 يعالج توقف تشغيل المقاطع الثنائية داخل معالج الصوت، دون الحاجة لإعادة إضافة الملفات.
