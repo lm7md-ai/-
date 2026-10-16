@@ -1,5 +1,18 @@
 # Updating without losing journeys
 
+## Version 4.1 playback fix
+
+VersionCode 41 fixes the stereo processor's handling of Media3's shared empty
+buffer while priming/draining the audio pipeline. Both zero-width and widened
+stereo output are tested through DefaultAudioSink to Android AudioTrack in
+Robolectric; a WAV content URI exercises the service/extractor/output path and
+retry after a read error. Error messages now identify the failing stage, and a
+same-item retry clears the old error. No files need reimporting for this fix.
+Package, retained certificate, journey schema 6 and audio schema 1 stay unchanged.
+Install over 4.0 or the earlier compatible main APK without uninstalling/clearing.
+The independent APK is only for an existing `sa.rihla.next` installation.
+See [fix evidence and limits](docs/AUDIO_FIX_4_1.md).
+
 ## Version 4.0 audio library
 
 The signed non-debuggable main APK retains `sa.rihla` and the verified 1.3–3.2

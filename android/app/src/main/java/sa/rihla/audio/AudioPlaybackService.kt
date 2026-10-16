@@ -103,8 +103,11 @@ class AudioPlaybackService : MediaSessionService() {
                 saves.trySend(Triple(id, position, if (player.isPlaying) System.currentTimeMillis() else 0))
             }
             override fun onPlayerError(error: PlaybackException) {
-                playbackError = "تعذر تشغيل الملف. قد يكون منقولًا أو محذوفًا أو لم يعد إذن الوصول صالحًا، أو تنسيقه غير مدعوم. أعد إضافته أو اختر المقطع التالي."
+                playbackError = audioPlaybackError(error)
                 publish()
+            }
+            override fun onPlayerErrorChanged(error: PlaybackException?) {
+                if (error == null) { playbackError = null; publish() }
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 playbackError = null

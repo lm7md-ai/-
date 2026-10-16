@@ -25,6 +25,10 @@ class StereoSpaceProcessor : BaseAudioProcessor() {
     }
     override fun onFlush() { left.fill(0f); right.fill(0f); index = 0; pending = null; previousStrength = 0f }
     override fun queueInput(inputBuffer: ByteBuffer) {
+        // Media3 also queues its shared EMPTY_BUFFER while priming/draining the pipeline.
+        // BaseAudioProcessor initially uses that same object for output; copying it into
+        // itself throws even when there are zero bytes. Preserve any pending stereo frame.
+        if (!inputBuffer.hasRemaining()) return
         val strength = amount.coerceIn(0f, 1f)
         if (previousStrength != strength && strength == 0f) { left.fill(0f); right.fill(0f); index = 0 }
         previousStrength = strength

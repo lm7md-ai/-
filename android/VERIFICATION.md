@@ -1,32 +1,34 @@
-# Verification — version 4.0, 2026-10-14
+# Verification — version 4.1, 2026-10-16
 
 Toolchain: JDK 21, Gradle 9.8.0, AGP 9.4.1, Kotlin 2.4.20/KSP 2.3.12,
 Android platform 37.2/build-tools 37.0.0, Compose BOM 2026.09.00, Room 2.8.5,
 DataStore 1.2.1, Media3 1.11.1, DocumentFile 1.1.0 and Robolectric 4.17. TLS, wrapper and source verification remain enabled.
 
 ```sh
-./gradlew assembleClassicRelease assembleNextRelease testClassicDebugUnitTest lintClassicRelease lintNextRelease
+./gradlew assembleClassicRelease assembleNextRelease testClassicDebugUnitTest lintClassicRelease lintNextRelease --max-workers=1 \
+  '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8 -Djava.util.concurrent.ForkJoinPool.common.parallelism=16'
 python3 tools/verify_schema.py
 python3 tools/verify_country_map.py
 python3 -m unittest discover -s tools -p 'test_*.py'
-python3 tools/verify_release.py app/build/outputs/apk/classic/release/app-classic-release.apk --edition classic --previous ../releases/app-v3.2.apk
+python3 tools/verify_release.py app/build/outputs/apk/classic/release/app-classic-release.apk --edition classic --previous ../releases/app-v4.0.apk
 python3 tools/verify_release.py app/build/outputs/apk/next/release/app-next-release.apk --edition next
 ```
 
 | Check | Result |
 |---|---|
-| Android tests | 98 passed; 0 failures/errors/skipped |
+| Android tests | 103 passed; 0 failures/errors/skipped |
 | Python transfer/signature/geometry tests | 13 passed |
 | Legacy server HTTP security tests | Previous 3.2 validation: 4 passed; anonymous device access, oversized body, Host parsing and public dev-token binding checked |
 | Legacy Expo project | Previous 3.2 validation: TypeScript check and web export passed; 7 static routes |
 | npm dependency audit | Previous 3.2 audit: 29 unresolved advisories: 18 high, 11 moderate, 0 critical; semver-compatible fixes attempted; no forced SDK downgrade |
-| Classic and next builds | Passed; non-debuggable Release, versionCode 40, versionName 4.0 |
+| Classic and next builds | Passed; non-debuggable Release, versionCode 41, versionName 4.1 |
 | Both Android lint targets | 0 errors, 21 warnings per target; KTX convenience, empty-super, obsolete-SDK and newer-Gradle notices, plus exported MediaSessionService. Service admission checks own UID or Media3 trusted controllers; exported access is required for system media controls |
 | Audio catalog | Duplicate scan retains favorites/resume/playlists/bookmarks; relink uses stable record ID; ordered playlist edits and FK cascades tested |
 | Audio persistence | Separate audio database reopens with saved position; catalog backup restores all records, rejects existing targets and rolls back orphan references |
-| Audio playback service | Real Media3 service restores queue paused at saved position and retains queue on shutdown without changing an active journey; simulated content URI, not a decoded hardware playback test |
+| Audio playback service | Media3 service restores queue paused and retains position/queue without changing an active journey. Synthetic WAV reads from a registered content provider through ExoPlayer to AudioTrack; same-item retry clears an initial read error |
 | Audio UI | Native rendered navigation, search with empty result, favorites and playlist creation tested; explicit-width dialogs avoid a native layout loop |
-| Stereo processor | Disabled stereo is byte-identical, enabled output bounded, split stereo frames retained, unsupported mono/8-channel/float layouts left inactive; presets checked |
+| Stereo processor | Disabled stereo is byte-identical, enabled output bounded, split frames retained, unsupported layouts inactive; shared EMPTY_BUFFER accepted before input/between chunks. DefaultAudioSink passes 4096 PCM bytes to AudioTrack at widths 0 and 1. This integration test reproduced a self-copy exception before the fix |
+| Playback error feedback | Internal/output failures do not request relinking valid files; permissions and decoder errors give different advice; private URI text is omitted |
 | Audio idle saving | Paused service avoids periodic progress writes; position-only save retains actual last-played time |
 | Audio source isolation | Journey Room schema/migrations and tracking reducer unchanged; no destructive audio fallback |
 | Supplied Rajhi Google Pay SMS | Exactly 3200 halalas and EXPRESS FOOD; Saudi bank time retained |
@@ -55,8 +57,8 @@ python3 tools/verify_release.py app/build/outputs/apk/next/release/app-next-rele
 | UI map | Navigation, zoom, measurement selection, loaded native map rendering and screenshots checked |
 | Stop taps | Existing coordinate-picking behavior retained; advanced map can select stops alongside point picking |
 | Existing behavior | SMS parser/deduplication, migrations, fuel/cost/duration calculations, backup rejection and UI restoration tests retained |
-| Main update identity | `sa.rihla`, same verified certificate as published 1.3/2.0/3.0/3.1; versionCode increases to 40 |
-| Independent identity | `sa.rihla.next`, same retained certificate; versionCode 40 |
+| Main update identity | `sa.rihla`, same verified certificate as published 1.3/2.0/3.0/3.1; versionCode increases to 41 |
+| Independent identity | `sa.rihla.next`, same retained certificate; versionCode 41 |
 
 ## Offline country data
 
@@ -89,10 +91,10 @@ The same-package main update preserves the installed 1.3/2.0 data. The independe
 edition updates only an existing next installation; cross-package transfer remains
 explicit and cannot bypass Android isolation or the unavailable original 1.0 key.
 
-Main APK: 82,945,115 bytes; SHA-256
-`f492aa44a4504d3b229b714a47e0d2d30d6bbc8ce9e6f80f7e67d762a8ecec05`.
-Independent APK: 82,945,115 bytes; SHA-256
-`f6b721dbd290a4fec72c47e4d5ec81b49d4e97329f5f8cfdbe69c2aef76c3cc7`.
+Main APK: 82,945,111 bytes; SHA-256
+`1ada17c76e82c6caeddbefe80bf632b19724e0c9c72c66c0c85bca8120e31231`.
+Independent APK: 82,945,119 bytes; SHA-256
+`9a28795aea8096babb3ecfa0f5dea95bed6be05f161f14f48e3449fd2213f2c3`.
 
 Release uses the retained certificate for update compatibility; it is not a key
 rotation or a claim of Play Store signing readiness. Legacy run-as backup tools
@@ -122,10 +124,29 @@ server security and CI server-test step were updated as described in the audit.
 ## Audio device acceptance
 
 The audio UI preview contains one clearly synthetic test catalog entry and is
-rendered by native Robolectric graphics. The new tests do not exercise a physical
-SAF provider or decode and measure sound on RedMagic. Check local-file selection,
+rendered by native Robolectric graphics. The tests use a synthetic content provider and WAV extractor; they do not exercise
+a physical SAF provider, hardware AAC decoding or measured sound on RedMagic. Check local-file selection,
 Bluetooth buttons, lock-screen notification, headset removal, call interruption,
 screen-off playback, sleep timer and EQ/output changes on the handset. No Android
 Auto browsing, streaming subscription, real discrete 7.1 conversion or measured
 battery/psychoacoustic quality is claimed. Audio backup stores references and
 metadata only; device URI grants and the files themselves require separate care.
+
+## 4.1 regression evidence
+
+Before the fix, AudioOutputTest failed with `IllegalArgumentException: The source
+buffer is this buffer` in StereoSpaceProcessor.queueInput, reached through
+AudioProcessingPipeline.getOutput and DefaultAudioSink.handleBuffer. The guard
+returns before touching the output buffer for empty input and retains partial
+frames. The integration test passes after the fix with stereo widening off/on.
+A real generated WAV fixture traverses content URI, service, extraction, PCM sink
+and shadow AudioTrack; missing-file → same-item prepare/play verifies error recovery.
+Its test-only load policy avoids retries, and the simulated clock advances while
+waiting for playback callbacks. No device playback is claimed. See
+[the user-facing fix guide](docs/AUDIO_FIX_4_1.md).
+
+The first concurrent packaging run stalled in signing digest tasks behind archive
+locks. A fresh Gradle daemon, cleaned generated APK/package state, sequential
+workers and a 16-thread common pool completed the build. Source inputs and the
+retained key were unchanged; tests remained successful. The command above records
+the successful build settings.

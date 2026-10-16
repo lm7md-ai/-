@@ -2,6 +2,7 @@ package sa.rihla.audio
 
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
+import androidx.media3.common.audio.AudioProcessor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.junit.Assert.*
@@ -9,6 +10,24 @@ import org.junit.Test
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class StereoSpaceTest {
+    @Test
+    fun sharedEmptyBufferBeforeAndBetweenPcmChunksIsHarmless() {
+        for (width in listOf(0f,1f)) {
+            val processor=StereoSpaceProcessor().apply { amount=width }
+            processor.configure(AudioFormat(48000,2,C.ENCODING_PCM_16BIT))
+            processor.flush(AudioProcessor.StreamMetadata.DEFAULT)
+            processor.queueInput(AudioProcessor.EMPTY_BUFFER)
+            assertFalse(processor.output.hasRemaining())
+            processor.queueInput(data(shortArrayOf(100)))
+            assertFalse(processor.output.hasRemaining())
+            processor.queueInput(AudioProcessor.EMPTY_BUFFER)
+            assertFalse(processor.output.hasRemaining())
+            processor.queueInput(data(shortArrayOf(-100)))
+            assertEquals(4,processor.output.remaining())
+            processor.queueEndOfStream()
+            assertTrue(processor.isEnded)
+        }
+    }
     @Test
     fun splitPcmFramesPreserveChannelAlignmentAcrossBuffers() {
         val processor=StereoSpaceProcessor();processor.configure(AudioFormat(48000,2,C.ENCODING_PCM_16BIT));processor.flush()
