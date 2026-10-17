@@ -30,6 +30,13 @@ data class AudioPlaylistItem(val playlistId: Long, val trackId: String, val posi
 @Entity(tableName = "audio_bookmarks", foreignKeys = [ForeignKey(entity = AudioTrack::class, parentColumns = ["id"], childColumns = ["trackId"], onDelete = ForeignKey.CASCADE)], indices = [Index("trackId")])
 data class AudioBookmark(@PrimaryKey(autoGenerate = true) val id: Long = 0, val trackId: String, val positionMs: Long, val label: String)
 
+@Entity(tableName="audio_folders")
+data class AudioFolder(@PrimaryKey val id:String,val topic:String,val source:String)
+@Entity(tableName="audio_filing",foreignKeys=[ForeignKey(entity=AudioTrack::class,parentColumns=["id"],childColumns=["trackId"],onDelete=ForeignKey.CASCADE),ForeignKey(entity=AudioFolder::class,parentColumns=["id"],childColumns=["folderId"],onDelete=ForeignKey.CASCADE)],indices=[Index("folderId")])
+data class AudioFiling(@PrimaryKey val trackId:String,val folderId:String)
+@Entity(tableName="audio_tuning",foreignKeys=[ForeignKey(entity=AudioTrack::class,parentColumns=["id"],childColumns=["trackId"],onDelete=ForeignKey.CASCADE)])
+data class AudioTuning(@PrimaryKey val trackId:String,val scene:String)
+
 @Dao
 interface AudioDao {
     @Query("SELECT * FROM audio_tracks ORDER BY title COLLATE NOCASE,id") fun tracks(): Flow<List<AudioTrack>>
@@ -52,10 +59,29 @@ interface AudioDao {
     @Query("SELECT * FROM audio_bookmarks ORDER BY positionMs") fun bookmarks(): Flow<List<AudioBookmark>>
     @Insert suspend fun bookmark(value: AudioBookmark)
     @Query("DELETE FROM audio_bookmarks WHERE id=:id") suspend fun removeBookmark(id: Long)
+    @Query("SELECT * FROM audio_folders ORDER BY topic,source") fun folders():Flow<List<AudioFolder>>
+    @Query("SELECT * FROM audio_filing") fun filings():Flow<List<AudioFiling>>
+    @Query("SELECT * FROM audio_tuning") fun tunings():Flow<List<AudioTuning>>
+    @Query("SELECT * FROM audio_tuning WHERE trackId=:id") suspend fun tuning(id:String):AudioTuning?
+    @Upsert suspend fun folder(folder:AudioFolder)
+    @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun filing(filing:AudioFiling)
+    @Insert(onConflict=OnConflictStrategy.REPLACE) suspend fun tuning(tuning:AudioTuning)
 }
 
-@Database(entities = [AudioTrack::class, AudioPlaylist::class, AudioPlaylistItem::class, AudioBookmark::class], version = 1, exportSchema = true)
-abstract class AudioDatabase : RoomDatabase() { abstract fun dao(): AudioDao }
+@Database(entities = [AudioTrack::class, AudioPlaylist::class, AudioPlaylistItem::class, AudioBookmark::class,AudioFolder::class,AudioFiling::class,AudioTuning::class], version = 2, exportSchema = true)
+abstract class AudioDatabase : RoomDatabase() {
+    abstract fun dao(): AudioDao
+    companion object {
+        val MIGRATION_1_2=object:androidx.room.migration.Migration(1,2) {
+            override fun migrate(db:androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS audio_folders (id TEXT NOT NULL PRIMARY KEY,topic TEXT NOT NULL,source TEXT NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS audio_filing (trackId TEXT NOT NULL PRIMARY KEY,folderId TEXT NOT NULL,FOREIGN KEY(trackId) REFERENCES audio_tracks(id) ON DELETE CASCADE,FOREIGN KEY(folderId) REFERENCES audio_folders(id) ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_audio_filing_folderId ON audio_filing(folderId)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS audio_tuning (trackId TEXT NOT NULL PRIMARY KEY,scene TEXT NOT NULL,FOREIGN KEY(trackId) REFERENCES audio_tracks(id) ON DELETE CASCADE)")
+            }
+        }
+    }
+}
 
 fun audioResume(position: Long, duration: Long): Long =
     if (position < 0 || (duration > 0 && position >= (duration - 5000).coerceAtLeast(0))) 0 else position

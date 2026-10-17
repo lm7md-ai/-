@@ -47,6 +47,12 @@ fun AudioMiniPlayer(onOpen: () -> Unit, vm: AudioViewModel = viewModel()) {
 
 @Composable
 fun AudioScreen(vm: AudioViewModel = viewModel()) {
+    var studio by rememberSaveable { mutableStateOf(false) }
+    if(studio) {
+        androidx.activity.compose.BackHandler { studio=false }
+        sa.rihla.audio.studio.StudioScreen(vm,{studio=false})
+        return
+    }
     val catalog by vm.catalog.collectAsStateWithLifecycle()
     val playback by AudioLive.state.collectAsStateWithLifecycle()
     val connected by vm.connected.collectAsStateWithLifecycle()
@@ -106,6 +112,7 @@ fun AudioScreen(vm: AudioViewModel = viewModel()) {
                     Icon(Icons.Default.Headphones, null, Modifier.size(36.dp))
                     Text("مكتبتك الصوتية", style = MaterialTheme.typography.headlineSmall)
                     Text("${catalog.tracks.size} مقطع · ${catalog.playlists.size} قائمة · تشغيل محلي دون إنترنت")
+                    Button(onClick={studio=true}) { Text("استوديو المحاضرات والمساعد المحلي") }
                     AudioSceneChooser(vm,playback.scene)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { files.launch(arrayOf("audio/*")) }, enabled = !busy) { Text("إضافة ملفات") }
@@ -312,7 +319,7 @@ private fun AudioEffectsPanel(vm: AudioViewModel, support: SoundSupport) {
 private fun AudioSceneChooser(vm:AudioViewModel,selected:String) {
     Text("أوضاع الصوت الجاهزة",style=MaterialTheme.typography.titleSmall)
     FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-        AudioScene.entries.forEach { scene ->
+        AudioScene.entries.filterNot { it.lecture }.forEach { scene ->
             FilterChip(selected==scene.key,{vm.scene(scene)},label={Text(scene.label)})
         }
     }
@@ -320,6 +327,8 @@ private fun AudioSceneChooser(vm:AudioViewModel,selected:String) {
         "3d" -> "3D: اتساع وانعكاسات قصيرة؛ يُفضّل استخدام سماعات ستيريو."
         "7.1" -> "7.1 افتراضي: ثمانية انعكاسات مكانية إلى ستيريو، وليس ثماني قنوات منفصلة."
         "custom" -> "تحكم يدوي في الاتساع ومعادل الجهاز."
+        "lecture_soft" -> "تحسين المحاضرات: تخفيف الحدة والصفير المرتفع."
+        "lecture_clear" -> "تحسين المحاضرات: تقليل الرنين المنخفض وإبراز الكلام مع ضبط ديناميكي للمستوى."
         else -> "تشغيل مباشر دون مؤثرات؛ يستخدم مخرج الصوت الذي اختاره النظام."
     },style=MaterialTheme.typography.bodySmall)
 }

@@ -5,8 +5,19 @@ import androidx.room.Room
 import sa.rihla.data.*
 
 class RihlaApp : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        val jobs=getSharedPreferences("studio_jobs",MODE_PRIVATE)
+        if(jobs.getBoolean("running",false)) {
+            sa.rihla.audio.studio.StudioTasks.state.value=sa.rihla.audio.studio.StudioState("توقفت العملية السابقة؛ أعد طلبها. النقل قد يكون اكتمل جزئيًا.")
+            jobs.edit().putBoolean("running",false).apply()
+        }
+        // Only abandoned temporary studio data; never user recordings or completed output.
+        cacheDir.listFiles()?.filter { it.isDirectory && it.name.matches(Regex("studio-[0-9a-f-]{36}")) }?.forEach { it.deleteRecursively() }
+        java.io.File(filesDir,"processed_audio").listFiles()?.filter { it.extension=="part" }?.forEach { it.delete() }
+    }
     val audioDatabase by lazy {
-        Room.databaseBuilder(this, sa.rihla.audio.AudioDatabase::class.java, "audio_library.db").build()
+        Room.databaseBuilder(this, sa.rihla.audio.AudioDatabase::class.java, "audio_library.db").addMigrations(sa.rihla.audio.AudioDatabase.MIGRATION_1_2).build()
     }
     val audio by lazy { sa.rihla.audio.AudioRepository(this, audioDatabase) }
     val database by lazy {

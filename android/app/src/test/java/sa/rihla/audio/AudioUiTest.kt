@@ -63,6 +63,21 @@ class AudioUiTest {
         compose.onNodeWithText("اسم القائمة").performTextInput("المشوار")
         compose.onNodeWithText("إنشاء").performClick()
         compose.waitUntil(10000){runBlocking{app.audio.dao.playlists().first().isNotEmpty()}}
+        compose.onNodeWithText("استوديو المحاضرات والمساعد المحلي").performScrollTo().performClick()
+        compose.onNodeWithText("استوديو المحاضرات").assertIsDisplayed()
+        java.io.File("build/outputs/ui-previews/audio-studio-5.png").outputStream().use {
+            compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
+        }
+        compose.onNodeWithText("محاضرة · تخفيف الحدة").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("تنظيم").performScrollTo().performClick()
+        compose.onNodeWithText("خطة أولية دون نموذج").performScrollTo().performClick()
+        compose.onNodeWithText("تطبيق التصنيف (1)").performScrollTo().performClick()
+        compose.waitUntil(10000){compose.onAllNodesWithText("حُفظ التصنيف داخل المكتبة").fetchSemanticsNodes();runBlocking{app.audio.dao.filings().first().size==1}}
+        compose.onNodeWithText("نقل الملفات في الهاتف").performScrollTo().assertExists()
+        compose.onNodeWithText("المجلدات").performScrollTo().performClick()
+        compose.onNodeWithText("غير مصنف / فنان").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("النماذج").performScrollTo().performClick()
+        compose.onNodeWithText("مساعد Qwen2.5 · 1.5B").performScrollTo().assertIsDisplayed()
         } finally {
             service.destroy()
             AudioLive.state.value = AudioPlayback()

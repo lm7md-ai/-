@@ -197,6 +197,9 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 var page by rememberSaveable { mutableStateOf("dashboard") }
                 var selected by rememberSaveable { mutableStateOf<Long?>(null) }
+                LaunchedEffect(Unit) {
+                    sa.rihla.audio.studio.AssistantNavigation.requests.collect { page=it;selected=null }
+                }
                 LaunchedEffect(audioRequest) {
                     if (audioRequest > 0) { page = "audio"; selected = null }
                 }

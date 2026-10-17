@@ -101,8 +101,10 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
             } finally { busy.value = false }
         }
     }
-    fun play(track: AudioTrack, tracks: List<AudioTrack>, at: Long? = null) {
-        val p = controller ?: return
+    fun play(track: AudioTrack, tracks: List<AudioTrack>, at: Long? = null, listeningScene:AudioScene?=null) = work {
+        val p = controller ?: return@work
+        val tuning=listeningScene ?: repo.dao.tuning(track.id)?.let { row->AudioScene.entries.find { it.key==row.scene } }
+        if(tuning!=null)selectAudioScene(prefs,tuning)
         val queue = tracks.distinctBy { it.id }.ifEmpty { listOf(track) }
         val index = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
         p.setMediaItems(queue.map(::item), index, at?.coerceIn(0,track.durationMs) ?: audioResume(track.positionMs, track.durationMs))
@@ -114,6 +116,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     fun moveQueued(index: Int, offset: Int) { controller?.let { p -> val target = index + offset; if (index in 0 until p.mediaItemCount && target in 0 until p.mediaItemCount) p.moveMediaItem(index,target) } }
     fun selectQueued(index: Int) { controller?.seekToDefaultPosition(index); controller?.play() }
     fun toggle() { controller?.let { if (it.isPlaying) it.pause() else { if (it.playbackState == Player.STATE_ENDED) it.seekTo(0); it.prepare(); it.play() } } }
+    fun pause() { controller?.pause() }
     fun next() { controller?.seekToNextMediaItem() }
     fun previous() { controller?.seekToPreviousMediaItem() }
     fun seek(position: Long) { controller?.let { it.seekTo(position.coerceIn(0, it.duration.takeIf { d -> d > 0 } ?: Long.MAX_VALUE)) } }

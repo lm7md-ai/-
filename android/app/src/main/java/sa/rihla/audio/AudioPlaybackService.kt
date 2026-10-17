@@ -130,6 +130,11 @@ class AudioPlaybackService : MediaSessionService() {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 if (player !== ownedPlayer) return
                 playbackError = null
+                if(reason!=Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) mediaItem?.mediaId?.let { id -> scope.launch {
+                    val tuning=app.audio.dao.tuning(id) ?: return@launch
+                    val scene=AudioScene.entries.find { it.key==tuning.scene } ?: return@launch
+                    handler.post { if(!destroying && player.currentMediaItem?.mediaId==id && AudioScene.read(prefs)!=scene) selectAudioScene(prefs,scene) }
+                } }
                 if (prefs.getBoolean("sleep_end",false) && reason in listOf(Player.MEDIA_ITEM_TRANSITION_REASON_AUTO, Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT)) {
                     prefs.edit().putBoolean("sleep_end",false).apply(); player.pause()
                 }
