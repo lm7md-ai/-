@@ -1,3 +1,7 @@
+# Personal assistant and navigation 5.1
+
+[Personal command training, model center, voice commands and verification limits](docs/ASSISTANT_5_1.md).
+
 # Audio studio 5.0
 
 [Usage, models, data migration and verification limits](docs/AUDIO_STUDIO_5.md).
@@ -34,11 +38,11 @@ search/sorting, trip titles/notes/favorites, route timeline scrubbing, GPX/CSV e
 local backup/restore, and device readiness checks. Offline maps and SMS purchase
 import remain available. [Download the APK and view screenshots](../releases/README.md).
 
-The main **مشواري** download (`app-v5.0.apk`, `sa.rihla`) updates the published 1.3 and 2.0
+The main **مشواري** download (`app-v5.1.apk`, `sa.rihla`) updates the published 1.3 and 2.0
 APK in place with the same verified certificate and explicit Room migrations.
 The user has already moved historical data into 1.3; no cross-package transfer is
 needed for this update. Finish the active outing and install over 1.3 without uninstalling.
-An alternative `app-v5.0-independent.apk` uses `sa.rihla.next` for installations
+An alternative `app-v5.1-independent.apk` uses `sa.rihla.next` for installations
 still blocked by the original 1.0 signature conflict. That alternative installs
 separately and needs explicit local transfer. [Windows USB instructions](docs/WINDOWS_MIGRATION.md)
 and a ready-to-run ZIP include Python/ADB and keep verified backups; a

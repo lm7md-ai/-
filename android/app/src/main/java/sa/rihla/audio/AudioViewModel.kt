@@ -116,6 +116,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     fun moveQueued(index: Int, offset: Int) { controller?.let { p -> val target = index + offset; if (index in 0 until p.mediaItemCount && target in 0 until p.mediaItemCount) p.moveMediaItem(index,target) } }
     fun selectQueued(index: Int) { controller?.seekToDefaultPosition(index); controller?.play() }
     fun toggle() { controller?.let { if (it.isPlaying) it.pause() else { if (it.playbackState == Player.STATE_ENDED) it.seekTo(0); it.prepare(); it.play() } } }
+    fun resume() { controller?.prepare(); controller?.play() }
     fun pause() { controller?.pause() }
     fun next() { controller?.seekToNextMediaItem() }
     fun previous() { controller?.seekToPreviousMediaItem() }

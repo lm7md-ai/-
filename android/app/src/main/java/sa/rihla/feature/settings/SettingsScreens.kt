@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -102,6 +103,17 @@ fun PermissionsPanel(vm: JourneyViewModel) {
         )
         Action("grant_notifications") { single.launch(Manifest.permission.POST_NOTIFICATIONS) }
     }
+    Text("الميكروفون: " + if (allowed(Manifest.permission.RECORD_AUDIO)) "مسموح" else "غير مسموح")
+    Button(
+        onClick = { single.launch(Manifest.permission.RECORD_AUDIO) },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text("منح إذن الميكروفون للأوامر الصوتية")
+    }
+    Text(
+        "يُستخدم عند الضغط للتحدث فقط. يمكنك تغيير الإذن من إعدادات التطبيق في الهاتف.",
+        style = MaterialTheme.typography.bodySmall,
+    )
     Action("system_settings") {
         c.startActivity(
             Intent(
@@ -116,85 +128,255 @@ fun PermissionsPanel(vm: JourneyViewModel) {
 fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) -> Unit = {}) {
     var place by remember { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf(false) }
+    var section by
+        androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    androidx.activity.compose.BackHandler(enabled = section != null) { section = null }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Hero(tr("brand_caption"), tr("your_space"), tr("local_first_caption"), "vehicle") {
-            navigate("vehicle")
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = { navigate("calendar") }, modifier = Modifier.weight(1f)) {
-                Text(tr("calendar"))
-            }
-            OutlinedButton(onClick = { navigate("vehicle") }, modifier = Modifier.weight(1f)) {
-                Text(tr("vehicle"))
-            }
-        }
-        BudgetSettings(vm, data)
-        Button(onClick = { navigate("map") }, modifier = Modifier.fillMaxWidth()) {
-            Text("خريطة السعودية وأدوات المسار")
-        }
-        DataTools(vm, data)
-        Button(onClick = { navigate("audio") }, modifier = Modifier.fillMaxWidth()) { Text("مكتبة الصوتيات والمشغل") }
-        DeviceReadiness(data)
-        TrackingOptions(vm, data)
-        Heading("theme")
-        Row {
-            listOf("SYSTEM", "LIGHT", "DARK").forEach { v ->
-                FilterChip(data.settings.theme == v, { vm.theme(v) }, label = { Text(tr(v)) })
-            }
-        }
-        Heading("auto_tracking")
-        Text(tr("manual_available"))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Switch(
-                data.settings.auto,
-                { vm.automatic(it) },
-                enabled =
-                    data.settings.auto ||
-                        (TrackingService.backgroundAllowed(LocalContext.current) &&
-                            (Detection.available(LocalContext.current) ||
-                                data.places.any { it.type == "HOME" } ||
-                                data.settings.bluetoothAddress.isNotBlank())),
+        if (section == null) {
+            Text("الإعدادات والأدوات", style = MaterialTheme.typography.headlineSmall)
+            Text("كل قسم في مكانه؛ اختر الأداة أو الإعداد الذي تحتاجه.")
+            OutlinedTextField(
+                query,
+                { query = it },
+                label = { Text("ابحث في الإعدادات والأدوات") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
             )
-            Text(tr("auto_tracking"))
-        }
-        Text(tr("tracking_limits"))
-        val trackingContext = LocalContext.current
-        var homeStatus by remember { mutableStateOf("") }
-        var serviceStatus by remember { mutableStateOf("") }
-        LaunchedEffect(Unit) {
-            while (true) {
-                homeStatus = trackingContext.getSharedPreferences("tracking_health", android.content.Context.MODE_PRIVATE).getString("home", "").orEmpty()
-                serviceStatus = trackingContext.getSharedPreferences("tracking_health", android.content.Context.MODE_PRIVATE).getString("service", "").orEmpty()
-                delay(5000)
+            val groups =
+                listOf(
+                    "الذكاء الاصطناعي" to
+                        listOf(
+                            Triple(
+                                "models",
+                                "نماذج الذكاء الاصطناعي",
+                                "النموذج المدمج وتنزيل Qwen وفصل الموسيقى",
+                            ),
+                            Triple(
+                                "assistant",
+                                "المساعد الذكي",
+                                "اكتب أو تحدث لاقتراح أوامر التطبيق",
+                            ),
+                            Triple(
+                                "assistant_profile",
+                                "تخصيص مساعدي وتدريب نموذجي",
+                                "اسمي وتعليماتي وأمثلة أوامري",
+                            ),
+                            Triple(
+                                "voice",
+                                "الأوامر الصوتية",
+                                "الميكروفون واللغة العربية وقراءة الردود",
+                            ),
+                        ),
+                    "أدوات التطبيق" to
+                        listOf(
+                            Triple(
+                                "audio",
+                                "مكتبة الصوتيات والمشغل",
+                                "المحاضرات والقوائم والمفضلة",
+                            ),
+                            Triple(
+                                "studio",
+                                "استوديو المحاضرات",
+                                "تحسين الصوت وتنظيم الملفات وفصل الموسيقى",
+                            ),
+                            Triple(
+                                "map",
+                                "خريطة السعودية وأدوات المسار",
+                                "خرائط دون إنترنت وبحث وطبقات",
+                            ),
+                            Triple("calendar", "التقويم", "المشاوير حسب الأيام"),
+                            Triple("expenses", "المصروفات", "مصاريفك وعمليات الشراء"),
+                            Triple("statistics", "الإحصاءات", "تحليل الرحلات والتكاليف"),
+                            Triple("vehicle", "سيارتي", "بيانات السيارة والاستهلاك"),
+                        ),
+                    "إعدادات التطبيق" to
+                        listOf(
+                            Triple(
+                                "tracking",
+                                "التتبع وأماكني",
+                                "التتبع التلقائي والبيت والجامعة والبلوتوث",
+                            ),
+                            Triple(
+                                "finance",
+                                "الميزانية والوقود",
+                                "حساب التكلفة والأسعار والاستهلاك",
+                            ),
+                            Triple("sms", "رسائل الشراء", "الاستقبال والأذونات وإضافة رسالة فائتة"),
+                            Triple(
+                                "permissions",
+                                "الأذونات والبطارية",
+                                "الموقع والإشعارات وتشخيص جاهزية الهاتف",
+                            ),
+                            Triple("appearance", "المظهر", "الوضع الفاتح والداكن والنظام"),
+                            Triple("maps_settings", "إعدادات الخرائط", "مصادر الخرائط والاستيراد"),
+                            Triple(
+                                "backup",
+                                "نسخ بياناتك محليًا",
+                                "التصدير والاستعادة وأدوات البيانات",
+                            ),
+                            Triple(
+                                "privacy",
+                                "الخصوصية والبيانات",
+                                "بياناتك المحلية وخيارات الحذف",
+                            ),
+                        ),
+                )
+            for ((title, entries) in groups) {
+                val visible = entries.filter {
+                    query.isBlank() || (it.second + " " + it.third).contains(query.trim(), true)
+                }
+                if (visible.isNotEmpty()) Text(title, style = MaterialTheme.typography.titleLarge)
+                for ((key, label, description) in visible) sa.rihla.assistant.FeatureRow(
+                    label,
+                    description,
+                    when (key) {
+                        "models" -> androidx.compose.material.icons.Icons.Default.Memory
+                        "assistant",
+                        "assistant_profile" ->
+                            androidx.compose.material.icons.Icons.Default.AutoAwesome
+                        "voice" -> androidx.compose.material.icons.Icons.Default.Mic
+                        "audio",
+                        "studio" -> androidx.compose.material.icons.Icons.Default.Headphones
+                        "map",
+                        "maps_settings" -> androidx.compose.material.icons.Icons.Default.Map
+                        "calendar" -> androidx.compose.material.icons.Icons.Default.CalendarMonth
+                        "expenses" -> androidx.compose.material.icons.Icons.Default.Payments
+                        "statistics" -> androidx.compose.material.icons.Icons.Default.BarChart
+                        "vehicle" -> androidx.compose.material.icons.Icons.Default.DirectionsCar
+                        "tracking" -> androidx.compose.material.icons.Icons.Default.Route
+                        "finance" -> androidx.compose.material.icons.Icons.Default.LocalGasStation
+                        "sms" -> androidx.compose.material.icons.Icons.Default.Sms
+                        "permissions" -> androidx.compose.material.icons.Icons.Default.Shield
+                        "appearance" -> androidx.compose.material.icons.Icons.Default.Palette
+                        "backup" -> androidx.compose.material.icons.Icons.Default.Backup
+                        "privacy" -> androidx.compose.material.icons.Icons.Default.Lock
+                        else -> androidx.compose.material.icons.Icons.Default.Tune
+                    },
+                ) {
+                    if (
+                        key in
+                            setOf(
+                                "tracking",
+                                "finance",
+                                "sms",
+                                "permissions",
+                                "appearance",
+                                "maps_settings",
+                                "backup",
+                                "privacy",
+                            )
+                    )
+                        section = key
+                    else navigate(key)
+                }
+            }
+        } else {
+            TextButton(onClick = { section = null }) { Text("العودة إلى الإعدادات والأدوات") }
+            when (section) {
+                "tracking" -> {
+                    TrackingOptions(vm, data)
+                    Heading("auto_tracking")
+                    Text(tr("manual_available"))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            data.settings.auto,
+                            { vm.automatic(it) },
+                            enabled =
+                                data.settings.auto ||
+                                    (TrackingService.backgroundAllowed(LocalContext.current) &&
+                                        (Detection.available(LocalContext.current) ||
+                                            data.places.any { it.type == "HOME" } ||
+                                            data.settings.bluetoothAddress.isNotBlank())),
+                        )
+                        Text(tr("auto_tracking"))
+                    }
+                    Text(tr("tracking_limits"))
+                    val trackingContext = LocalContext.current
+                    var homeStatus by remember { mutableStateOf("") }
+                    var serviceStatus by remember { mutableStateOf("") }
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            homeStatus =
+                                trackingContext
+                                    .getSharedPreferences(
+                                        "tracking_health",
+                                        android.content.Context.MODE_PRIVATE,
+                                    )
+                                    .getString("home", "")
+                                    .orEmpty()
+                            serviceStatus =
+                                trackingContext
+                                    .getSharedPreferences(
+                                        "tracking_health",
+                                        android.content.Context.MODE_PRIVATE,
+                                    )
+                                    .getString("service", "")
+                                    .orEmpty()
+                            delay(5000)
+                        }
+                    }
+                    Text(
+                        "محفّز مغادرة البيت: " +
+                            when (homeStatus) {
+                                "registered" -> "مسجل لدى النظام"
+                                "error" -> "تعذر التسجيل؛ راجع إذن الموقع الدائم وخدمات Google"
+                                else -> "غير مسجل؛ حدد البيت وفعّل الموقع الدائم والتتبع التلقائي"
+                            }
+                    )
+                    Text(
+                        "تبدأ محاولة التتبع عند مغادرة نطاق البيت، ثم يؤكد GPS القيادة. تنتهي الرحلة بعد توقف ثابت داخل نطاق البيت لمدة 5 دقائق. قد يؤخر النظام محفّز النطاق، ويحتاج GPS إلى إشارة صالحة.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        "آخر حالة تشغيل التتبع: " +
+                            when (serviceStatus) {
+                                "checking_driving" -> "بدأ فحص القيادة"
+                                "running" -> "شُغّلت خدمة تسجيل المسار"
+                                "permission" -> "منع النظام الخدمة بسبب إذن الموقع"
+                                "blocked" -> "منع النظام بدء الخدمة في الخلفية"
+                                "error" -> "تعذرت متابعة التسجيل؛ افتح التطبيق لإعادة المحاولة"
+                                else -> "لم تُشغّل الخدمة بعد"
+                            }
+                    )
+                    Action("configure_home") { place = "HOME" }
+                    Action("configure_university") { place = "UNIVERSITY" }
+                    Text(tr("no_official_boundary"))
+                }
+                "finance" -> {
+                    BudgetSettings(vm, data)
+                    FuelCostSettings(vm, data)
+                }
+                "sms" -> SmsImportSettings(vm, data)
+                "permissions" -> {
+                    DeviceReadiness(data)
+                    PermissionsPanel(vm)
+                }
+                "appearance" -> {
+                    Heading("theme")
+                    Column {
+                        listOf("SYSTEM", "LIGHT", "DARK").forEach { value ->
+                            FilterChip(
+                                data.settings.theme == value,
+                                { vm.theme(value) },
+                                label = { Text(tr(value)) },
+                            )
+                        }
+                    }
+                }
+                "maps_settings" -> OfflineImport(vm, data)
+                "backup" -> DataTools(vm, data)
+                "privacy" -> {
+                    Heading("privacy")
+                    Text(tr("privacy"))
+                    Action("delete_all") { deleting = true }
+                }
             }
         }
-        Text("محفّز مغادرة البيت: " + when (homeStatus) {
-            "registered" -> "مسجل لدى النظام"
-            "error" -> "تعذر التسجيل؛ راجع إذن الموقع الدائم وخدمات Google"
-            else -> "غير مسجل؛ حدد البيت وفعّل الموقع الدائم والتتبع التلقائي"
-        })
-        Text("تبدأ محاولة التتبع عند مغادرة نطاق البيت، ثم يؤكد GPS القيادة. تنتهي الرحلة بعد توقف ثابت داخل نطاق البيت لمدة 5 دقائق. قد يؤخر النظام محفّز النطاق، ويحتاج GPS إلى إشارة صالحة.", style = MaterialTheme.typography.bodySmall)
-        Text("آخر حالة تشغيل التتبع: " + when (serviceStatus) {
-            "checking_driving" -> "بدأ فحص القيادة"
-            "running" -> "شُغّلت خدمة تسجيل المسار"
-            "permission" -> "منع النظام الخدمة بسبب إذن الموقع"
-            "blocked" -> "منع النظام بدء الخدمة في الخلفية"
-            "error" -> "تعذرت متابعة التسجيل؛ افتح التطبيق لإعادة المحاولة"
-            else -> "لم تُشغّل الخدمة بعد"
-        })
-        Action("configure_home") { place = "HOME" }
-        Action("configure_university") { place = "UNIVERSITY" }
-        Text(tr("no_official_boundary"))
-        FuelCostSettings(vm, data)
-        SmsImportSettings(vm, data)
-        PermissionsPanel(vm)
-        OfflineImport(vm, data)
-        Heading("privacy")
-        Text(tr("privacy"))
-        Action("delete_all") { deleting = true }
+        Spacer(Modifier.height(16.dp))
     }
     if (place != null) PlaceDialog(vm, data, place!!) { place = null }
     if (deleting) Confirm("delete_all_confirmation", { deleting = false }) { vm.clear() }
@@ -208,10 +390,11 @@ fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
     var pasting by remember { mutableStateOf(false) }
     var pasted by remember { mutableStateOf("") }
     var pasteResult by remember { mutableStateOf<String?>(null) }
-    val smsPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        refresh++
-        if (granted) vm.smsImport(true)
-    }
+    val smsPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            refresh++
+            if (granted) vm.smsImport(true)
+        }
     val launcher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             refresh++
@@ -249,39 +432,91 @@ fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
         Text(tr("sms_import"))
     }
     Metric("sms_access", tr(if (allowed) "allowed" else "denied"))
-    Text(if (direct) "استقبال الرسائل الجديدة مباشرة: مسموح" else "استقبال الرسائل الجديدة مباشرة: غير مسموح")
+    Text(
+        if (direct) "استقبال الرسائل الجديدة مباشرة: مسموح"
+        else "استقبال الرسائل الجديدة مباشرة: غير مسموح"
+    )
     Button(onClick = { smsPermission.launch(Manifest.permission.RECEIVE_SMS) }) {
         Text("تفعيل استقبال رسائل الشراء مباشرة")
     }
-    Text("بإذنك، يُستخرج المبلغ والتاجر من رسائل الشراء الجديدة على الجهاز، دون رفع الرسائل أو حفظ نصها. لا يقرأ هذا الإذن الرسائل السابقة. إذا منع الهاتف الإذن، استخدم إشعارات الرسائل أو الصق الرسالة هنا.", style = MaterialTheme.typography.bodySmall)
-    LaunchedEffect(Unit) { while (true) { delay(5000); refresh++ } }
-    val health = context.getSharedPreferences("sms_health", android.content.Context.MODE_PRIVATE)
-    val lastResult = when (health.getString("result", null)) {
-        "imported" -> "تم تسجيل عملية شراء"
-        "unrecognized" -> "وصل نص، لكنه لم يتضمن عملية شراء واضحة؛ قد يكون إشعارًا مخفيًا"
-        "duplicate_or_disabled" -> "عملية مكررة أو الاستيراد متوقف أو الرسالة أقدم من التفعيل"
-        "error" -> "تعذر حفظ العملية؛ الصق الرسالة لإعادة المحاولة"
-        else -> "لم يستقبل التطبيق نص رسالة حتى الآن"
-    }
-    Text("حالة الاستقبال: $lastResult")
-    Text("اتصال قارئ الإشعارات: " + when (health.getString("listener", null)) {
-        "connected" -> "متصل"
-        "disconnected" -> "إعادة اتصال مطلوبة"
-        else -> "لم يتأكد الاتصال"
-    })
-    Button(onClick = { pasting = true; pasteResult = null }) { Text("إضافة رسالة شراء فائتة") }
-    if (pasting) Dialog(onDismissRequest = { pasting = false; pasted = "" }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxWidth().padding(24.dp), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("الصق رسالة الشراء")
-                OutlinedTextField(value = pasted, onValueChange = { pasted = it.take(10000) }, modifier = Modifier.fillMaxWidth(), minLines = 4)
-                Text("يُستخدم تاريخ رسالة الراجحي إن وُجد، وتُمنع إضافة نفس الرسالة مرتين.")
-                pasteResult?.let { Text(it) }
-                Button(onClick = { vm.importPastedSms(pasted) { ok -> pasteResult = if (ok) "تم تسجيل العملية" else "الرسالة مكررة أو لا تتضمن مبلغ شراء واضحًا" } }, enabled = pasted.isNotBlank()) { Text("استخراج وتسجيل") }
-                TextButton(onClick = { pasting = false; pasted = "" }) { Text("إغلاق") }
-            }
+    Text(
+        "بإذنك، يُستخرج المبلغ والتاجر من رسائل الشراء الجديدة على الجهاز، دون رفع الرسائل أو حفظ نصها. لا يقرأ هذا الإذن الرسائل السابقة. إذا منع الهاتف الإذن، استخدم إشعارات الرسائل أو الصق الرسالة هنا.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(5000)
+            refresh++
         }
     }
+    val health = context.getSharedPreferences("sms_health", android.content.Context.MODE_PRIVATE)
+    val lastResult =
+        when (health.getString("result", null)) {
+            "imported" -> "تم تسجيل عملية شراء"
+            "unrecognized" -> "وصل نص، لكنه لم يتضمن عملية شراء واضحة؛ قد يكون إشعارًا مخفيًا"
+            "duplicate_or_disabled" -> "عملية مكررة أو الاستيراد متوقف أو الرسالة أقدم من التفعيل"
+            "error" -> "تعذر حفظ العملية؛ الصق الرسالة لإعادة المحاولة"
+            else -> "لم يستقبل التطبيق نص رسالة حتى الآن"
+        }
+    Text("حالة الاستقبال: $lastResult")
+    Text(
+        "اتصال قارئ الإشعارات: " +
+            when (health.getString("listener", null)) {
+                "connected" -> "متصل"
+                "disconnected" -> "إعادة اتصال مطلوبة"
+                else -> "لم يتأكد الاتصال"
+            }
+    )
+    Button(
+        onClick = {
+            pasting = true
+            pasteResult = null
+        }
+    ) {
+        Text("إضافة رسالة شراء فائتة")
+    }
+    if (pasting)
+        Dialog(
+            onDismissRequest = {
+                pasting = false
+                pasted = ""
+            },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(Modifier.fillMaxWidth().padding(24.dp), shape = MaterialTheme.shapes.large) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("الصق رسالة الشراء")
+                    OutlinedTextField(
+                        value = pasted,
+                        onValueChange = { pasted = it.take(10000) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 4,
+                    )
+                    Text("يُستخدم تاريخ رسالة الراجحي إن وُجد، وتُمنع إضافة نفس الرسالة مرتين.")
+                    pasteResult?.let { Text(it) }
+                    Button(
+                        onClick = {
+                            vm.importPastedSms(pasted) { ok ->
+                                pasteResult =
+                                    if (ok) "تم تسجيل العملية"
+                                    else "الرسالة مكررة أو لا تتضمن مبلغ شراء واضحًا"
+                            }
+                        },
+                        enabled = pasted.isNotBlank(),
+                    ) {
+                        Text("استخراج وتسجيل")
+                    }
+                    TextButton(
+                        onClick = {
+                            pasting = false
+                            pasted = ""
+                        }
+                    ) {
+                        Text("إغلاق")
+                    }
+                }
+            }
+        }
     if (messagesApp == null) Text(tr("sms_app_missing"))
     if (data.settings.smsImport && !allowed && !direct) Text(tr("sms_access_required"))
     Action("sms_access_settings") {
@@ -433,13 +668,14 @@ fun OfflineImport(vm: JourneyViewModel, data: ScreenData) {
                                                                 listOf("png", "jpg", "jpeg")
                                                     )
                                                 }
-                                            db.rawQuery("SELECT tile_data FROM tiles WHERE length(tile_data)<=2000000 LIMIT 1", null)
+                                            db.rawQuery(
+                                                    "SELECT tile_data FROM tiles WHERE length(tile_data)<=2000000 LIMIT 1",
+                                                    null,
+                                                )
                                                 .use {
                                                     require(it.moveToFirst())
                                                     val bytes = it.getBlob(0)
-                                                    require(
-                                                        sa.rihla.map.TileImages.valid(bytes)
-                                                    )
+                                                    require(sa.rihla.map.TileImages.valid(bytes))
                                                 }
                                         }
                                     require(temp.renameTo(target))

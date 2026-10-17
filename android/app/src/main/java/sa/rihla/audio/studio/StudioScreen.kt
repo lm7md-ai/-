@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -19,7 +18,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import sa.rihla.audio.*
 
 @Composable
-fun StudioScreen(audio: AudioViewModel, onBack: () -> Unit, vm: StudioViewModel = viewModel()) {
+fun StudioScreen(
+    audio: AudioViewModel,
+    onBack: () -> Unit,
+    vm: StudioViewModel = viewModel(),
+    showHeading: Boolean = true,
+) {
     val catalog by audio.catalog.collectAsStateWithLifecycle()
     val playback by AudioLive.state.collectAsStateWithLifecycle()
     val statuses by vm.statuses.collectAsStateWithLifecycle()
@@ -33,14 +37,10 @@ fun StudioScreen(audio: AudioViewModel, onBack: () -> Unit, vm: StudioViewModel 
     var tab by rememberSaveable { mutableStateOf("lecture") }
     var selected by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
-    var question by rememberSaveable { mutableStateOf("") }
-    var metered by rememberSaveable { mutableStateOf(false) }
     var physical by rememberSaveable { mutableStateOf(false) }
     var approvedMove by remember { mutableStateOf(false) }
     var scene by rememberSaveable { mutableStateOf("lecture_soft") }
     var folder by rememberSaveable { mutableStateOf<String?>(null) }
-    var licenses by remember { mutableStateOf(false) }
-    var executed by remember(state.reply) { mutableStateOf(false) }
     val tree =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
             it?.let { uri -> vm.apply(uri) }
@@ -61,23 +61,36 @@ fun StudioScreen(audio: AudioViewModel, onBack: () -> Unit, vm: StudioViewModel 
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item {
-            TextButton(onClick = onBack) { Text("العودة إلى المشغل") }
-            Text("استوديو المحاضرات", style = MaterialTheme.typography.headlineSmall)
+            if (showHeading) {
+                TextButton(onClick = onBack) { Text("العودة إلى المشغل") }
+                Text("استوديو المحاضرات", style = MaterialTheme.typography.headlineSmall)
+            }
             Text("تحسين الاستماع · مساعد على الهاتف · تنظيم الملفات · فصل الموسيقى")
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
                         "lecture" to "تحسين الصوت",
-                        "assistant" to "المساعد",
                         "organize" to "تنظيم",
                         "folders" to "المجلدات",
                         "separate" to "فصل الموسيقى",
+                        "assistant" to "المساعد",
                         "models" to "النماذج",
                     )
-                    .forEach { (key, label) ->
-                        FilterChip(tab == key, { tab = key }, label = { Text(label) })
+                    .chunked(2)
+                    .forEach { pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pair.forEach { (key, label) ->
+                                OutlinedButton(
+                                    onClick = {
+                                        if (key == "assistant" || key == "models")
+                                            AssistantNavigation.requests.tryEmit(key)
+                                        else tab = key
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(label)
+                                }
+                            }
+                        }
                     }
             }
             if (state.stage.isNotBlank()) {
@@ -93,56 +106,6 @@ fun StudioScreen(audio: AudioViewModel, onBack: () -> Unit, vm: StudioViewModel 
             if (message.isNotBlank()) {
                 Text(message)
                 TextButton(onClick = { vm.message.value = "" }) { Text("إخفاء") }
-            }
-        }
-        if (tab == "models") {
-            item {
-                Text(
-                    "التنزيل أول مرة يحتاج إنترنت؛ التشغيل لاحقًا محلي. لا تُرفع ملفاتك إلى خدمة ذكاء اصطناعي."
-                )
-                Row {
-                    Checkbox(metered, { metered = it }, enabled = !locked)
-                    Text("السماح بالتنزيل عبر بيانات الهاتف")
-                }
-                TextButton(onClick = { licenses = true }) { Text("مصادر المحركات والتراخيص") }
-                Text(
-                    "المساعد يحتاج نحو 1.6 جيجابايت للتنزيل وذاكرة متاحة نحو 2.5 جيجابايت. محرك CPU بأربع خيوط، ويُغلق بعد الطلب. يناسب ذاكرة هاتفك مبدئيًا؛ السرعة تعتمد على الجهاز."
-                )
-            }
-            items(LocalModels.all, key = { it.id }) { model ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Column(
-                        Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            when (model.id) {
-                                "assistant" -> "مساعد Qwen2.5 · 1.5B"
-                                "vocals" -> "Spleeter · نموذج الكلام"
-                                else -> "Spleeter · نموذج المصاحبة"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            "${model.size/1_000_000} ميجابايت · ${statuses[model.id]?.state ?: "فحص الحالة"}"
-                        )
-                        LinearProgressIndicator(
-                            progress = { (statuses[model.id]?.progress ?: 0) / 100f },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Row {
-                            Button(
-                                onClick = { vm.download(model, metered) },
-                                enabled = !locked && statuses[model.id]?.ready != true,
-                            ) {
-                                Text("تنزيل")
-                            }
-                            TextButton(onClick = { vm.remove(model) }, enabled = !locked) {
-                                Text("إلغاء التنزيل / إزالة النموذج")
-                            }
-                        }
-                    }
-                }
             }
         }
         if (tab in setOf("lecture", "separate")) {
@@ -217,7 +180,9 @@ fun StudioScreen(audio: AudioViewModel, onBack: () -> Unit, vm: StudioViewModel 
                     ) {
                         Text("إنشاء نسخة دون موسيقى")
                     }
-                    TextButton(onClick = { tab = "models" }) { Text("تنزيل نماذج الفصل") }
+                    TextButton(onClick = { AssistantNavigation.requests.tryEmit("models") }) {
+                        Text("تنزيل نماذج الفصل")
+                    }
                 }
                 OutlinedTextField(
                     query,
@@ -234,70 +199,6 @@ fun StudioScreen(audio: AudioViewModel, onBack: () -> Unit, vm: StudioViewModel 
                     Column(Modifier.padding(12.dp)) {
                         Text((if (picked?.id == track.id) "✓ " else "") + track.title)
                         Text(track.artist, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
-        if (tab == "assistant") {
-            item {
-                Text(
-                    "ينفذ أوامر التشغيل والبحث والتنقل بعد مراجعتك. يطلع على أعداد المشاوير والمصاريف وعناوين أول 20 مقطعًا، ولا يعدّل سجلاتك المالية أو يحذف ملفاتك."
-                )
-                OutlinedTextField(
-                    question,
-                    { question = it.take(1200) },
-                    label = { Text("مثال: شغّل محاضرة، افتح الخريطة، نظّم المكتبة") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = { vm.start("ask", question) },
-                    enabled =
-                        !locked && question.isNotBlank() && statuses["assistant"]?.ready == true,
-                ) {
-                    Text("إرسال إلى المساعد المحلي")
-                }
-                TextButton(onClick = { tab = "models" }) { Text("تنزيل نموذج المساعد") }
-                state.reply?.let { reply ->
-                    Text(reply.reply, style = MaterialTheme.typography.titleMedium)
-                    if (reply.action != "none") {
-                        Text("الإجراء المقترح: ${actionLabel(reply.action)} · ${reply.value}")
-                        Button(
-                            onClick = {
-                                vm.work {
-                                    when (reply.action) {
-                                        "navigate" -> AssistantNavigation.requests.emit(reply.value)
-                                        "scene" ->
-                                            audio.scene(
-                                                AudioScene.entries.first { it.key == reply.value }
-                                            )
-                                        "pause_audio" -> audio.pause()
-                                        "next_audio" -> audio.next()
-                                        "previous_audio" -> audio.previous()
-                                        "search_audio" -> {
-                                            query = reply.value
-                                            tab = "lecture"
-                                        }
-                                        "play_audio",
-                                        "favorite_audio" -> {
-                                            val track =
-                                                vm.app.audio.dao.track(reply.value)
-                                                    ?: error("المقطع لم يعد موجودًا")
-                                            if (reply.action == "play_audio")
-                                                audio.play(track, listOf(track))
-                                            else if (!track.favorite) audio.favorite(track.id)
-                                        }
-                                        "organize" -> {
-                                            tab = "organize"
-                                            vm.preliminary(catalog.tracks)
-                                        }
-                                    }
-                                    executed = true
-                                }
-                            },
-                            enabled = !locked && !executed,
-                        ) {
-                            Text(if (executed) "تم تنفيذ الإجراء" else "تنفيذ الاقتراح")
-                        }
                     }
                 }
             }
@@ -403,27 +304,6 @@ fun StudioScreen(audio: AudioViewModel, onBack: () -> Unit, vm: StudioViewModel 
                 }
             }
         }
-    }
-    if (licenses) {
-        val context = androidx.compose.ui.platform.LocalContext.current
-        val notice = remember {
-            context.resources.openRawResource(sa.rihla.R.raw.studio_licenses).bufferedReader().use {
-                it.readText()
-            }
-        }
-        AlertDialog(
-            onDismissRequest = { licenses = false },
-            title = { Text("التراخيص مفتوحة المصدر") },
-            text = {
-                androidx.compose.foundation.text.selection.SelectionContainer {
-                    Text(
-                        notice,
-                        Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()),
-                    )
-                }
-            },
-            confirmButton = { TextButton(onClick = { licenses = false }) { Text("إغلاق") } },
-        )
     }
     if (approvedMove)
         AlertDialog(

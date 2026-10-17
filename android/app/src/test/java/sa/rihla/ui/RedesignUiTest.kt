@@ -38,7 +38,7 @@ class RedesignUiTest {
             app.settings.clear()
             app.settings.onboard()
         }
-        compose.setContent { RihlaRoot() }
+        compose.setContent { sa.rihla.ui.FreshTestApplication { RihlaRoot() } }
         compose.waitUntil(20000) {
             compose.onAllNodesWithText("رحلتك تبدأ هنا").fetchSemanticsNodes().isNotEmpty()
         }
@@ -109,7 +109,7 @@ class RedesignUiTest {
             app.settings.onboard()
             app.settings.theme("LIGHT")
         }
-        compose.setContent { RihlaRoot() }
+        compose.setContent { sa.rihla.ui.FreshTestApplication { RihlaRoot() } }
         compose.waitUntil(20000) {
             compose.onAllNodesWithText("رحلتك تبدأ هنا").fetchSemanticsNodes().isNotEmpty()
         }
@@ -128,6 +128,8 @@ class RedesignUiTest {
         compose.onNodeWithText("المزيد").performClick()
         compose.onNodeWithText("نسخ بياناتك محليًا").performScrollTo().assertIsDisplayed()
         capture("more-dark.png")
+        compose.onNodeWithText("نسخ بياناتك محليًا").performClick()
+        compose.onNodeWithText("حفظ نسخة محلية").performScrollTo().assertExists()
     }
 
     @Test
@@ -138,7 +140,7 @@ class RedesignUiTest {
             app.settings.onboard()
         }
         val restoration = StateRestorationTester(compose)
-        restoration.setContent { RihlaRoot() }
+        restoration.setContent { sa.rihla.ui.FreshTestApplication { RihlaRoot() } }
         compose.waitUntil(20000) {
             compose.onAllNodesWithText("رحلتك تبدأ هنا").fetchSemanticsNodes().isNotEmpty()
         }

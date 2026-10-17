@@ -1,7 +1,6 @@
 package sa.rihla.ui
 
 import android.content.*
-import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -13,6 +12,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -195,19 +195,35 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
         MaterialTheme(colorScheme = colors, typography = NewTypography, shapes = NewShapes) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                val pageStates = rememberSaveableStateHolder()
                 var page by rememberSaveable { mutableStateOf("dashboard") }
                 var selected by rememberSaveable { mutableStateOf<Long?>(null) }
+                var previousPages by rememberSaveable { mutableStateOf(listOf<String>()) }
+                fun openPage(next: String) {
+                    if (next != page) {
+                        previousPages = (previousPages + page).takeLast(15)
+                        page = next
+                    }
+                    selected = null
+                }
+                fun goBack() {
+                    if (selected != null) selected = null
+                    else {
+                        page = previousPages.lastOrNull() ?: "dashboard"
+                        previousPages = previousPages.dropLast(1)
+                    }
+                }
                 LaunchedEffect(Unit) {
-                    sa.rihla.audio.studio.AssistantNavigation.requests.collect { page=it;selected=null }
+                    sa.rihla.audio.studio.AssistantNavigation.requests.collect { openPage(it) }
                 }
                 LaunchedEffect(audioRequest) {
-                    if (audioRequest > 0) { page = "audio"; selected = null }
+                    if (audioRequest > 0) openPage("audio")
                 }
                 LaunchedEffect(selected, data.outings) {
                     if (selected != null && data.outings.none { it.id == selected }) selected = null
                 }
                 BackHandler(enabled = selected != null || page != "dashboard") {
-                    if (selected != null) selected = null else page = "dashboard"
+                    goBack()
                 }
                 var expense by rememberSaveable { mutableStateOf(false) }
                 var expenseOuting by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -219,9 +235,19 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                 Modifier.fillMaxWidth().statusBarsPadding().padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (selected != null) {
-                                    IconButton(onClick = { selected = null }) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, tr("history"))
+                                if (
+                                    selected != null ||
+                                        page !in
+                                            setOf(
+                                                "dashboard",
+                                                "history",
+                                                "audio",
+                                                "assistant",
+                                                "settings",
+                                            )
+                                ) {
+                                    IconButton(onClick = ::goBack) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع")
                                     }
                                 }
                                 Column(Modifier.weight(1f)) {
@@ -231,73 +257,73 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                     Text(
-                                        tr(
-                                            if (selected != null) "detail"
-                                            else if (page == "settings") "more" else page
-                                        ),
+                                        when {
+                                            selected != null -> tr("detail")
+                                            page == "assistant" -> "المساعد الذكي"
+                                            page == "models" -> "نماذج الذكاء الاصطناعي"
+                                            page == "assistant_profile" -> "تخصيص مساعدي"
+                                            page == "voice" -> "الأوامر الصوتية"
+                                            page == "studio" -> "استوديو المحاضرات"
+                                            page == "settings" -> tr("more")
+                                            else -> tr(page)
+                                        },
                                         style = MaterialTheme.typography.headlineSmall,
                                     )
                                 }
-                                IconButton(
-                                    onClick = { page = "audio"; selected = null }
-                                ) {
-                                    Icon(Icons.Default.Headphones, "الصوتيات")
-                                }
-                                IconButton(
-                                    onClick = {
-                                        page = "calendar"
-                                        selected = null
-                                    }
-                                ) {
-                                    Icon(Icons.Default.CalendarMonth, tr("calendar"))
-                                }
-                                IconButton(
-                                    onClick = {
-                                        page = "map"
-                                        selected = null
-                                    }
-                                ) {
+                                IconButton(onClick = { openPage("map") }) {
                                     Icon(Icons.Default.Map, "الخريطة")
-                                }
-                                IconButton(
-                                    onClick = {
-                                        page = "settings"
-                                        selected = null
-                                    }
-                                ) {
-                                    Icon(Icons.Default.Settings, tr("settings"))
                                 }
                             }
                         },
                         bottomBar = {
                             Column {
-                            if (audioPlayback.id.isNotBlank())
-                                sa.rihla.audio.AudioMiniPlayer(onOpen = { page = "audio"; selected = null })
-                            NavigationBar {
-                                listOf(
-                                        "dashboard" to Icons.Default.Home,
-                                        "history" to Icons.Default.Route,
-                                        "statistics" to Icons.Default.BarChart,
-                                        "expenses" to Icons.Default.Payments,
-                                        "settings" to Icons.Default.GridView,
-                                    )
-                                    .forEach { (key, icon) ->
-                                        NavigationBarItem(
-                                            selected = page == key && selected == null,
-                                            onClick = {
-                                                page = key
-                                                selected = null
-                                            },
-                                            icon = { Icon(icon, tr(key)) },
-                                            label = {
-                                                Text(
-                                                    tr(if (key == "settings") "more" else key),
-                                                    maxLines = 1,
-                                                )
-                                            },
+                                if (audioPlayback.id.isNotBlank())
+                                    sa.rihla.audio.AudioMiniPlayer(onOpen = { openPage("audio") })
+                                NavigationBar {
+                                    listOf(
+                                            "dashboard" to Icons.Default.Home,
+                                            "history" to Icons.Default.Route,
+                                            "audio" to Icons.Default.Headphones,
+                                            "assistant" to Icons.Default.AutoAwesome,
+                                            "settings" to Icons.Default.GridView,
                                         )
-                                    }
-                            }
+                                        .forEach { (key, icon) ->
+                                            NavigationBarItem(
+                                                selected =
+                                                    (page == key ||
+                                                        (key == "assistant" &&
+                                                            page in
+                                                                setOf(
+                                                                    "models",
+                                                                    "assistant_profile",
+                                                                    "voice",
+                                                                )) ||
+                                                        (key == "audio" && page == "studio")) &&
+                                                        selected == null,
+                                                onClick = {
+                                                    openPage(key)
+                                                },
+                                                icon = {
+                                                    Icon(
+                                                        icon,
+                                                        if (key == "assistant") "المساعد الذكي"
+                                                        else tr(key),
+                                                    )
+                                                },
+                                                label = {
+                                                    Text(
+                                                        if (key == "assistant") "المساعد"
+                                                        else
+                                                            tr(
+                                                                if (key == "settings") "more"
+                                                                else key
+                                                            ),
+                                                        maxLines = 1,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                }
                             }
                         },
                     ) { padding ->
@@ -309,30 +335,44 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                     expense = true
                                 }
                             else
-                                when (page) {
-                                    "dashboard" ->
-                                        Dashboard(
-                                            vm,
-                                            data,
-                                            onOpen = { selected = it },
-                                            onLive = { selected = data.active?.id },
-                                            onExpense = {
+                                pageStates.SaveableStateProvider(page) {
+                                    when (page) {
+                                        "dashboard" ->
+                                            Dashboard(
+                                                vm,
+                                                data,
+                                                onOpen = { selected = it },
+                                                onLive = { selected = data.active?.id },
+                                                onExpense = {
+                                                    expenseOuting = data.active?.id
+                                                    expense = true
+                                                },
+                                            )
+                                        "history" -> History(data) { selected = it }
+                                        "calendar" -> CalendarScreen(data) { selected = it }
+                                        "map" -> sa.rihla.map.MapScreen(vm, data)
+                                        "audio" -> sa.rihla.audio.AudioScreen()
+                                        "assistant" -> sa.rihla.assistant.AssistantScreen()
+                                        "voice" ->
+                                            sa.rihla.assistant.AssistantScreen(voiceOnly = true)
+                                        "assistant_profile" ->
+                                            sa.rihla.assistant.PersonalAssistantScreen()
+                                        "models" -> sa.rihla.assistant.ModelCenterScreen()
+                                        "studio" ->
+                                            sa.rihla.audio.studio.StudioScreen(
+                                                viewModel(),
+                                                { openPage("audio") },
+                                                showHeading = false,
+                                            )
+                                        "statistics" -> StatisticsScreen(data, vm) { selected = it }
+                                        "vehicle" -> VehicleScreen(data)
+                                        "expenses" ->
+                                            ExpensesScreen(data, vm) {
                                                 expenseOuting = data.active?.id
                                                 expense = true
-                                            },
-                                        )
-                                    "history" -> History(data) { selected = it }
-                                    "calendar" -> CalendarScreen(data) { selected = it }
-                                    "map" -> sa.rihla.map.MapScreen(vm, data)
-                                    "audio" -> sa.rihla.audio.AudioScreen()
-                                    "statistics" -> StatisticsScreen(data, vm) { selected = it }
-                                    "vehicle" -> VehicleScreen(data)
-                                    "expenses" ->
-                                        ExpensesScreen(data, vm) {
-                                            expenseOuting = data.active?.id
-                                            expense = true
-                                        }
-                                    "settings" -> SettingsScreen(vm, data) { page = it }
+                                            }
+                                        "settings" -> SettingsScreen(vm, data) { openPage(it) }
+                                    }
                                 }
                         }
                     }

@@ -47,12 +47,6 @@ fun AudioMiniPlayer(onOpen: () -> Unit, vm: AudioViewModel = viewModel()) {
 
 @Composable
 fun AudioScreen(vm: AudioViewModel = viewModel()) {
-    var studio by rememberSaveable { mutableStateOf(false) }
-    if(studio) {
-        androidx.activity.compose.BackHandler { studio=false }
-        sa.rihla.audio.studio.StudioScreen(vm,{studio=false})
-        return
-    }
     val catalog by vm.catalog.collectAsStateWithLifecycle()
     val playback by AudioLive.state.collectAsStateWithLifecycle()
     val connected by vm.connected.collectAsStateWithLifecycle()
@@ -112,7 +106,7 @@ fun AudioScreen(vm: AudioViewModel = viewModel()) {
                     Icon(Icons.Default.Headphones, null, Modifier.size(36.dp))
                     Text("مكتبتك الصوتية", style = MaterialTheme.typography.headlineSmall)
                     Text("${catalog.tracks.size} مقطع · ${catalog.playlists.size} قائمة · تشغيل محلي دون إنترنت")
-                    Button(onClick={studio=true}) { Text("استوديو المحاضرات والمساعد المحلي") }
+                    Button(onClick={ sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("studio") }) { Text("استوديو المحاضرات والمساعد المحلي") }
                     AudioSceneChooser(vm,playback.scene)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { files.launch(arrayOf("audio/*")) }, enabled = !busy) { Text("إضافة ملفات") }
