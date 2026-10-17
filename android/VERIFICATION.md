@@ -1,4 +1,4 @@
-# Verification — version 4.1, 2026-10-16
+# Verification — version 4.2, 2026-10-17
 
 Toolchain: JDK 21, Gradle 9.8.0, AGP 9.4.1, Kotlin 2.4.20/KSP 2.3.12,
 Android platform 37.2/build-tools 37.0.0, Compose BOM 2026.09.00, Room 2.8.5,
@@ -10,25 +10,29 @@ DataStore 1.2.1, Media3 1.11.1, DocumentFile 1.1.0 and Robolectric 4.17. TLS, wr
 python3 tools/verify_schema.py
 python3 tools/verify_country_map.py
 python3 -m unittest discover -s tools -p 'test_*.py'
-python3 tools/verify_release.py app/build/outputs/apk/classic/release/app-classic-release.apk --edition classic --previous ../releases/app-v4.0.apk
+python3 tools/verify_release.py app/build/outputs/apk/classic/release/app-classic-release.apk --edition classic --previous ../releases/app-v4.1.apk
 python3 tools/verify_release.py app/build/outputs/apk/next/release/app-next-release.apk --edition next
 ```
 
 | Check | Result |
 |---|---|
-| Android tests | 103 passed; 0 failures/errors/skipped |
+| Android tests | 106 passed; 0 failures/errors/skipped |
 | Python transfer/signature/geometry tests | 13 passed |
 | Legacy server HTTP security tests | Previous 3.2 validation: 4 passed; anonymous device access, oversized body, Host parsing and public dev-token binding checked |
 | Legacy Expo project | Previous 3.2 validation: TypeScript check and web export passed; 7 static routes |
 | npm dependency audit | Previous 3.2 audit: 29 unresolved advisories: 18 high, 11 moderate, 0 critical; semver-compatible fixes attempted; no forced SDK downgrade |
-| Classic and next builds | Passed; non-debuggable Release, versionCode 41, versionName 4.1 |
-| Both Android lint targets | 0 errors, 21 warnings per target; KTX convenience, empty-super, obsolete-SDK and newer-Gradle notices, plus exported MediaSessionService. Service admission checks own UID or Media3 trusted controllers; exported access is required for system media controls |
+| Classic and next builds | Passed; non-debuggable Release, versionCode 42, versionName 4.2 |
+| Both Android lint targets | 0 errors, 23 warnings per target; KTX convenience, empty-super, obsolete-SDK and newer-Gradle notices, plus exported MediaSessionService. Service admission checks own UID or Media3 trusted controllers; exported access is required for system media controls |
 | Audio catalog | Duplicate scan retains favorites/resume/playlists/bookmarks; relink uses stable record ID; ordered playlist edits and FK cascades tested |
 | Audio persistence | Separate audio database reopens with saved position; catalog backup restores all records, rejects existing targets and rolls back orphan references |
 | Audio playback service | Media3 service restores queue paused and retains position/queue without changing an active journey. Synthetic WAV reads from a registered content provider through ExoPlayer to AudioTrack; same-item retry clears an initial read error |
 | Audio UI | Native rendered navigation, search with empty result, favorites and playlist creation tested; explicit-width dialogs avoid a native layout loop |
-| Stereo processor | Disabled stereo is byte-identical, enabled output bounded, split frames retained, unsupported layouts inactive; shared EMPTY_BUFFER accepted before input/between chunks. DefaultAudioSink passes 4096 PCM bytes to AudioTrack at widths 0 and 1. This integration test reproduced a self-copy exception before the fix |
+| Stereo processor | Disabled stereo is byte-identical, enabled output bounded, split frames retained, unsupported custom mono/multichannel/float layouts inactive; shared EMPTY_BUFFER accepted before input/between chunks. DefaultAudioSink passes 4096 PCM bytes to AudioTrack at widths 0 and 1. This integration test reproduced a self-copy exception before the fix |
 | Playback error feedback | Internal/output failures do not request relinking valid files; permissions and decoder errors give different advice; private URI text is omitted |
+| Ready scenes | Natural uses the standard sink with no custom processor or native effects; 3D/virtual 7.1 software scenes produce distinct nonzero mono/stereo output; silence stays silent |
+| PCM output values | Production renderer factory tested for every scene at both width settings; output PCM nonzero, natural/custom-zero settled frames byte-identical after Media3's 20ms startup ramp; WAV service output nonzero and app volume 1 |
+| Scene switching | Native Compose buttons work; queue/index/position and paused intent remain through natural→3D→7.1→natural with an existing journey unchanged |
+| Mute feedback/recovery | System media volume 0 is reported; recovery sets app volume to 1 while leaving system media volume 0; no automatic loudness escalation |
 | Audio idle saving | Paused service avoids periodic progress writes; position-only save retains actual last-played time |
 | Audio source isolation | Journey Room schema/migrations and tracking reducer unchanged; no destructive audio fallback |
 | Supplied Rajhi Google Pay SMS | Exactly 3200 halalas and EXPRESS FOOD; Saudi bank time retained |
@@ -57,8 +61,8 @@ python3 tools/verify_release.py app/build/outputs/apk/next/release/app-next-rele
 | UI map | Navigation, zoom, measurement selection, loaded native map rendering and screenshots checked |
 | Stop taps | Existing coordinate-picking behavior retained; advanced map can select stops alongside point picking |
 | Existing behavior | SMS parser/deduplication, migrations, fuel/cost/duration calculations, backup rejection and UI restoration tests retained |
-| Main update identity | `sa.rihla`, same verified certificate as published 1.3/2.0/3.0/3.1; versionCode increases to 41 |
-| Independent identity | `sa.rihla.next`, same retained certificate; versionCode 41 |
+| Main update identity | `sa.rihla`, same verified certificate as published 1.3/2.0/3.0/3.1; versionCode increases to 42 |
+| Independent identity | `sa.rihla.next`, same retained certificate; versionCode 42 |
 
 ## Offline country data
 
@@ -92,9 +96,9 @@ edition updates only an existing next installation; cross-package transfer remai
 explicit and cannot bypass Android isolation or the unavailable original 1.0 key.
 
 Main APK: 82,945,111 bytes; SHA-256
-`1ada17c76e82c6caeddbefe80bf632b19724e0c9c72c66c0c85bca8120e31231`.
-Independent APK: 82,945,119 bytes; SHA-256
-`9a28795aea8096babb3ecfa0f5dea95bed6be05f161f14f48e3449fd2213f2c3`.
+`b8b8fe187a029d5d6e73ef9acb8ce76b15bf6321b6c2a4d7d6621b38fc3986b3`.
+Independent APK: 82,945,115 bytes; SHA-256
+`c72bc1e1c18a95f1d8dd09bcf352919aee0e7e39545818aa6420f2942ba2dac6`.
 
 Release uses the retained certificate for update compatibility; it is not a key
 rotation or a claim of Play Store signing readiness. Legacy run-as backup tools
@@ -150,3 +154,21 @@ locks. A fresh Gradle daemon, cleaned generated APK/package state, sequential
 workers and a 16-thread common pool completed the build. Source inputs and the
 retained key were unchanged; tests remained successful. The command above records
 the successful build settings.
+
+## 4.2 silent-output scope
+
+The handset's silent output has not been reproduced or assigned a confirmed root
+cause: counter movement, other-player playback and speaker/Bluetooth route were
+asked about but no answer was available while implementing. Natural mode now
+bypasses the custom processor entirely and allocates no vendor effects; software
+scenes opt in to processing, and custom mode alone connects native effects.
+System and app volumes are separate, suppression is visible, hardware keys target
+media, and explicit recovery resets app volume/effects/silence/timer and lets the
+system choose the route. It does not force the speaker or raise system volume.
+No claim of measured handset audibility is made.
+
+3D uses widening plus two short reflections. Virtual 7.1 uses eight differing
+reflection delays, normalized to stereo; neither is a discrete 7.1 renderer or
+measured HRTF implementation. PCM16 mono is expanded to stereo for these scenes.
+Native callback guards prevent a released player's events overwriting its new
+replacement state. The source remains Room-schema compatible.

@@ -106,6 +106,7 @@ fun AudioScreen(vm: AudioViewModel = viewModel()) {
                     Icon(Icons.Default.Headphones, null, Modifier.size(36.dp))
                     Text("مكتبتك الصوتية", style = MaterialTheme.typography.headlineSmall)
                     Text("${catalog.tracks.size} مقطع · ${catalog.playlists.size} قائمة · تشغيل محلي دون إنترنت")
+                    AudioSceneChooser(vm,playback.scene)
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { files.launch(arrayOf("audio/*")) }, enabled = !busy) { Text("إضافة ملفات") }
                         OutlinedButton(onClick = { folder.launch(null) }, enabled = !busy) { Text("إضافة مجلد") }
@@ -247,10 +248,20 @@ private fun AudioNowPlaying(vm: AudioViewModel, state: AudioPlayback, catalog: A
             Text("سرعة الاستماع")
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) { listOf(.5f,.75f,1f,1.25f,1.5f,2f).forEach { speed -> FilterChip(state.speed==speed,{vm.speed(speed)},label={Text("${speed}×")}) } }
             Row(verticalAlignment=Alignment.CenterVertically) { Text("تجاوز الصمت",Modifier.weight(1f));Switch(state.silence,vm::silence) }
-            Text("مستوى الصوت")
+            Text("صوت المشغل · ${(state.volume*100).toInt()}٪")
             Slider(state.volume,vm::volume,enabled=connected)
+            Text("صوت الوسائط في الهاتف: ${state.mediaVolume} / ${state.mediaMax}")
+            if (state.muted || state.mediaVolume==0) Text("صوت الوسائط في الهاتف مكتوم. ارفعه من أزرار الهاتف أو لوحة الصوت.",color=MaterialTheme.colorScheme.error)
+            if (state.suppression!=0) Text("النظام أوقف الصوت مؤقتًا بسبب تركيز الصوت أو المخرج الحالي؛ راجع التطبيقات الأخرى ومخرج الصوت.")
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                TextButton(onClick={
+                    val manager=vm.app.getSystemService(android.media.AudioManager::class.java)
+                    manager.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC,android.media.AudioManager.ADJUST_SAME,android.media.AudioManager.FLAG_SHOW_UI)
+                }) { Text("لوحة صوت الهاتف") }
+                TextButton(onClick=vm::recoverSound) { Text("استعادة التشغيل المباشر") }
+            }
             TextButton(onClick = { effects = !effects }) { Text(if(effects) "إغلاق إعدادات الصوت" else "المعادل والصوت المحيطي") }
-            if (effects) AudioEffectsPanel(vm,state.sound)
+            if (effects) key(state.soundRevision) { AudioEffectsPanel(vm,state.sound) }
             val bookmarks = catalog.bookmarks.filter { it.trackId == state.id }
             if (bookmarks.isNotEmpty()) {
                 Text("المواضع المحفوظة")
@@ -277,9 +288,9 @@ private fun AudioNowPlaying(vm: AudioViewModel, state: AudioPlayback, catalog: A
 @Composable
 private fun AudioEffectsPanel(vm: AudioViewModel, support: SoundSupport) {
     val context = LocalContext.current
-    var enabled by remember { mutableStateOf(vm.prefs.getBoolean("eq_enabled",false)) }
+    var enabled by remember(vm.prefs.getBoolean("eq_enabled",false)) { mutableStateOf(vm.prefs.getBoolean("eq_enabled",false)) }
     Row(verticalAlignment=Alignment.CenterVertically) { Text("معادل الصوت EQ",Modifier.weight(1f)); Switch(enabled,{enabled=it;vm.equalizer(it)},enabled=support.bands.isNotEmpty()) }
-    if (support.bands.isEmpty()) Text("معادل الجهاز غير متاح حاليًا. يبدأ فحصه عند تشغيل مقطع.")
+    if (support.bands.isEmpty()) Text("اختر الوضع المخصص لتجربة معادل الجهاز أثناء التشغيل؛ قد لا يدعمه المخرج الحالي.")
     else {
         Row(Modifier.horizontalScroll(rememberScrollState())) { listOf("flat" to "طبيعي","voice" to "صوت بشري","bass" to "جهير","bright" to "وضوح").forEach{(key,label)->TextButton(onClick={vm.preset(key);enabled=true}){Text(label)}} }
         support.bands.forEach { band ->
@@ -295,6 +306,22 @@ private fun AudioEffectsPanel(vm: AudioViewModel, support: SoundSupport) {
     Text(support.systemSpatial,style=MaterialTheme.typography.bodySmall)
     TextButton(onClick={context.startActivity(Intent(android.provider.Settings.ACTION_SOUND_SETTINGS))}){Text("إعدادات صوت الهاتف")}
     TextButton(onClick={vm.resetSound();enabled=false}){Text("استعادة الصوت الطبيعي")}
+}
+
+@Composable
+private fun AudioSceneChooser(vm:AudioViewModel,selected:String) {
+    Text("أوضاع الصوت الجاهزة",style=MaterialTheme.typography.titleSmall)
+    FlowRow(horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+        AudioScene.entries.forEach { scene ->
+            FilterChip(selected==scene.key,{vm.scene(scene)},label={Text(scene.label)})
+        }
+    }
+    Text(when(selected) {
+        "3d" -> "3D: اتساع وانعكاسات قصيرة؛ يُفضّل استخدام سماعات ستيريو."
+        "7.1" -> "7.1 افتراضي: ثمانية انعكاسات مكانية إلى ستيريو، وليس ثماني قنوات منفصلة."
+        "custom" -> "تحكم يدوي في الاتساع ومعادل الجهاز."
+        else -> "تشغيل مباشر دون مؤثرات؛ يستخدم مخرج الصوت الذي اختاره النظام."
+    },style=MaterialTheme.typography.bodySmall)
 }
 
 @Composable

@@ -40,6 +40,12 @@ class AudioUiTest {
         compose.waitUntil(20000){compose.onAllNodesWithContentDescription("الصوتيات").fetchSemanticsNodes().isNotEmpty()}
         compose.onNodeWithContentDescription("الصوتيات").performClick()
         compose.onNodeWithText("مكتبتك الصوتية").assertIsDisplayed()
+        compose.onNodeWithText("3D · افتراضي").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("أوضاع الصوت الجاهزة").fetchSemanticsNodes();AudioLive.state.value.scene=="3d" }
+        compose.onNodeWithText("7.1 · محاكاة").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("أوضاع الصوت الجاهزة").fetchSemanticsNodes();AudioLive.state.value.scene=="7.1" }
+        compose.onNodeWithText("طبيعي · مباشر").performClick()
+        compose.waitUntil(10000) { compose.onAllNodesWithText("أوضاع الصوت الجاهزة").fetchSemanticsNodes();AudioLive.state.value.scene=="natural" }
         compose.onNodeWithText("إضافة ملفات").assertIsDisplayed()
         compose.onNodeWithText("ابحث بالعنوان أو الفنان أو الألبوم").performScrollTo().performTextInput("غير موجود")
         compose.onNodeWithText("لا توجد مقاطع مطابقة").performScrollTo().assertIsDisplayed()

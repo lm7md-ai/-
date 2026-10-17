@@ -1,5 +1,16 @@
 # Updating without losing journeys
 
+## Version 4.2 direct output and ready scenes
+
+VersionCode 42 retains both package identities, certificate, journey schema 6 and
+audio schema 1. Existing queues/catalog files and positions stay in place.
+The initial natural scene uses the standard sink without custom processing or
+vendor audio effects. Scene selection rebuilds the session player while retaining
+queue/index/position, repeat/shuffle, volume and paused/playing intent. Old player
+callbacks are ignored after replacement. Recovery intentionally resets the app
+volume, silence skipping and sleep timer; it does not raise system media volume.
+See [ready scenes and silent-output diagnostics](docs/AUDIO_4_2.md).
+
 ## Version 4.1 playback fix
 
 VersionCode 41 fixes the stereo processor's handling of Media3's shared empty

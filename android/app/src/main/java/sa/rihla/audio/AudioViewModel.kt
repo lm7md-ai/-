@@ -127,16 +127,21 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     fun silence(enabled: Boolean) { prefs.edit().putBoolean("silence",enabled).apply() }
     fun bookmark() { val state = AudioLive.state.value; if (state.id.isNotBlank()) work { repo.dao.bookmark(AudioBookmark(trackId = state.id, positionMs = state.position, label = audioTime(state.position))) } }
     fun deleteBookmark(id: Long) = work { repo.dao.removeBookmark(id) }
-    fun soundFloat(key: String, value: Float) { require(key == "width"); prefs.edit().putFloat(key,value.coerceIn(0f,1f)).apply() }
-    fun soundInt(key: String, value: Int) { require(key in listOf("bass", "surround")); prefs.edit().putInt(key,value.coerceIn(0,1000)).apply() }
-    fun equalizer(enabled: Boolean) { prefs.edit().putBoolean("eq_enabled",enabled).apply() }
-    fun preset(name: String) { require(name in listOf("flat","voice","bass","bright")); prefs.edit().putString("eq_preset",name).remove("eq_levels").putBoolean("eq_enabled",true).apply() }
+    fun soundFloat(key: String, value: Float) { require(key == "width"); prefs.edit().putString("scene","custom").putFloat(key,value.coerceIn(0f,1f)).apply() }
+    fun soundInt(key: String, value: Int) { require(key in listOf("bass", "surround")); prefs.edit().putString("scene","custom").putInt(key,value.coerceIn(0,1000)).apply() }
+    fun equalizer(enabled: Boolean) { prefs.edit().putString("scene","custom").putBoolean("eq_enabled",enabled).apply() }
+    fun preset(name: String) { require(name in listOf("flat","voice","bass","bright")); prefs.edit().putString("scene","custom").putString("eq_preset",name).remove("eq_levels").putBoolean("eq_enabled",true).apply() }
     fun band(index: Int, value: Float) {
         val bands = AudioLive.state.value.sound.bands
         val levels = org.json.JSONArray(bands.map { if (it.index == index) value.coerceIn(it.min,it.max) else it.db })
-        prefs.edit().putString("eq_levels",levels.toString()).putBoolean("eq_enabled",true).apply()
+        prefs.edit().putString("scene","custom").putString("eq_levels",levels.toString()).putBoolean("eq_enabled",true).apply()
     }
-    fun resetSound() { prefs.edit().putFloat("width",0f).putInt("bass",0).putInt("surround",0).putBoolean("eq_enabled",false).remove("eq_levels").putString("eq_preset","flat").apply() }
+    fun scene(scene:AudioScene) { selectAudioScene(prefs,scene) }
+    fun resetSound() { scene(AudioScene.NATURAL) }
+    fun recoverSound() {
+        selectAudioScene(prefs,AudioScene.NATURAL)
+        prefs.edit().putBoolean("silence",false).putLong("sleep_at",0).putBoolean("sleep_end",false).putBoolean("recover",true).apply()
+    }
     override fun onCleared() { MediaController.releaseFuture(future); super.onCleared() }
     companion object {
         fun item(track: AudioTrack): MediaItem = MediaItem.Builder().setMediaId(track.id).setUri(track.uri)

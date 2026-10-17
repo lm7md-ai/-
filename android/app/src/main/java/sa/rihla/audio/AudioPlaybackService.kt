@@ -22,6 +22,7 @@ data class AudioPlayback(
     val sleepAt: Long = 0, val error: String? = null, val sound: SoundSupport = SoundSupport(),
     val channels: Int = 0, val codec: String = "", val silence: Boolean = false, val sleepEnd: Boolean = false,
     val soundRevision: Long = 0,
+    val scene:String="natural", val mediaVolume:Int=0, val mediaMax:Int=1, val muted:Boolean=false, val suppression:Int=0,
 )
 object AudioLive { val state = MutableStateFlow(AudioPlayback()) }
 
@@ -30,7 +31,8 @@ class AudioPlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private lateinit var player: ExoPlayer
     private lateinit var sound: AudioSound
-    private val stereo = StereoSpaceProcessor()
+    private var stereo = StereoSpaceProcessor()
+    private var currentScene=AudioScene.NATURAL
     private val handler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val app get() = application as RihlaApp
@@ -45,7 +47,7 @@ class AudioPlaybackService : MediaSessionService() {
     private var soundRevision = 0L
     private val saves = Channel<Triple<String, Long, Long>>(Channel.UNLIMITED)
     private val settingsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key in listOf("width", "eq_enabled", "eq_levels", "eq_preset", "bass", "surround", "sleep_at", "speed", "silence", "sleep_end"))
+        if (key in listOf("scene", "recover", "width", "eq_enabled", "eq_levels", "eq_preset", "bass", "surround", "sleep_at", "speed", "silence", "sleep_end"))
             handler.post { if (session != null) applySettings() }
     }
     private val devices = object : android.media.AudioDeviceCallback() {
@@ -73,49 +75,8 @@ class AudioPlaybackService : MediaSessionService() {
             }
             scope.cancel()
         }
-        val renderers = object : DefaultRenderersFactory(this) {
-            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioOutputPlaybackParams: Boolean): AudioSink =
-                DefaultAudioSink.Builder(context).setAudioProcessors(arrayOf(stereo)).build()
-        }
-        player = ExoPlayer.Builder(this, renderers).build()
-        player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
-        player.setHandleAudioBecomingNoisy(true)
-        player.setWakeMode(C.WAKE_MODE_LOCAL)
         sound = AudioSound(this)
-        player.addAnalyticsListener(object : AnalyticsListener {
-            override fun onAudioInputFormatChanged(eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
-                channels = format.channelCount.coerceAtLeast(0); codec = format.sampleMimeType.orEmpty(); publish()
-            }
-            override fun onAudioSessionIdChanged(eventTime: AnalyticsListener.EventTime, audioSessionId: Int) {
-                sound.connect(audioSessionId); applySettings()
-            }
-        })
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED && prefs.getBoolean("sleep_end",false)) {
-                    prefs.edit().putBoolean("sleep_end",false).apply(); player.pause()
-                }
-            }
-            override fun onEvents(player: Player, events: Player.Events) { publish(); persist(events.contains(Player.EVENT_TIMELINE_CHANGED)) }
-            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
-                val id = oldPosition.mediaItem?.mediaId ?: return
-                val position = oldPosition.positionMs.coerceAtLeast(0)
-                saves.trySend(Triple(id, position, if (player.isPlaying) System.currentTimeMillis() else 0))
-            }
-            override fun onPlayerError(error: PlaybackException) {
-                playbackError = audioPlaybackError(error)
-                publish()
-            }
-            override fun onPlayerErrorChanged(error: PlaybackException?) {
-                if (error == null) { playbackError = null; publish() }
-            }
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                playbackError = null
-                if (prefs.getBoolean("sleep_end",false) && reason in listOf(Player.MEDIA_ITEM_TRANSITION_REASON_AUTO, Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT)) {
-                    prefs.edit().putBoolean("sleep_end",false).apply(); player.pause()
-                }
-            }
-        })
+        createPlayer()
         val open = android.app.PendingIntent.getActivity(this, 90, android.content.Intent(this, sa.rihla.MainActivity::class.java).putExtra("open_audio", true), android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
         session = MediaSession.Builder(this, player).setSessionActivity(open).build()
         prefs.registerOnSharedPreferenceChangeListener(settingsListener)
@@ -124,25 +85,105 @@ class AudioPlaybackService : MediaSessionService() {
         restoreQueue()
         handler.post(tick)
     }
+    private fun createPlayer() {
+        currentScene=AudioScene.read(prefs)
+        stereo=StereoSpaceProcessor().apply { scene=currentScene;amount=prefs.getFloat("width",0f) }
+        val renderers = AudioRenderersFactory(this,currentScene,stereo)
+        player = ExoPlayer.Builder(this, renderers).build()
+        player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), true)
+        player.setHandleAudioBecomingNoisy(true)
+        player.setWakeMode(C.WAKE_MODE_LOCAL)
+        val ownedPlayer=player
+        player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onAudioInputFormatChanged(eventTime: AnalyticsListener.EventTime, format: Format, decoderReuseEvaluation: androidx.media3.exoplayer.DecoderReuseEvaluation?) {
+                if (player !== ownedPlayer) return
+                channels = format.channelCount.coerceAtLeast(0); codec = format.sampleMimeType.orEmpty(); publish()
+            }
+            override fun onAudioSessionIdChanged(eventTime: AnalyticsListener.EventTime, audioSessionId: Int) {
+                if (player !== ownedPlayer) return
+                sound.connect(audioSessionId); applySettings()
+            }
+        })
+        player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (player !== ownedPlayer) return
+                if (playbackState == Player.STATE_ENDED && prefs.getBoolean("sleep_end",false)) {
+                    prefs.edit().putBoolean("sleep_end",false).apply(); player.pause()
+                }
+            }
+            override fun onEvents(player: Player, events: Player.Events) { if (player===this@AudioPlaybackService.player) { publish(); persist(events.contains(Player.EVENT_TIMELINE_CHANGED)) } }
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                if (player !== ownedPlayer) return
+                val id = oldPosition.mediaItem?.mediaId ?: return
+                val position = oldPosition.positionMs.coerceAtLeast(0)
+                saves.trySend(Triple(id, position, if (player.isPlaying) System.currentTimeMillis() else 0))
+            }
+            override fun onPlayerError(error: PlaybackException) {
+                if (player !== ownedPlayer) return
+                playbackError = audioPlaybackError(error)
+                publish()
+            }
+            override fun onPlayerErrorChanged(error: PlaybackException?) {
+                if (player !== ownedPlayer) return
+                if (error == null) { playbackError = null; publish() }
+            }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                if (player !== ownedPlayer) return
+                playbackError = null
+                if (prefs.getBoolean("sleep_end",false) && reason in listOf(Player.MEDIA_ITEM_TRANSITION_REASON_AUTO, Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT)) {
+                    prefs.edit().putBoolean("sleep_end",false).apply(); player.pause()
+                }
+            }
+        })
+    }
+    private fun changeScene() {
+        val old=player
+        val items=(0 until old.mediaItemCount).map { old.getMediaItemAt(it) }
+        val index=old.currentMediaItemIndex.coerceAtLeast(0)
+        val position=old.currentPosition.coerceAtLeast(0)
+        val playing=old.playWhenReady
+        persist(true)
+        sound.connect(0)
+        createPlayer()
+        player.volume=old.volume
+        player.repeatMode=old.repeatMode;player.shuffleModeEnabled=old.shuffleModeEnabled
+        session?.setPlayer(player)
+        old.release()
+        if(items.isNotEmpty()) {
+            player.setMediaItems(items,index.coerceIn(items.indices),position)
+            player.prepare();player.playWhenReady=playing
+        }
+    }
     private fun applySettings() {
+        if (AudioScene.read(prefs)!=currentScene) changeScene()
+        stereo.scene=currentScene
         stereo.amount = prefs.getFloat("width", 0f).coerceIn(0f, 1f)
         soundStatus = sound.apply()
         sleepAt = prefs.getLong("sleep_at", 0)
         val speed = prefs.getFloat("speed", 1f).coerceIn(.5f, 2f)
         if (player.playbackParameters.speed != speed) player.playbackParameters = PlaybackParameters(speed)
         player.skipSilenceEnabled = prefs.getBoolean("silence",false)
+        if (prefs.getBoolean("recover",false)) {
+            prefs.edit().putBoolean("recover",false).apply()
+            player.volume=1f;player.setPreferredAudioDevice(null)
+            playbackError=null
+            if(player.mediaItemCount>0) { player.prepare();player.play() }
+        }
         soundRevision++
         publish()
     }
     private fun publish() {
         if (destroying) return
+        val manager=getSystemService(android.media.AudioManager::class.java)
         AudioLive.state.value = AudioPlayback(
             player.currentMediaItem?.mediaId.orEmpty(), player.mediaMetadata.title?.toString().orEmpty(), player.isPlaying,
             player.currentPosition.coerceAtLeast(0), player.duration.takeIf { it > 0 } ?: 0,
             player.playbackState == Player.STATE_BUFFERING,
             (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }, player.repeatMode,
             player.shuffleModeEnabled, player.playbackParameters.speed, player.volume, sleepAt, playbackError, soundStatus,
-            channels,codec,player.skipSilenceEnabled,prefs.getBoolean("sleep_end",false),soundRevision)
+            channels,codec,player.skipSilenceEnabled,prefs.getBoolean("sleep_end",false),soundRevision,currentScene.key,
+            manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC),manager.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC),
+            manager.isStreamMute(android.media.AudioManager.STREAM_MUSIC),player.playbackSuppressionReason)
     }
     private fun persist(includeQueue: Boolean = false) {
         if (destroying) return

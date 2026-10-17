@@ -2,6 +2,10 @@
 
 A native, Arabic-first, local-first personal driving journal for one Mitsubishi Lancer 2016. The existing website in the repository root is independent of this Android project.
 
+Version 4.2 adds direct output without custom processing/vendor effects, ready 3D
+and virtual 7.1 stereo reflection scenes, media-volume/mute feedback and recovery.
+[Behavior and hardware limits](docs/AUDIO_4_2.md).
+
 Version 4.1 fixes a reproduced empty-buffer self-copy in the stereo processor,
 adds AudioTrack/service playback regression coverage and separates file/decoder/output
 errors. [Fix evidence](docs/AUDIO_FIX_4_1.md).
@@ -25,11 +29,11 @@ search/sorting, trip titles/notes/favorites, route timeline scrubbing, GPX/CSV e
 local backup/restore, and device readiness checks. Offline maps and SMS purchase
 import remain available. [Download the APK and view screenshots](../releases/README.md).
 
-The main **مشواري** download (`app-v4.1.apk`, `sa.rihla`) updates the published 1.3 and 2.0
+The main **مشواري** download (`app-v4.2.apk`, `sa.rihla`) updates the published 1.3 and 2.0
 APK in place with the same verified certificate and explicit Room migrations.
 The user has already moved historical data into 1.3; no cross-package transfer is
 needed for this update. Finish the active outing and install over 1.3 without uninstalling.
-An alternative `app-v4.1-independent.apk` uses `sa.rihla.next` for installations
+An alternative `app-v4.2-independent.apk` uses `sa.rihla.next` for installations
 still blocked by the original 1.0 signature conflict. That alternative installs
 separately and needs explicit local transfer. [Windows USB instructions](docs/WINDOWS_MIGRATION.md)
 and a ready-to-run ZIP include Python/ADB and keep verified backups; a
@@ -53,7 +57,7 @@ The optional secure file variable `RIHLA_SIGNING_KEYSTORE` selects an existing k
 `RIHLA_STORE_PASSWORD`, `RIHLA_KEY_ALIAS`, and `RIHLA_KEY_PASSWORD` configure it.
 Android debug-key defaults apply when those three variables are absent. Keep the
 private key securely outside Git. `tools/verify_release.py` requires an explicit
-`--edition classic --previous ../releases/app-v4.0.apk` or `--edition next`.
+`--edition classic --previous ../releases/app-v4.1.apk` or `--edition next`.
 It rejects a changed certificate, wrong package, and incompatible classic baseline.
 Future updates must retain the same key; an arbitrary regenerated debug key is incompatible.
 

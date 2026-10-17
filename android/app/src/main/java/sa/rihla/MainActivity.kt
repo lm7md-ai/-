@@ -18,6 +18,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         enableEdgeToEdge()
         if (intent.getBooleanExtra("open_audio", false)) audioRequest.intValue++
         setContent { RihlaRoot(audioRequest = audioRequest.intValue) }

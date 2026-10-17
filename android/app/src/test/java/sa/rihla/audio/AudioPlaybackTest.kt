@@ -33,6 +33,23 @@ import sa.rihla.RihlaApp
 @Config(sdk=[35],application=RihlaApp::class)
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class AudioPlaybackTest {
+    @Test fun phoneMediaMuteIsReportedAndRecoveryRestoresOnlyTheAppVolume() {
+        val app=RuntimeEnvironment.getApplication() as RihlaApp
+        val manager=app.getSystemService(android.media.AudioManager::class.java)
+        manager.setStreamVolume(android.media.AudioManager.STREAM_MUSIC,0,0)
+        val service=Robolectric.buildService(AudioPlaybackService::class.java).create()
+        try {
+            val player=AudioPlaybackService::class.java.getDeclaredField("player").apply{isAccessible=true}.get(service.get()) as ExoPlayer
+            player.volume=0f
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(0,AudioLive.state.value.mediaVolume)
+            app.getSharedPreferences("audio_player",Context.MODE_PRIVATE).edit().putBoolean("recover",true).apply()
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(1f,player.volume)
+            assertEquals(0,manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC))
+        } finally { service.destroy();AudioLive.state.value=AudioPlayback() }
+    }
+
     @Test
     fun localWaveContentUriRecoversAfterReadErrorAndPlaysToAudioTrack() {
         val app=RuntimeEnvironment.getApplication() as RihlaApp
@@ -49,7 +66,8 @@ class AudioPlaybackTest {
         provider.attachInfo(app,ProviderInfo().apply { authority="audio-fixture" })
         ShadowContentResolver.registerProviderInternal("audio-fixture",provider)
         val written=java.util.concurrent.atomic.AtomicInteger()
-        val listener=ShadowAudioTrack.OnAudioDataWrittenListener { _,data,_ -> written.addAndGet(data.size) }
+        val audible=java.util.concurrent.atomic.AtomicBoolean()
+        val listener=ShadowAudioTrack.OnAudioDataWrittenListener { _,data,_ -> written.addAndGet(data.size);if(data.any { it!=0.toByte() }) audible.set(true) }
         ShadowAudioTrack.addAudioDataListener(listener)
         val service=Robolectric.buildService(AudioPlaybackService::class.java).create()
         try {
@@ -75,6 +93,8 @@ class AudioPlaybackTest {
             }
             assertNull("Unexpected player error: ${player.playerError}",player.playerError)
             assertEquals(pcmBytes,written.get())
+            assertTrue("Output PCM must contain nonzero samples",audible.get())
+            assertEquals(1f,player.volume)
             assertNull(AudioLive.state.value.error)
         } finally {
             service.destroy();AudioLive.state.value=AudioPlayback()
@@ -109,6 +129,16 @@ class AudioPlaybackTest {
             assertFalse(player.playWhenReady)
             assertEquals(20000L,player.currentPosition)
             assertEquals(id,app.repository.dao.active()!!.id)
+            for(scene in listOf(AudioScene.SPACE_3D,AudioScene.SURROUND_71,AudioScene.NATURAL)) {
+                selectAudioScene(prefs,scene)
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                val replacement=AudioPlaybackService::class.java.getDeclaredField("player").apply{isAccessible=true}.get(service) as ExoPlayer
+                assertEquals("fixture",replacement.currentMediaItem!!.mediaId)
+                assertEquals(20000L,replacement.currentPosition)
+                assertFalse(replacement.playWhenReady)
+                assertEquals(scene.key,AudioLive.state.value.scene)
+                assertEquals(id,app.repository.dao.active()!!.id)
+            }
             Shadows.shadowOf(Looper.getMainLooper()).idle()
         } finally {
             controller.destroy()

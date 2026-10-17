@@ -24,11 +24,12 @@ import org.robolectric.shadows.ShadowAudioTrack
 class AudioOutputTest {
     @Test
     fun stereoPcmReachesAndroidAudioTrackWithWideningOffAndOn() {
-        for (width in listOf(0f,1f)) {
-            val processor=StereoSpaceProcessor().apply { amount=width }
-            val sink=DefaultAudioSink.Builder(RuntimeEnvironment.getApplication()).setAudioProcessors(arrayOf(processor)).build()
+        for (scene in AudioScene.entries) for (width in listOf(0f,1f)) {
+            val processor=StereoSpaceProcessor().apply { amount=width;this.scene=scene }
+            val sink=AudioRenderersFactory(RuntimeEnvironment.getApplication(),scene,processor).buildAudioSink(RuntimeEnvironment.getApplication(),false,false)
             var bytesWritten=0
-            val listener=ShadowAudioTrack.OnAudioDataWrittenListener { _, data, _ -> bytesWritten+=data.size }
+            val actual=java.io.ByteArrayOutputStream()
+            val listener=ShadowAudioTrack.OnAudioDataWrittenListener { _, data, _ -> bytesWritten+=data.size;actual.write(data) }
             ShadowAudioTrack.addAudioDataListener(listener)
             try {
                 sink.setListener(object:AudioSink.Listener {
@@ -41,9 +42,14 @@ class AudioOutputTest {
                 val input=ByteBuffer.allocateDirect(4096).order(ByteOrder.nativeOrder()).apply {
                     repeat(1024) { putShort(1000);putShort(-1000) };flip()
                 }
+                val expected=ByteArray(input.remaining());input.duplicate().get(expected)
                 repeat(10) { if(input.hasRemaining()) sink.handleBuffer(input,0,1);Shadows.shadowOf(Looper.getMainLooper()).idle() }
                 assertFalse(input.hasRemaining())
                 assertEquals(4096,bytesWritten)
+                assertTrue("Silent PCM for $scene",actual.toByteArray().any { it!=0.toByte() })
+                // Media3 applies its own 20 ms start ramp; compare the settled final frames.
+                if(scene==AudioScene.NATURAL || (scene==AudioScene.CUSTOM && width==0f))
+                    assertArrayEquals(expected.takeLast(128).toByteArray(),actual.toByteArray().takeLast(128).toByteArray())
             } finally { sink.reset();ShadowAudioTrack.removeAudioDataListener(listener) }
         }
     }
