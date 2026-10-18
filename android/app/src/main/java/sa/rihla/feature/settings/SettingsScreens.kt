@@ -137,13 +137,19 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (section == null) {
-            Text("الإعدادات والأدوات", style = MaterialTheme.typography.headlineSmall)
-            Text("كل قسم في مكانه؛ اختر الأداة أو الإعداد الذي تحتاجه.")
+            Text("كل ما تحتاجه", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                "أدواتك وإعداداتك في مكان واحد",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 query,
                 { query = it },
                 label = { Text("ابحث في الإعدادات والأدوات") },
                 singleLine = true,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Search, null) },
                 modifier = Modifier.fillMaxWidth(),
             )
             val groups =
@@ -229,7 +235,13 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                 val visible = entries.filter {
                     query.isBlank() || (it.second + " " + it.third).contains(query.trim(), true)
                 }
-                if (visible.isNotEmpty()) Text(title, style = MaterialTheme.typography.titleLarge)
+                if (visible.isNotEmpty())
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp, start = 4.dp),
+                    )
                 for ((key, label, description) in visible) sa.rihla.assistant.FeatureRow(
                     label,
                     description,

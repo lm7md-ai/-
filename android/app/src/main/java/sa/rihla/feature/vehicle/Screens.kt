@@ -29,22 +29,48 @@ import sa.rihla.ui.*
 
 @Composable
 fun VehicleScreen(data: ScreenData) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
         item {
-            Panel("car_name", androidx.compose.material.icons.Icons.Default.DirectionsCar) {
-                StatusPill(tr("engine_lancer_16_at"))
-                Text(tr("vehicle_specs"))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Panel("car_name", androidx.compose.material.icons.Icons.Default.DirectionsCar) {
+                    StatusPill(tr("engine_lancer_16_at"))
+                    Text(
+                        "1.6L MIVEC · أوتوماتيك · 2016",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                val m = metrics(data, periodBounds(Period.ALL))
+                PageTabs(listOf("نظرة عامة", "سجل الوقود", "المواصفات"), tab) { tab = it }
+                Spacer(Modifier.height(12.dp))
+                when (tab) {
+                    1 -> sa.rihla.ui.FuelLog(data)
+                    2 ->
+                        Panel("car_name", androidx.compose.material.icons.Icons.Default.Info) {
+                            Text(tr("vehicle_specs"))
+                        }
+                    else -> {
+                        MetricGrid(
+                            listOf(
+                                "distance" to (num(m.meters / 1000) + " " + tr("km")),
+                                "outings_count" to num(m.outings.toDouble(), 0),
+                            )
+                        )
+                        CostPerKilometer(data)
+                        val estimated = estimateTotals(data.outings, data.settings, m.economy)
+                        Metric(
+                            "estimated_fuel_cost",
+                            numberRange(estimated.first / 100.0, estimated.second / 100.0) +
+                                " " +
+                                tr("sar"),
+                        )
+                        Text(tr("estimate_not_expense"), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
-            val m = metrics(data, periodBounds(Period.ALL))
-            sa.rihla.ui.FuelLog(data)
-            MetricsList(m)
-            CostPerKilometer(data)
-            val estimated = estimateTotals(data.outings, data.settings, m.economy)
-            Metric(
-                "estimated_fuel_cost",
-                numberRange(estimated.first / 100.0, estimated.second / 100.0) + " " + tr("sar"),
-            )
-            Text(tr("estimate_not_expense"))
         }
     }
 }

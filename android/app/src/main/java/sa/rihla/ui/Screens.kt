@@ -217,7 +217,8 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                     sa.rihla.audio.studio.AssistantNavigation.requests.collect { openPage(it) }
                 }
                 LaunchedEffect(audioRequest) {
-                    if (audioRequest > 0) openPage("audio")
+                    if (audioRequest > 0)
+                        openPage(if (audioPlayback.id.isBlank()) "audio" else "player")
                 }
                 LaunchedEffect(selected, data.outings) {
                     if (selected != null && data.outings.none { it.id == selected }) selected = null
@@ -232,7 +233,9 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                     Scaffold(
                         topBar = {
                             Row(
-                                Modifier.fillMaxWidth().statusBarsPadding().padding(16.dp),
+                                Modifier.fillMaxWidth()
+                                    .statusBarsPadding()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 if (
@@ -252,11 +255,6 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                 }
                                 Column(Modifier.weight(1f)) {
                                     Text(
-                                        tr("brand_caption"),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                    Text(
                                         when {
                                             selected != null -> tr("detail")
                                             page == "assistant" -> "المساعد الذكي"
@@ -264,67 +262,84 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                             page == "assistant_profile" -> "تخصيص مساعدي"
                                             page == "voice" -> "الأوامر الصوتية"
                                             page == "studio" -> "استوديو المحاضرات"
+                                            page == "player" -> "المشغل"
                                             page == "settings" -> tr("more")
                                             else -> tr(page)
                                         },
-                                        style = MaterialTheme.typography.headlineSmall,
+                                        style = MaterialTheme.typography.titleLarge,
                                     )
                                 }
-                                IconButton(onClick = { openPage("map") }) {
-                                    Icon(Icons.Default.Map, "الخريطة")
-                                }
+                                if (page == "player")
+                                    IconButton(onClick = { openPage("audio") }) {
+                                        Icon(
+                                            Icons.Default.KeyboardArrowDown,
+                                            "طي المشغل إلى المكتبة",
+                                        )
+                                    }
+                                else
+                                    IconButton(onClick = { openPage("map") }) {
+                                        Icon(Icons.Default.Map, "الخريطة")
+                                    }
                             }
                         },
                         bottomBar = {
-                            Column {
-                                if (audioPlayback.id.isNotBlank())
-                                    sa.rihla.audio.AudioMiniPlayer(onOpen = { openPage("audio") })
-                                NavigationBar {
-                                    listOf(
-                                            "dashboard" to Icons.Default.Home,
-                                            "history" to Icons.Default.Route,
-                                            "audio" to Icons.Default.Headphones,
-                                            "assistant" to Icons.Default.AutoAwesome,
-                                            "settings" to Icons.Default.GridView,
+                            if (page != "player")
+                                Column {
+                                    if (audioPlayback.id.isNotBlank() && page != "player")
+                                        sa.rihla.audio.AudioMiniPlayer(
+                                            onOpen = { openPage("player") }
                                         )
-                                        .forEach { (key, icon) ->
-                                            NavigationBarItem(
-                                                selected =
-                                                    (page == key ||
-                                                        (key == "assistant" &&
-                                                            page in
-                                                                setOf(
-                                                                    "models",
-                                                                    "assistant_profile",
-                                                                    "voice",
-                                                                )) ||
-                                                        (key == "audio" && page == "studio")) &&
-                                                        selected == null,
-                                                onClick = {
-                                                    openPage(key)
-                                                },
-                                                icon = {
-                                                    Icon(
-                                                        icon,
-                                                        if (key == "assistant") "المساعد الذكي"
-                                                        else tr(key),
-                                                    )
-                                                },
-                                                label = {
-                                                    Text(
-                                                        if (key == "assistant") "المساعد"
-                                                        else
-                                                            tr(
-                                                                if (key == "settings") "more"
-                                                                else key
-                                                            ),
-                                                        maxLines = 1,
-                                                    )
-                                                },
+                                    NavigationBar(
+                                        containerColor = MaterialTheme.colorScheme.surface,
+                                        tonalElevation = 0.dp,
+                                    ) {
+                                        listOf(
+                                                "dashboard" to Icons.Default.Home,
+                                                "history" to Icons.Default.Route,
+                                                "audio" to Icons.Default.Headphones,
+                                                "assistant" to Icons.Default.AutoAwesome,
+                                                "settings" to Icons.Default.GridView,
                                             )
-                                        }
+                                            .forEach { (key, icon) ->
+                                                NavigationBarItem(
+                                                    selected =
+                                                        (page == key ||
+                                                            (key == "assistant" &&
+                                                                page in
+                                                                    setOf(
+                                                                        "models",
+                                                                        "assistant_profile",
+                                                                        "voice",
+                                                                    )) ||
+                                                            (key == "audio" &&
+                                                                page in
+                                                                    setOf("studio", "player"))) &&
+                                                            selected == null,
+                                                    onClick = {
+                                                        openPage(key)
+                                                    },
+                                                    icon = {
+                                                        Icon(
+                                                            icon,
+                                                            if (key == "assistant") "المساعد الذكي"
+                                                            else tr(key),
+                                                        )
+                                                    },
+                                                    label = {
+                                                        Text(
+                                                            if (key == "assistant") "المساعد"
+                                                            else
+                                                                tr(
+                                                                    if (key == "settings") "more"
+                                                                    else key
+                                                                ),
+                                                            maxLines = 1,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                    }
                                 }
-                            }
                         },
                     ) { padding ->
                         Column(Modifier.padding(padding).padding(horizontal = 16.dp)) {
@@ -351,7 +366,11 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                         "history" -> History(data) { selected = it }
                                         "calendar" -> CalendarScreen(data) { selected = it }
                                         "map" -> sa.rihla.map.MapScreen(vm, data)
-                                        "audio" -> sa.rihla.audio.AudioScreen()
+                                        "audio" ->
+                                            sa.rihla.audio.AudioScreen(
+                                                onOpenPlayer = { openPage("player") }
+                                            )
+                                        "player" -> sa.rihla.audio.AudioPlayerScreen()
                                         "assistant" -> sa.rihla.assistant.AssistantScreen()
                                         "voice" ->
                                             sa.rihla.assistant.AssistantScreen(voiceOnly = true)
@@ -396,7 +415,7 @@ fun OutingCard(o: Outing, now: Long, details: TripDetails? = null, onClick: () -
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(18.dp),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

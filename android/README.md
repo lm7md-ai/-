@@ -1,3 +1,8 @@
+# Application design 5.2
+
+[Library, dedicated player, navigation and verification limits](docs/DESIGN_5_2.md).
+No database schema change; update over 5.1 with the same signing certificate.
+
 # Personal assistant and navigation 5.1
 
 [Personal command training, model center, voice commands and verification limits](docs/ASSISTANT_5_1.md).

@@ -33,6 +33,7 @@ import sa.rihla.ui.*
 
 @Composable
 fun ExpensesScreen(data: ScreenData, vm: JourneyViewModel, onAdd: () -> Unit) {
+    var page by rememberSaveable { mutableIntStateOf(0) }
     var deleting by remember { mutableStateOf<Long?>(null) }
     var query by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("ALL") }
@@ -47,97 +48,175 @@ fun ExpensesScreen(data: ScreenData, vm: JourneyViewModel, onAdd: () -> Unit) {
                         normalizeSms(query).trim() in (it.amountHalala / 100.0).toString())
             }
         }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
         item {
             Hero(
                 tr("wallet_caption"),
                 num(visible.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
                 tr("visible_spending"),
                 "add_expense",
-                onAdd,
+                icon = androidx.compose.material.icons.Icons.Default.AccountBalanceWallet,
+                onAction = onAdd,
             )
-            OutlinedTextField(
-                query,
-                { query = it },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(tr("search_expenses")) },
-            )
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                listOf(
-                        "ALL" to "all",
-                        "FUEL" to "fuel",
-                        "FOOD" to "food",
-                        "OTHER" to "other",
-                        "SMS" to "sms_imported",
-                    )
-                    .forEach { (value, label) ->
-                        FilterChip(
-                            category == value,
-                            { category = value },
-                            label = { Text(tr(label)) },
+            Spacer(Modifier.height(12.dp))
+            PageTabs(listOf("سجل المصروفات", "التحليل والميزانية"), page) { page = it }
+            if (page == 0) {
+                OutlinedTextField(
+                    query,
+                    { query = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(tr("search_expenses")) },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    leadingIcon = {
+                        Icon(androidx.compose.material.icons.Icons.Default.Search, null)
+                    },
+                )
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(
+                            "ALL" to "all",
+                            "FUEL" to "fuel",
+                            "FOOD" to "food",
+                            "OTHER" to "other",
+                            "SMS" to "sms_imported",
                         )
-                    }
+                        .forEach { (value, label) ->
+                            FilterChip(
+                                category == value,
+                                { category = value },
+                                label = { Text(tr(label)) },
+                            )
+                        }
+                }
+            } else {
+                Spacer(Modifier.height(12.dp))
+                SpendingChart(data.expenses, day(data.now))
+                Spacer(Modifier.height(12.dp))
+                sa.rihla.ui.WalletPro(vm, data)
+                Metric(
+                    "total_spending",
+                    num(data.expenses.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
+                )
+                ExportDocument(vm, "export_csv", "rihla-expenses.csv", "text/csv") {
+                    expensesCsv(visible)
+                }
             }
-            ExportDocument(vm, "export_csv", "rihla-expenses.csv", "text/csv") {
-                expensesCsv(visible)
-            }
-            SpendingChart(data.expenses, day(data.now))
-            sa.rihla.ui.WalletPro(vm, data)
-            Action("add_expense", click = onAdd)
-            Metric(
-                "total_spending",
-                num(data.expenses.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
-            )
         }
-        if (visible.isEmpty()) item { EmptyPanel("no_results", "search_expense_hint") }
-        items(visible, key = { it.id }) { e ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        tr(
-                            when (e.category) {
-                                "FUEL" -> "fuel"
-                                "FOOD" -> "food"
-                                else -> "other"
+        if (page == 0) {
+
+            if (visible.isEmpty()) item { EmptyPanel("no_results", "search_expense_hint") }
+            items(visible, key = { it.id }) { e ->
+                var expanded by rememberSaveable(e.id) { mutableStateOf(false) }
+                Card(
+                    Modifier.fillMaxWidth(),
+                    colors =
+                        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Surface(
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                            ) {
+                                Icon(
+                                    when (e.category) {
+                                        "FUEL" ->
+                                            androidx.compose.material.icons.Icons.Default
+                                                .LocalGasStation
+                                        "FOOD" ->
+                                            androidx.compose.material.icons.Icons.Default.Restaurant
+                                        else ->
+                                            androidx.compose.material.icons.Icons.Default
+                                                .ReceiptLong
+                                    },
+                                    null,
+                                    Modifier.padding(10.dp).size(22.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
                             }
-                        ),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(num(e.amountHalala / 100.0, 2) + " " + tr("sar"))
-                    Text(stamp(e.createdAt))
-                    if (e.source == "RECURRING") Text("مصروف متكرر · " + e.merchant)
-                    if (e.source == "SMS_NOTIFICATION") {
-                        Text(tr("sms_imported"), style = MaterialTheme.typography.labelMedium)
-                        if (e.merchant.isNotBlank()) Text(e.merchant)
-                        run {
-                            Row(Modifier.horizontalScroll(rememberScrollState())) {
-                                listOf("FUEL" to "fuel", "FOOD" to "food", "OTHER" to "other")
-                                    .forEach { (category, label) ->
-                                        FilterChip(
-                                            e.category == category,
-                                            { vm.categorizeImportedExpense(e.id, category) },
-                                            label = { Text(tr(label)) },
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    e.merchant.ifBlank {
+                                        tr(
+                                            when (e.category) {
+                                                "FUEL" -> "fuel"
+                                                "FOOD" -> "food"
+                                                else -> "other"
+                                            }
                                         )
-                                    }
+                                    },
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    stamp(e.createdAt),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
-                            TextButton(onClick = { deleting = e.id }) { Text(tr("delete")) }
+                            Text(
+                                num(e.amountHalala / 100.0, 2) + " " + tr("sar"),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            IconButton(onClick = { expanded = !expanded }) {
+                                Icon(
+                                    if (expanded)
+                                        androidx.compose.material.icons.Icons.Default.ExpandLess
+                                    else androidx.compose.material.icons.Icons.Default.ExpandMore,
+                                    "تفاصيل المصروف",
+                                )
+                            }
+                        }
+                        if (expanded) {
+                            if (e.source == "RECURRING") Text("مصروف متكرر · " + e.merchant)
+                            if (e.source == "SMS_NOTIFICATION") {
+                                Text(
+                                    tr("sms_imported"),
+                                    style = MaterialTheme.typography.labelMedium,
+                                )
+                                if (e.merchant.isNotBlank()) Text(e.merchant)
+                                run {
+                                    Row(Modifier.horizontalScroll(rememberScrollState())) {
+                                        listOf(
+                                                "FUEL" to "fuel",
+                                                "FOOD" to "food",
+                                                "OTHER" to "other",
+                                            )
+                                            .forEach { (category, label) ->
+                                                FilterChip(
+                                                    e.category == category,
+                                                    {
+                                                        vm.categorizeImportedExpense(e.id, category)
+                                                    },
+                                                    label = { Text(tr(label)) },
+                                                )
+                                            }
+                                    }
+                                    TextButton(onClick = { deleting = e.id }) { Text(tr("delete")) }
+                                }
+                            }
+                            data.fuel
+                                .find { it.expenseId == e.id }
+                                ?.let { f ->
+                                    Text(num(f.litersMl / 1000.0, 3) + " · " + tr("liters"))
+                                    Text(num(f.priceHalala / 100.0, 2) + " " + tr("price"))
+                                    if (f.full) Text(tr("full_tank"))
+                                }
                         }
                     }
-                    data.fuel
-                        .find { it.expenseId == e.id }
-                        ?.let { f ->
-                            Text(num(f.litersMl / 1000.0, 3) + " · " + tr("liters"))
-                            Text(num(f.priceHalala / 100.0, 2) + " " + tr("price"))
-                            if (f.full) Text(tr("full_tank"))
-                        }
                 }
             }
         }
     }
+
     if (deleting != null)
         Confirm("delete_confirmation", { deleting = null }) {
             vm.deleteImportedExpense(deleting!!)

@@ -18,22 +18,22 @@ val NewShapes =
     Shapes(
         small = RoundedCornerShape(12.dp),
         medium = RoundedCornerShape(20.dp),
-        large = RoundedCornerShape(28.dp),
+        large = RoundedCornerShape(20.dp),
     )
 val NewTypography =
     Typography(
         headlineLarge =
-            androidx.compose.ui.text.TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold),
+            androidx.compose.ui.text.TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold),
         headlineMedium =
-            androidx.compose.ui.text.TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold),
+            androidx.compose.ui.text.TextStyle(fontSize = 26.sp, fontWeight = FontWeight.Bold),
         headlineSmall =
-            androidx.compose.ui.text.TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold),
+            androidx.compose.ui.text.TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold),
         titleLarge =
-            androidx.compose.ui.text.TextStyle(fontSize = 21.sp, fontWeight = FontWeight.SemiBold),
+            androidx.compose.ui.text.TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
         titleMedium =
             androidx.compose.ui.text.TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-        bodyLarge = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, lineHeight = 26.sp),
-        bodyMedium = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, lineHeight = 23.sp),
+        bodyLarge = androidx.compose.ui.text.TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+        bodyMedium = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, lineHeight = 22.sp),
         labelLarge =
             androidx.compose.ui.text.TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
     )
@@ -41,40 +41,50 @@ val NewTypography =
 fun journeyColors(dark: Boolean): ColorScheme =
     if (dark)
         darkColorScheme(
-            primary = Color(0xFF83AFFF),
-            primaryContainer = Color(0xFF203F72),
-            onPrimaryContainer = Color(0xFFD9E7FF),
-            secondaryContainer = Color(0xFF123F39),
-            onSecondaryContainer = Color(0xFFB8F1DF),
-            surfaceContainer = Color(0xFF101B2E),
-            onPrimary = Color(0xFF052250),
-            secondary = Color(0xFF63DDC0),
-            background = Color(0xFF090F1C),
-            surface = Color(0xFF101B2E),
-            surfaceVariant = Color(0xFF1A2840),
-            onBackground = Color(0xFFE8EEF9),
-            onSurface = Color(0xFFE8EEF9),
-            onSurfaceVariant = Color(0xFFA8B7CF),
-            outline = Color(0xFF39475E),
+            primary = Color(0xFF6EDAC6),
+            primaryContainer = Color(0xFF143E37),
+            onPrimaryContainer = Color(0xFFB8F1E5),
+            secondaryContainer = Color(0xFF253D4C),
+            onSecondaryContainer = Color(0xFFD0E7F5),
+            surfaceContainer = Color(0xFF191F23),
+            surfaceContainerLow = Color(0xFF151B1E),
+            surfaceContainerHigh = Color(0xFF242C31),
+            surfaceContainerHighest = Color(0xFF2E383C),
+            outlineVariant = Color(0xFF2E3A3D),
+            surfaceTint = Color(0xFF6EDAC6),
+            onPrimary = Color(0xFF00382E),
+            secondary = Color(0xFFAACBDD),
+            background = Color(0xFF101518),
+            surface = Color(0xFF191F23),
+            surfaceVariant = Color(0xFF242C31),
+            onBackground = Color(0xFFE5ECEF),
+            onSurface = Color(0xFFE5ECEF),
+            onSurfaceVariant = Color(0xFFA3B3BA),
+            outline = Color(0xFF405057),
             error = Color(0xFFFFB4AB),
         )
     else
         lightColorScheme(
-            primary = Color(0xFF225BEA),
-            primaryContainer = Color(0xFFE4ECFF),
-            onPrimaryContainer = Color(0xFF16376E),
-            secondaryContainer = Color(0xFFDDF5ED),
-            onSecondaryContainer = Color(0xFF075B4C),
-            surfaceContainer = Color(0xFFEEF2F9),
+            primary = Color(0xFF006D5B),
+            primaryContainer = Color(0xFFD8F3E9),
+            onPrimaryContainer = Color(0xFF004D40),
+            secondaryContainer = Color(0xFFE3EEF6),
+            onSecondaryContainer = Color(0xFF2D4B60),
+            surfaceContainer = Color(0xFFEBF0EF),
+            surfaceContainerLow = Color(0xFFF0F4F2),
+            surfaceContainerHigh = Color(0xFFE5ECE8),
+            surfaceContainerHighest = Color(0xFFDCE5E0),
+            outlineVariant = Color(0xFFDEE6E1),
+            surfaceTint = Color(0xFF006D5B),
             onPrimary = Color.White,
-            secondary = Color(0xFF087A64),
-            background = Color(0xFFF3F5FA),
+            secondary = Color(0xFF496B80),
+            background = Color(0xFFF5F7F6),
             surface = Color.White,
-            surfaceVariant = Color(0xFFE9EFF9),
-            onBackground = Color(0xFF101D35),
-            onSurface = Color(0xFF101D35),
-            onSurfaceVariant = Color(0xFF60718C),
-            outline = Color(0xFFC9D3E4),
+            surfaceVariant = Color(0xFFE7EEEB),
+            onBackground = Color(0xFF192C29),
+            onSurface = Color(0xFF192C29),
+            onSurfaceVariant = Color(0xFF63756F),
+            outline = Color(0xFFCBD8D2),
         )
 
 @Composable
@@ -85,7 +95,7 @@ fun MetricGrid(values: List<Pair<String, String>>) {
                 row.forEach { (label, value) ->
                     Surface(
                         Modifier.weight(1f),
-                        shape = RoundedCornerShape(22.dp),
+                        shape = RoundedCornerShape(18.dp),
                         color = MaterialTheme.colorScheme.surface,
                     ) {
                         Column(
@@ -119,7 +129,7 @@ fun Panel(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -159,7 +169,12 @@ fun StatusPill(text: String, active: Boolean = false) {
 
 @Composable
 fun EmptyPanel(title: String, message: String, icon: ImageVector = Icons.Default.Route) {
-    Surface(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+    EmptyState(tr(title), tr(message), icon)
+}
+
+@Composable
+fun EmptyState(title: String, message: String, icon: ImageVector = Icons.Default.Route) {
+    Surface(shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
         Column(
             Modifier.padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -171,37 +186,44 @@ fun EmptyPanel(title: String, message: String, icon: ImageVector = Icons.Default
                 modifier = Modifier.size(40.dp),
                 tint = MaterialTheme.colorScheme.primary,
             )
-            Text(tr(title), style = MaterialTheme.typography.titleMedium)
-            Text(tr(message), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-fun Hero(title: String, value: String, subtitle: String, action: String, onAction: () -> Unit) {
+fun Hero(
+    title: String,
+    value: String,
+    subtitle: String,
+    action: String,
+    icon: ImageVector = Icons.Default.Explore,
+    onAction: () -> Unit,
+) {
     Box(
         Modifier.fillMaxWidth()
             .background(
-                Brush.linearGradient(listOf(Color(0xFF102346), Color(0xFF1745A0))),
-                RoundedCornerShape(30.dp),
+                Brush.linearGradient(listOf(Color(0xFF083F35), Color(0xFF126B58))),
+                RoundedCornerShape(24.dp),
             )
     ) {
-        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(title, color = Color(0xFFB8D1FF), style = MaterialTheme.typography.labelLarge)
+                Text(title, color = Color(0xFFB6DFD0), style = MaterialTheme.typography.labelLarge)
                 Icon(
-                    Icons.Default.Route,
+                    icon,
                     null,
-                    tint = Color(0xFF78E3CA),
+                    tint = Color(0xFF9AE4C6),
                     modifier = Modifier.size(32.dp),
                 )
             }
             Text(value, color = Color.White, style = MaterialTheme.typography.headlineLarge)
-            Text(subtitle, color = Color(0xFFD1DFF5), style = MaterialTheme.typography.bodyMedium)
+            Text(subtitle, color = Color(0xFFD6EBE2), style = MaterialTheme.typography.bodyMedium)
             Button(
                 onClick = onAction,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
@@ -215,5 +237,38 @@ fun Hero(title: String, value: String, subtitle: String, action: String, onActio
                 Text(tr(action))
             }
         }
+    }
+}
+
+@Composable
+fun PageTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    TabRow(
+        selectedTabIndex = selected,
+        containerColor = MaterialTheme.colorScheme.background,
+        divider = {},
+    ) {
+        labels.forEachIndexed { index, label ->
+            Tab(
+                selected = selected == index,
+                onClick = { onSelect(index) },
+                text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            )
+        }
+    }
+}
+
+@Composable
+fun SectionTitle(title: String, subtitle: String = "") {
+    Column(
+        Modifier.padding(top = 8.dp, bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        if (subtitle.isNotBlank())
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
     }
 }

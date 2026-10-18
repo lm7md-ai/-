@@ -32,7 +32,10 @@ import sa.rihla.ui.*
 fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
     var month by remember { mutableStateOf(YearMonth.now(SaudiZone)) }
     var selected by remember { mutableStateOf(LocalDate.now(SaudiZone)) }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(onClick = { month = month.minusMonths(1) }) {
@@ -80,10 +83,14 @@ fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
                                     onClick = { selected = date },
                                     colors =
                                         ButtonDefaults.textButtonColors(
-                                            contentColor =
+                                            containerColor =
                                                 if (date == selected)
                                                     MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.onSurface
+                                                else androidx.compose.ui.graphics.Color.Transparent,
+                                            contentColor =
+                                                if (date == selected)
+                                                    MaterialTheme.colorScheme.onPrimary
+                                                else MaterialTheme.colorScheme.onSurface,
                                         ),
                                 ) {
                                     Text(num(d.toDouble(), 0) + if (driven) " •" else "")
@@ -99,11 +106,14 @@ fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
         val m = metrics(data, start to end)
         item {
             Text(selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Arabic)))
-            Metric("outings_count", num(m.outings.toDouble(), 0))
-            Metric("visits", num(m.visits.toDouble(), 0))
-            Metric("distance", num(m.meters / 1000) + " " + tr("km"))
-            Metric("university_time", duration(m.universityMs))
-            Metric("total_spending", num(m.total / 100.0, 2) + " " + tr("sar"))
+            MetricGrid(
+                listOf(
+                    "outings_count" to num(m.outings.toDouble(), 0),
+                    "distance" to (num(m.meters / 1000) + " " + tr("km")),
+                    "university_time" to duration(m.universityMs),
+                    "total_spending" to (num(m.total / 100.0, 2) + " " + tr("sar")),
+                )
+            )
             Text(tr("stats_policy"), style = MaterialTheme.typography.labelSmall)
         }
         items(data.outings.filter { it.startedAt < end && (it.endedAt ?: data.now) >= start }) { o

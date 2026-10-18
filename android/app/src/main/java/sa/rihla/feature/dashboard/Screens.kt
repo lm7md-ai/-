@@ -48,6 +48,9 @@ fun Dashboard(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
+            SectionTitle("يومك على الطريق", stamp(data.now).substringBefore(" · "))
+        }
+        item {
             Hero(
                 tr(if (active == null) "ready_for_road" else "live_journey"),
                 if (active == null) tr("hero_headline")
@@ -83,6 +86,23 @@ fun Dashboard(
                         tr(if (data.settings.auto) "auto_tracking" else "manual_mode"),
                         data.settings.auto,
                     )
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                DashboardShortcut("الخريطة", Icons.Default.Map, Modifier.weight(1f)) {
+                    sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("map")
+                }
+                DashboardShortcut("مكتبتي", Icons.Default.Headphones, Modifier.weight(1f)) {
+                    sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("audio")
+                }
+                DashboardShortcut(
+                    "محفظتي",
+                    Icons.Default.AccountBalanceWallet,
+                    Modifier.weight(1f),
+                ) {
+                    sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("expenses")
+                }
             }
         }
         item {
@@ -136,6 +156,35 @@ fun Dashboard(
             OutingCard(outing, data.now, data.details.find { it.outingId == outing.id }) {
                 onOpen(outing.id)
             }
+        }
+    }
+}
+
+@Composable
+private fun DashboardShortcut(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surface,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+    ) {
+        Column(
+            Modifier.padding(vertical = 16.dp),
+            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                icon,
+                null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp),
+            )
+            Text(label, style = MaterialTheme.typography.labelMedium)
         }
     }
 }

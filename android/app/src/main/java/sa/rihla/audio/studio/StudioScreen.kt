@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,33 +67,68 @@ fun StudioScreen(
                 TextButton(onClick = onBack) { Text("العودة إلى المشغل") }
                 Text("استوديو المحاضرات", style = MaterialTheme.typography.headlineSmall)
             }
-            Text("تحسين الاستماع · مساعد على الهاتف · تنظيم الملفات · فصل الموسيقى")
+            Text("مساحة عمل لمحاضراتك", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "اختر الأداة ثم المقطع الذي تريد العمل عليه",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
                         "lecture" to "تحسين الصوت",
                         "organize" to "تنظيم",
                         "folders" to "المجلدات",
                         "separate" to "فصل الموسيقى",
-                        "assistant" to "المساعد",
-                        "models" to "النماذج",
                     )
                     .chunked(2)
                     .forEach { pair ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             pair.forEach { (key, label) ->
-                                OutlinedButton(
+                                Surface(
                                     onClick = {
-                                        if (key == "assistant" || key == "models")
-                                            AssistantNavigation.requests.tryEmit(key)
-                                        else tab = key
+                                        tab = key
+                                        folder = null
                                     },
                                     modifier = Modifier.weight(1f),
+                                    shape =
+                                        androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                                    color =
+                                        if (tab == key) MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.surface,
                                 ) {
-                                    Text(label)
+                                    Row(
+                                        Modifier.padding(16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment =
+                                            androidx.compose.ui.Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            when (key) {
+                                                "lecture" -> Icons.Default.GraphicEq
+                                                "organize" -> Icons.Default.AutoFixHigh
+                                                "folders" -> Icons.Default.Folder
+                                                else -> Icons.Default.VoiceOverOff
+                                            },
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(22.dp),
+                                        )
+                                        Text(label, style = MaterialTheme.typography.labelLarge)
+                                    }
                                 }
                             }
                         }
                     }
+            }
+            Row {
+                TextButton(onClick = { AssistantNavigation.requests.tryEmit("models") }) {
+                    Icon(Icons.Default.Memory, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("النماذج")
+                }
+                TextButton(onClick = { AssistantNavigation.requests.tryEmit("assistant") }) {
+                    Text("فتح المساعد")
+                }
             }
             if (state.stage.isNotBlank()) {
                 Text(state.stage, color = MaterialTheme.colorScheme.primary)

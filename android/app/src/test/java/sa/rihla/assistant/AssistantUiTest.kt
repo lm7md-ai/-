@@ -120,10 +120,10 @@ class AssistantUiTest {
         prepare()
         compose.onNodeWithText("المزيد").performClick()
         compose.onNodeWithText("نماذج الذكاء الاصطناعي").assertIsDisplayed()
-        capture("settings-5.1.png")
+        capture("settings-5.2.png")
         compose.onNodeWithText("نماذج الذكاء الاصطناعي").performClick()
         compose.onNodeWithText("مشواري · نموذج أوامري").assertIsDisplayed()
-        capture("models-5.1.png")
+        capture("models-5.2.png")
         compose
             .onNodeWithText("Qwen · مساعد الأسئلة والتصنيف")
             .performScrollTo()
@@ -147,7 +147,7 @@ class AssistantUiTest {
         prepare()
         compose.onNodeWithText("المساعد").performClick()
         compose.onNodeWithText("تحدث بأمر صوتي").assertIsDisplayed()
-        capture("assistant-5.1.png")
+        capture("assistant-5.2.png")
         compose.onNodeWithText("تخصيص مساعدي وتدريب نموذجي").performScrollTo().performClick()
         compose
             .onNodeWithText("عبارة جديدة للتدريب")

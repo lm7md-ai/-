@@ -79,11 +79,16 @@ fun MetricsList(m: Metrics) {
 
 @Composable
 fun StatisticsScreen(data: ScreenData, vm: JourneyViewModel? = null, onTrip: (Long) -> Unit = {}) {
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     var period by remember { mutableStateOf(Period.MONTH) }
     val m = metrics(data, periodBounds(period))
     val previous = metrics(data, periodBounds(period, previous = true))
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 24.dp),
+    ) {
         item {
+            SectionTitle("صورة أوضح لرحلاتك", "المسافات والوقت والتكاليف من سجلك الفعلي")
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 Period.entries.zip(listOf("week", "month", "year", "all")).forEach { (p, key) ->
                     FilterChip(
@@ -95,73 +100,89 @@ fun StatisticsScreen(data: ScreenData, vm: JourneyViewModel? = null, onTrip: (Lo
             }
         }
         item {
-            MetricGrid(
-                listOf(
-                    "distance" to (num(m.meters / 1000) + " " + tr("km")),
-                    "total_spending" to (num(m.total / 100.0, 2) + " " + tr("sar")),
-                    "outings_count" to num(m.outings.toDouble(), 0),
-                    "driving_time" to duration(m.drivingMs),
-                    "stopped_time" to duration(m.stoppedMs),
-                    "university_time" to duration(m.universityMs),
-                    "average_travel" to (m.averageTravelMs?.let { duration(it) } ?: tr("empty")),
-                    "fastest" to (m.fastestMs?.let { duration(it) } ?: tr("empty")),
-                )
-            )
-            Heading("seven_day_spending")
-            SpendingChart(data.expenses, day(data.now))
-            Panel("total_spending", androidx.compose.material.icons.Icons.Default.Payments) {
-                Metric("fuel", num(m.fuel / 100.0, 2) + " " + tr("sar"))
-                Metric("food", num(m.food / 100.0, 2) + " " + tr("sar"))
-                Metric("other", num(m.other / 100.0, 2) + " " + tr("sar"))
-                Metric("longest", m.longestMs?.let { duration(it) } ?: tr("empty"))
-                Metric("visits", num(m.visits.toDouble(), 0))
-                Metric("university_trips", num(m.universityTrips.toDouble(), 0))
-            }
-            Panel("fuel_economy") { EconomyCard(m.economy) }
-            sa.rihla.ui.AdvancedAnalytics(data, periodBounds(period))
-            if (vm != null) sa.rihla.ui.RouteComparisonPanel(vm, data, periodBounds(period), onTrip)
-            val bounds = periodBounds(period)
-            val estimated =
-                estimateTotals(
-                    data.outings.filter {
-                        it.startedAt >= bounds.first && it.startedAt < bounds.second
-                    },
-                    data.settings,
-                    m.economy,
-                )
-            Metric(
-                "estimated_fuel_cost",
-                numberRange(estimated.first / 100.0, estimated.second / 100.0) + " " + tr("sar"),
-            )
-            Text(tr("estimate_not_expense"))
-            Text(tr("stats_policy"))
-            if (period != Period.ALL) {
-                Heading("comparison")
-                Metric("distance_change", num((m.meters - previous.meters) / 1000) + " " + tr("km"))
-                Metric(
-                    "spending_change",
-                    num((m.total - previous.total) / 100.0, 2) + " " + tr("sar"),
-                )
-                Metric(
-                    "trips_change",
-                    num((m.outings - previous.outings).toDouble(), 0),
-                )
-                Metric(
-                    "travel_change",
-                    if (m.averageTravelMs != null && previous.averageTravelMs != null)
-                        if (m.averageTravelMs == previous.averageTravelMs) tr("comparison_equal")
-                        else
-                            tr(
-                                if (m.averageTravelMs < previous.averageTravelMs)
-                                    "comparison_faster"
-                                else "comparison_slower"
-                            ) +
-                                " " +
-                                duration(
-                                    kotlin.math.abs(m.averageTravelMs - previous.averageTravelMs)
-                                )
-                    else tr("no_comparison"),
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                PageTabs(listOf("نظرة عامة", "التفاصيل والمقارنة"), tab) { tab = it }
+                Spacer(Modifier.height(12.dp))
+                if (tab == 0) {
+                    MetricGrid(
+                        listOf(
+                            "distance" to (num(m.meters / 1000) + " " + tr("km")),
+                            "total_spending" to (num(m.total / 100.0, 2) + " " + tr("sar")),
+                            "outings_count" to num(m.outings.toDouble(), 0),
+                            "driving_time" to duration(m.drivingMs),
+                        )
+                    )
+                    Heading("seven_day_spending")
+                    SpendingChart(data.expenses, day(data.now))
+                    Panel(
+                        "total_spending",
+                        androidx.compose.material.icons.Icons.Default.Payments,
+                    ) {
+                        Metric("fuel", num(m.fuel / 100.0, 2) + " " + tr("sar"))
+                        Metric("food", num(m.food / 100.0, 2) + " " + tr("sar"))
+                        Metric("other", num(m.other / 100.0, 2) + " " + tr("sar"))
+                        Metric("longest", m.longestMs?.let { duration(it) } ?: tr("empty"))
+                        Metric("visits", num(m.visits.toDouble(), 0))
+                        Metric("university_trips", num(m.universityTrips.toDouble(), 0))
+                    }
+                    Panel("fuel_economy") { EconomyCard(m.economy) }
+                } else {
+                    MetricsList(m)
+                    sa.rihla.ui.AdvancedAnalytics(data, periodBounds(period))
+                    if (vm != null)
+                        sa.rihla.ui.RouteComparisonPanel(vm, data, periodBounds(period), onTrip)
+                    val bounds = periodBounds(period)
+                    val estimated =
+                        estimateTotals(
+                            data.outings.filter {
+                                it.startedAt >= bounds.first && it.startedAt < bounds.second
+                            },
+                            data.settings,
+                            m.economy,
+                        )
+                    Metric(
+                        "estimated_fuel_cost",
+                        numberRange(estimated.first / 100.0, estimated.second / 100.0) +
+                            " " +
+                            tr("sar"),
+                    )
+                    Text(tr("estimate_not_expense"))
+                    Text(tr("stats_policy"))
+                    if (period != Period.ALL) {
+                        Heading("comparison")
+                        Metric(
+                            "distance_change",
+                            num((m.meters - previous.meters) / 1000) + " " + tr("km"),
+                        )
+                        Metric(
+                            "spending_change",
+                            num((m.total - previous.total) / 100.0, 2) + " " + tr("sar"),
+                        )
+                        Metric(
+                            "trips_change",
+                            num((m.outings - previous.outings).toDouble(), 0),
+                        )
+                        Metric(
+                            "travel_change",
+                            if (m.averageTravelMs != null && previous.averageTravelMs != null)
+                                if (m.averageTravelMs == previous.averageTravelMs)
+                                    tr("comparison_equal")
+                                else
+                                    tr(
+                                        if (m.averageTravelMs < previous.averageTravelMs)
+                                            "comparison_faster"
+                                        else "comparison_slower"
+                                    ) +
+                                        " " +
+                                        duration(
+                                            kotlin.math.abs(
+                                                m.averageTravelMs - previous.averageTravelMs
+                                            )
+                                        )
+                            else tr("no_comparison"),
+                        )
+                    }
+                }
             }
         }
     }
