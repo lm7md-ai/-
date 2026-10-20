@@ -105,6 +105,7 @@ fun Dashboard(
                 }
             }
         }
+        item { TrackingStatusCard(active != null) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("TODAY" to "اليوم", "WEEK" to "الأسبوع", "MONTH" to "الشهر").forEach {

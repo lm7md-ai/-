@@ -26,33 +26,48 @@ object Detection {
         )
 
     @Suppress("MissingPermission")
-    fun register(c: Context, enabled: Boolean, onFailure: (Exception) -> Unit = {}) {
+    fun register(c: Context, enabled: Boolean, onFailure: (Exception) -> Unit = {}): Job =
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            val app = c.applicationContext as? RihlaApp ?: return@launch
-            HomeGeofences.register(c, enabled, app.repository.dao.places().find { it.type == "HOME" }, onFailure)
-        }
-        val client = ActivityRecognition.getClient(c)
-        if (!enabled) {
-            client.removeActivityTransitionUpdates(pending(c))
-            client.removeActivityUpdates(pending(c))
-            return
-        }
-        if (!available(c)) return
-        client.requestActivityUpdates(60000, pending(c)).addOnFailureListener(onFailure)
-        client
-            .requestActivityTransitionUpdates(
-                ActivityTransitionRequest(
-                    listOf(
-                        ActivityTransition.Builder()
-                            .setActivityType(DetectedActivity.IN_VEHICLE)
-                            .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
-                            .build()
+            try {
+                val context = c.applicationContext
+                val app = context as? RihlaApp ?: return@launch
+                HomeGeofences.register(
+                    context,
+                    enabled,
+                    app.repository.dao.places().find { it.type == "HOME" },
+                    onFailure,
+                )
+                val client = ActivityRecognition.getClient(context)
+                if (!enabled) {
+                    client.removeActivityTransitionUpdates(pending(context))
+                    client.removeActivityUpdates(pending(context))
+                    return@launch
+                }
+                if (!available(context)) return@launch
+                client
+                    .requestActivityUpdates(60000, pending(context))
+                    .addOnFailureListener(onFailure)
+                client
+                    .requestActivityTransitionUpdates(
+                        ActivityTransitionRequest(
+                            listOf(
+                                ActivityTransition.Builder()
+                                    .setActivityType(DetectedActivity.IN_VEHICLE)
+                                    .setActivityTransition(
+                                        ActivityTransition.ACTIVITY_TRANSITION_ENTER
+                                    )
+                                    .build()
+                            )
+                        ),
+                        pending(context),
                     )
-                ),
-                pending(c),
-            )
-            .addOnFailureListener(onFailure)
-    }
+                    .addOnFailureListener(onFailure)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (e: Exception) {
+                onFailure(e)
+            }
+        }
 }
 
 class DetectionReceiver : BroadcastReceiver() {
@@ -71,12 +86,12 @@ class DetectionReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val app = c.applicationContext as RihlaApp
-                if (
-                    app.settings.flow.first().auto &&
-                        TrackingService.backgroundAllowed(c) &&
-                        app.repository.dao.active() == null
-                )
-                    TrackingService.launch(c, true)
+                if (app.settings.flow.first().auto && TrackingService.backgroundAllowed(c))
+                    TrackingService.launch(
+                        c,
+                        app.repository.dao.active() == null,
+                        motionResume = true,
+                    )
             } finally {
                 pending.finish()
             }
@@ -86,18 +101,19 @@ class DetectionReceiver : BroadcastReceiver() {
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
-        if (i.action !in listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED)) return
+        if (i.action !in listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED))
+            return
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 val app = c.applicationContext as RihlaApp
-                Detection.register(c, app.settings.flow.first().auto)
-                HomeGeofences.restore(c)
+                Detection.register(c, app.settings.flow.first().auto).join()
                 if (app.repository.dao.active() != null && TrackingService.backgroundAllowed(c))
                     TrackingService.launch(c)
                 if (sa.rihla.sms.PurchaseNotificationService.allowed(c))
                     android.service.notification.NotificationListenerService.requestRebind(
-                        ComponentName(c, sa.rihla.sms.PurchaseNotificationService::class.java))
+                        ComponentName(c, sa.rihla.sms.PurchaseNotificationService::class.java)
+                    )
             } finally {
                 pending.finish()
             }

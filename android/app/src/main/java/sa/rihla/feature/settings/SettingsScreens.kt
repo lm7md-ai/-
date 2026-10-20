@@ -180,6 +180,11 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                     "أدوات التطبيق" to
                         listOf(
                             Triple(
+                                "tracking_health",
+                                "مركز التتبع الذكي",
+                                "فحص الإشارة والأذونات والأقمار واستئناف التسجيل",
+                            ),
+                            Triple(
                                 "audio",
                                 "مكتبة الصوتيات والمشغل",
                                 "المحاضرات والقوائم والمفضلة",
@@ -246,6 +251,7 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                     label,
                     description,
                     when (key) {
+                        "tracking_health" -> androidx.compose.material.icons.Icons.Default.GpsFixed
                         "models" -> androidx.compose.material.icons.Icons.Default.Memory
                         "assistant",
                         "assistant_profile" ->

@@ -1,5 +1,6 @@
 package sa.rihla.core
 
+import androidx.room.ColumnInfo
 import kotlin.math.*
 
 data class Fix(
@@ -10,6 +11,12 @@ data class Fix(
     val speed: Double = 0.0,
     val altitude: Double = 0.0,
     val bearing: Double = 0.0,
+    val hasSpeed: Boolean = true,
+    val speedAccuracy: Double? = null,
+    val elapsedNanos: Long = 0,
+    val discontinuous: Boolean = false,
+    val provider: String = "",
+    val hasBearing: Boolean = true,
 )
 
 data class Area(
@@ -71,6 +78,10 @@ data class EngineState(
     val gapMs: Long = 0,
     val startedUniversity: Boolean = false,
     val stillDrivingMs: Long = 0,
+    @ColumnInfo(defaultValue = "NULL") val distanceLat: Double? = null,
+    @ColumnInfo(defaultValue = "NULL") val distanceLon: Double? = null,
+    @ColumnInfo(defaultValue = "0") val distanceTime: Long = 0,
+    @ColumnInfo(defaultValue = "0") val distanceAccuracy: Double = 0.0,
 )
 
 data class Event(
@@ -97,23 +108,60 @@ class TrackingEngine {
                 f.lat !in -90.0..90.0 ||
                 f.lon !in -180.0..180.0 ||
                 f.accuracy !in 0.1..60.0 ||
+                !f.speed.isFinite() ||
+                f.speed !in 0.0..65.0 ||
+                (f.speedAccuracy != null && (!f.speedAccuracy.isFinite() || f.speedAccuracy < 0)) ||
+                !f.altitude.isFinite() ||
+                !f.bearing.isFinite() ||
                 f.time <= s.lastTime
         )
             return Update(s, false)
         val dt = if (s.lastTime == 0L) 0L else f.time - s.lastTime
         val step = if (s.lastLat == null) 0.0 else distance(s.lastLat, s.lastLon!!, f.lat, f.lon)
         if (dt > 0 && step / (dt / 1000.0) > 65.0) return Update(s, false)
-        val gap = dt > 90_000
-        val movement =
-            (f.speed >= 2.5 || (dt in 1000..90000 && step / max(dt / 1000.0, 1.0) >= 2.5))
-        val significant = step > max(6.0, (f.accuracy + s.lastAccuracy) * 0.5)
+        val gap = dt > 90_000 || f.discontinuous
+        val speedTrusted = f.hasSpeed && (f.speedAccuracy == null || f.speedAccuracy in 0.0..2.0)
+        val anchorLat = s.distanceLat ?: s.lastLat
+        val anchorLon = s.distanceLon ?: s.lastLon
+        val anchorTime = if (s.distanceTime > 0) s.distanceTime else s.lastTime
+        val anchorAccuracy = if (s.distanceTime > 0) s.distanceAccuracy else s.lastAccuracy
+        val anchorStep =
+            if (anchorLat == null || anchorLon == null) 0.0
+            else distance(anchorLat, anchorLon, f.lat, f.lon)
+        val anchorDt = (f.time - anchorTime) / 1000.0
+        val derivedMoving =
+            if (!speedTrusted)
+                anchorDt in 1.0..90.0 &&
+                    anchorStep / anchorDt >= 2.5 &&
+                    anchorStep > max(8.0, f.accuracy + anchorAccuracy)
+            else
+                dt in 8000..90000 &&
+                    step / (dt / 1000.0) >= 5.0 &&
+                    step > f.accuracy + s.lastAccuracy + 20
+        val movement = (speedTrusted && f.speed >= 1.0) || derivedMoving
+        // The persisted anchor accumulates short steps instead of dropping each one.
+        val significant = anchorStep > max(6.0, (f.accuracy + anchorAccuracy) * .5)
+        val credit =
+            !gap && movement && significant && anchorTime > 0 && f.time - anchorTime <= 90_000
+        val holdUnknown =
+            !speedTrusted && !movement && s.stopStart == 0L && f.time - anchorTime <= 30_000
+        val resetAnchor =
+            anchorLat == null ||
+                gap ||
+                (!movement && !holdUnknown) ||
+                credit ||
+                f.time - anchorTime > 90_000
         var n =
             s.copy(
                 lastLat = f.lat,
                 lastLon = f.lon,
                 lastTime = f.time,
                 lastAccuracy = f.accuracy,
-                meters = s.meters + if (!gap && significant && movement) step else 0.0,
+                meters = s.meters + if (credit) anchorStep else 0.0,
+                distanceLat = if (resetAnchor) f.lat else anchorLat,
+                distanceLon = if (resetAnchor) f.lon else anchorLon,
+                distanceTime = if (resetAnchor) f.time else anchorTime,
+                distanceAccuracy = if (resetAnchor) f.accuracy else anchorAccuracy,
                 gapMs = s.gapMs + if (gap && !(s.stopStart > 0 && !movement)) dt else 0L,
                 segmentStart = if (s.segmentStart == 0L) f.time else s.segmentStart,
             )
@@ -264,15 +312,22 @@ fun drivingEvidence(first: Fix, next: Fix): Boolean {
     val derivedSpeed = moved / (dt / 1000.0)
     // Some providers supply position without a speed field. A stricter derived threshold
     // admits driving while excluding typical walking and stationary accuracy drift.
-    val driving = next.speed >= 3.0 || (next.speed == 0.0 && derivedSpeed >= 5.0 &&
-        moved > first.accuracy + next.accuracy + 20.0)
+    val driving =
+        next.speed >= 3.0 ||
+            (next.speed == 0.0 &&
+                derivedSpeed >= 5.0 &&
+                moved > first.accuracy + next.accuracy + 20.0)
     return driving && moved >= 60.0 && derivedSpeed <= 65.0
 }
 
 /** Rolling evidence window survives waiting at home or a red light after an automatic trigger. */
 class DrivingCandidate {
     private var first: Fix? = null
-    fun reset() { first = null }
+
+    fun reset() {
+        first = null
+    }
+
     fun accept(f: Fix): Fix? {
         if (f.accuracy !in 0.1..40.0) return null
         val previous = first

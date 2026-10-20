@@ -13,6 +13,7 @@ v3 = json.loads((schemas / '3.json').read_text())['database']
 v4 = json.loads((schemas / '4.json').read_text())['database']
 v5 = json.loads((schemas / '5.json').read_text())['database']
 v6 = json.loads((schemas / '6.json').read_text())['database']
+v7 = json.loads((schemas / '7.json').read_text())['database']
 db = sqlite3.connect(':memory:')
 db.execute('PRAGMA foreign_keys=ON')
 for entity in v1['entities']:
@@ -87,7 +88,7 @@ for entity in v5['entities']:
 db.execute("INSERT INTO trip_details VALUES (1,'trip','note',1)")
 print('PASS: migration 4→5 adds trip titles, notes and favorites without altering old rows')
 
-for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_5_6'):]):
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_5_6'):source.index('val MIGRATION_6_7')]):
     db.execute(sql)
 for entity in v6['entities']:
     actual = {row[1]: (row[2], bool(row[3])) for row in db.execute(f'PRAGMA table_info(`{entity["tableName"]}`)')}
@@ -96,6 +97,15 @@ for entity in v6['entities']:
 assert db.execute('SELECT odometerMeters FROM fuel').fetchone() == (None,)
 assert db.execute('SELECT amountHalala FROM expenses').fetchone() == (12345,)
 print('PASS: migration 5→6 preserves history and adds odometer, merchant rules and recurring schedules')
+
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_6_7'):]):
+    db.execute(sql)
+for entity in v7['entities']:
+    actual = {row[1]: (row[2], bool(row[3])) for row in db.execute(f'PRAGMA table_info(`{entity["tableName"]}`)')}
+    expected = {f['columnName']: (f['affinity'], f.get('notNull', False)) for f in entity['fields']}
+    assert actual == expected, entity['tableName']
+assert db.execute('SELECT startedAt,distanceLat,distanceLon,distanceTime,distanceAccuracy FROM outings').fetchone() == (1234, None, None, 0, 0.0)
+print('PASS: migration 6→7 retains all rows and initializes distance anchors safely')
 
 db.execute('DELETE FROM outings WHERE id=1')
 for table in ('points', 'events', 'active_slot', 'trip_details'):

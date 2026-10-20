@@ -288,7 +288,7 @@ interface JourneyDao {
             MerchantRule::class,
             RecurringExpense::class,
         ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class JourneyDatabase : RoomDatabase() {
@@ -393,5 +393,16 @@ val MIGRATION_5_6 =
             db.execSQL(
                 "CREATE TABLE IF NOT EXISTS recurring_expenses (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, title TEXT NOT NULL, category TEXT NOT NULL, amountHalala INTEGER NOT NULL, dayOfMonth INTEGER NOT NULL)"
             )
+        }
+    }
+
+/** Only new distance anchors; all historical columns and rows remain intact. */
+val MIGRATION_6_7 =
+    object : androidx.room.migration.Migration(6, 7) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE outings ADD COLUMN distanceLat REAL DEFAULT NULL")
+            db.execSQL("ALTER TABLE outings ADD COLUMN distanceLon REAL DEFAULT NULL")
+            db.execSQL("ALTER TABLE outings ADD COLUMN distanceTime INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE outings ADD COLUMN distanceAccuracy REAL NOT NULL DEFAULT 0")
         }
     }

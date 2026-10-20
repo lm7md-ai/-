@@ -28,7 +28,7 @@ class LocalBackup(private val database: JourneyDatabase) {
         fun preview(text: String): BackupPreview {
             val json = JSONObject(text)
             require(json.getString("format") == "RIHLA_BACKUP" && json.getInt("formatVersion") == 1)
-            require(json.getInt("schemaVersion") in 1..6)
+            require(json.getInt("schemaVersion") in 1..7)
             val data = json.getJSONObject("tables")
             require(data.has("outings") && data.has("expenses") && data.has("points"))
             return BackupPreview(
@@ -67,7 +67,7 @@ class LocalBackup(private val database: JourneyDatabase) {
         JSONObject()
             .put("format", "RIHLA_BACKUP")
             .put("formatVersion", 1)
-            .put("schemaVersion", 6)
+            .put("schemaVersion", 7)
             .put("exportedAt", System.currentTimeMillis())
             .put("tables", data)
             .toString()
@@ -114,9 +114,12 @@ class LocalBackup(private val database: JourneyDatabase) {
                             )
                         "fuel" ->
                             require(
-                                row.getLong("litersMl") > 0 && row.getLong("priceHalala") > 0 &&
-                                    row.getDouble("trackedMeters").isFinite() && row.getDouble("trackedMeters") >= 0 &&
-                                    (row.isNull("odometerMeters") || row.getDouble("odometerMeters") in 0.0..1e10)
+                                row.getLong("litersMl") > 0 &&
+                                    row.getLong("priceHalala") > 0 &&
+                                    row.getDouble("trackedMeters").isFinite() &&
+                                    row.getDouble("trackedMeters") >= 0 &&
+                                    (row.isNull("odometerMeters") ||
+                                        row.getDouble("odometerMeters") in 0.0..1e10)
                             )
                         "expenses" ->
                             require(
@@ -138,8 +141,31 @@ class LocalBackup(private val database: JourneyDatabase) {
                             )
                     }
                     if (table == "outings") {
+                        val latitude = row.opt("distanceLat")
+                        val longitude = row.opt("distanceLon")
+                        val hasLatitude = latitude != null && latitude != JSONObject.NULL
+                        val hasLongitude = longitude != null && longitude != JSONObject.NULL
+                        require(hasLatitude == hasLongitude) { "BACKUP_INVALID_DISTANCE_ANCHOR" }
+                        if (hasLatitude)
+                            require(
+                                row.getDouble("distanceLat") in -90.0..90.0 &&
+                                    row.getDouble("distanceLon") in -180.0..180.0 &&
+                                    row.getLong("distanceTime") in 1..row.getLong("lastTime") &&
+                                    row.getDouble("distanceAccuracy") in 0.1..60.0
+                            ) {
+                                "BACKUP_INVALID_DISTANCE_ANCHOR"
+                            }
+                        else
+                            require(
+                                row.optLong("distanceTime", 0) == 0L &&
+                                    row.optDouble("distanceAccuracy", 0.0) == 0.0
+                            )
                         mapOf(
                                 "stillDrivingMs" to 0L,
+                                "distanceLat" to JSONObject.NULL,
+                                "distanceLon" to JSONObject.NULL,
+                                "distanceTime" to 0L,
+                                "distanceAccuracy" to 0.0,
                                 "fuelPriceHalala" to 0L,
                                 "consumptionMinMl" to 0L,
                                 "consumptionMaxMl" to 0L,
@@ -180,9 +206,12 @@ class LocalBackup(private val database: JourneyDatabase) {
             db.query("SELECT COUNT(*) FROM outings WHERE endedAt IS NULL").use {
                 require(it.moveToFirst() && it.getLong(0) <= 1)
             }
-            db.query("SELECT outings.id FROM outings LEFT JOIN active_slot ON outings.id=active_slot.outingId WHERE (outings.endedAt IS NULL AND active_slot.outingId IS NULL) OR (outings.endedAt IS NOT NULL AND active_slot.outingId IS NOT NULL)").use {
-                require(!it.moveToFirst()) { "BACKUP_INVALID_ACTIVE_TRIP" }
-            }
+            db.query(
+                    "SELECT outings.id FROM outings LEFT JOIN active_slot ON outings.id=active_slot.outingId WHERE (outings.endedAt IS NULL AND active_slot.outingId IS NULL) OR (outings.endedAt IS NOT NULL AND active_slot.outingId IS NOT NULL)"
+                )
+                .use {
+                    require(!it.moveToFirst()) { "BACKUP_INVALID_ACTIVE_TRIP" }
+                }
             database.invalidationTracker.refreshAsync()
             preview
         }

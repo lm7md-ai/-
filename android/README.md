@@ -1,3 +1,8 @@
+# Tracking reliability 6.0
+
+[Implemented audit findings, diagnostics, adaptive tracking and verification limits](docs/TRACKING_6.md).
+Journey schema 7 adds persistent distance anchors; tested forward migrations retain all historical rows. Audio schema 2 is unchanged.
+
 # Application design 5.2
 
 [Library, dedicated player, navigation and verification limits](docs/DESIGN_5_2.md).

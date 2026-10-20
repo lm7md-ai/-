@@ -30,9 +30,16 @@ fun TrackingOptions(vm: JourneyViewModel, data: ScreenData) {
             Switch(data.settings.preciseTracking, { vm.precise(it) })
         }
         Text(
-            "الوضع المتوازن يحافظ على 5 ثوانٍ أثناء الحركة و30 عند التوقف. الدقة الأعلى تطلب 3 ثوانٍ أثناء الحركة و15 عند التوقف لتحسين الاستئناف، وقد تزيد استهلاك البطارية.",
+            "المتوازن يطلب 5 ثوانٍ أثناء الحركة و30 عند التوقف. الدقة الأعلى تطلب 3 ثوانٍ، وتتكيف إلى ثانيتين عند السرعة أو المنعطفات أو ضعف الدقة، و15 عند التوقف. عودة نشاط القيادة أو بلوتوث السيارة تعيد الطلب السريع. قد تزيد الدقة الأعلى استهلاك البطارية.",
             style = MaterialTheme.typography.bodySmall,
         )
+        TextButton(
+            onClick = {
+                sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("tracking_health")
+            }
+        ) {
+            Text("فتح مركز التتبع الذكي")
+        }
         Text(
             "بلوتوث السيارة: " +
                 if (data.settings.bluetoothAddress.isBlank()) "غير محدد" else "جهاز مقترن محدد"

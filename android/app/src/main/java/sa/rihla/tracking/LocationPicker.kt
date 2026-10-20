@@ -19,19 +19,12 @@ object LocationPicker {
     internal fun usable(l: Location): Boolean {
         @Suppress("DEPRECATION")
         val mock = if (android.os.Build.VERSION.SDK_INT >= 31) l.isMock else l.isFromMockProvider
-        return sa.rihla.core.usableLocation((SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000,
-            l.accuracy.toDouble(), mock)
-    }
-    private fun fix(l: Location) =
-        Fix(
-            l.latitude,
-            l.longitude,
-            l.time,
+        return sa.rihla.core.usableLocation(
+            (SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000,
             l.accuracy.toDouble(),
-            l.speed.toDouble(),
-            l.altitude,
-            l.bearing.toDouble(),
-        )
+            mock,
+        ) && l.latitude in -90.0..90.0 && l.longitude in -180.0..180.0
+    }
 
     @SuppressLint("MissingPermission")
     suspend fun current(c: Context): Fix? {
@@ -57,9 +50,7 @@ object LocationPicker {
                                 )
                                 .addOnSuccessListener {
                                     if (cont.isActive)
-                                        cont.resume(
-                                            it?.takeIf(::usable)?.let(::fix)
-                                        )
+                                        cont.resume(it?.takeIf(::usable)?.let { it.trackingFix() })
                                 }
                                 .addOnFailureListener { if (cont.isActive) cont.resume(null) }
                         } catch (_: SecurityException) {
@@ -77,7 +68,7 @@ object LocationPicker {
                         override fun onLocationChanged(l: Location) {
                             if (usable(l) && cont.isActive) {
                                 manager.removeUpdates(this)
-                                cont.resume(fix(l))
+                                cont.resume(l.trackingFix())
                             }
                         }
                     }
@@ -87,9 +78,9 @@ object LocationPicker {
                     if (
                         last != null &&
                             System.currentTimeMillis() - last.time in 0..15000 &&
-                        usable(last)
+                            usable(last)
                     )
-                        cont.resume(fix(last))
+                        cont.resume(last.trackingFix())
                     else
                         manager.requestLocationUpdates(
                             LocationManager.GPS_PROVIDER,
@@ -105,3 +96,20 @@ object LocationPicker {
         }
     }
 }
+
+/** Missing speed is kept distinct from a measured stationary fix. */
+internal fun Location.trackingFix(source: String = provider.orEmpty()): Fix =
+    Fix(
+        latitude,
+        longitude,
+        time,
+        accuracy.toDouble(),
+        if (hasSpeed()) speed.toDouble() else 0.0,
+        if (hasAltitude()) altitude else 0.0,
+        if (hasBearing()) bearing.toDouble() else 0.0,
+        hasSpeed = hasSpeed(),
+        speedAccuracy = if (hasSpeedAccuracy()) speedAccuracyMetersPerSecond.toDouble() else null,
+        elapsedNanos = elapsedRealtimeNanos,
+        provider = source,
+        hasBearing = hasBearing(),
+    )

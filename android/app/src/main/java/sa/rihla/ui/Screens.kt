@@ -263,6 +263,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                             page == "voice" -> "الأوامر الصوتية"
                                             page == "studio" -> "استوديو المحاضرات"
                                             page == "player" -> "المشغل"
+                                            page == "tracking_health" -> "مركز التتبع الذكي"
                                             page == "settings" -> tr("more")
                                             else -> tr(page)
                                         },
@@ -366,6 +367,7 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                         "history" -> History(data) { selected = it }
                                         "calendar" -> CalendarScreen(data) { selected = it }
                                         "map" -> sa.rihla.map.MapScreen(vm, data)
+                                        "tracking_health" -> TrackingDiagnosticsScreen(vm, data)
                                         "audio" ->
                                             sa.rihla.audio.AudioScreen(
                                                 onOpenPlayer = { openPage("player") }

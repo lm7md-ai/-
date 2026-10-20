@@ -23,17 +23,29 @@ class BackupTest {
         try {
             seed(source)
             val original = LocalBackup(source).export()
-            val malformed = JSONObject(original).apply {
-                getJSONObject("tables").put("fuel", JSONObject())
+            val malformed =
+                JSONObject(original).apply {
+                    getJSONObject("tables").put("fuel", JSONObject())
+                }
+            assertThrows(Exception::class.java) {
+                runBlocking { LocalBackup(target).restore(malformed.toString()) }
             }
-            assertThrows(Exception::class.java) { runBlocking { LocalBackup(target).restore(malformed.toString()) } }
             assertTrue(target.dao().outings().isEmpty())
-            val invalidFuel = JSONObject(original).apply {
-                getJSONObject("tables").getJSONArray("fuel").getJSONObject(0).put("litersMl", -1)
+            val invalidFuel =
+                JSONObject(original).apply {
+                    getJSONObject("tables")
+                        .getJSONArray("fuel")
+                        .getJSONObject(0)
+                        .put("litersMl", -1)
+                }
+            assertThrows(IllegalArgumentException::class.java) {
+                runBlocking { LocalBackup(target).restore(invalidFuel.toString()) }
             }
-            assertThrows(IllegalArgumentException::class.java) { runBlocking { LocalBackup(target).restore(invalidFuel.toString()) } }
             assertTrue(target.dao().expenseRecords().isEmpty())
-        } finally { source.close(); target.close() }
+        } finally {
+            source.close()
+            target.close()
+        }
     }
 
     @Test
@@ -43,19 +55,33 @@ class BackupTest {
         try {
             seed(source)
             val text = LocalBackup(source).export()
-            val endedActive = JSONObject(text).apply {
-                getJSONObject("tables").getJSONArray("active_slot")
-                    .put(JSONObject().put("singleton", 1).put("outingId", 1))
+            val endedActive =
+                JSONObject(text).apply {
+                    getJSONObject("tables")
+                        .getJSONArray("active_slot")
+                        .put(JSONObject().put("singleton", 1).put("outingId", 1))
+                }
+            assertThrows(Exception::class.java) {
+                runBlocking { LocalBackup(target).restore(endedActive.toString()) }
             }
-            assertThrows(Exception::class.java) { runBlocking { LocalBackup(target).restore(endedActive.toString()) } }
             assertTrue(target.dao().outings().isEmpty())
-            val orphanActive = JSONObject(text).apply {
-                getJSONObject("tables").getJSONArray("outings").getJSONObject(0).put("endedAt", JSONObject.NULL)
+            val orphanActive =
+                JSONObject(text).apply {
+                    getJSONObject("tables")
+                        .getJSONArray("outings")
+                        .getJSONObject(0)
+                        .put("endedAt", JSONObject.NULL)
+                }
+            assertThrows(IllegalArgumentException::class.java) {
+                runBlocking { LocalBackup(target).restore(orphanActive.toString()) }
             }
-            assertThrows(IllegalArgumentException::class.java) { runBlocking { LocalBackup(target).restore(orphanActive.toString()) } }
             assertTrue(target.dao().outings().isEmpty())
-        } finally { source.close(); target.close() }
+        } finally {
+            source.close()
+            target.close()
+        }
     }
+
     private fun database() =
         Room.inMemoryDatabaseBuilder(
                 RuntimeEnvironment.getApplication(),
@@ -206,6 +232,68 @@ class BackupTest {
         } finally {
             source.close()
             target.close()
+        }
+    }
+
+    @Test
+    fun schemaSixBackupRestoresIntoSevenAndNewAnchorsRoundTrip() = runBlocking {
+        val source = database()
+        val target = database()
+        val roundTrip = database()
+        try {
+            seed(source)
+            val old =
+                JSONObject(LocalBackup(source).export()).apply {
+                    put("schemaVersion", 6)
+                    val outings = getJSONObject("tables").getJSONArray("outings")
+                    for (i in 0 until outings.length()) listOf(
+                            "distanceLat",
+                            "distanceLon",
+                            "distanceTime",
+                            "distanceAccuracy",
+                        )
+                        .forEach { outings.getJSONObject(i).remove(it) }
+                }
+            val invalid =
+                JSONObject(old.toString()).apply {
+                    put("schemaVersion", 7)
+                    getJSONObject("tables")
+                        .getJSONArray("outings")
+                        .getJSONObject(0)
+                        .put("distanceLat", 95.0)
+                        .put("distanceLon", 39.2)
+                        .put("distanceTime", 2000)
+                        .put("distanceAccuracy", 5.0)
+                }
+            assertThrows(IllegalArgumentException::class.java) {
+                runBlocking { LocalBackup(target).restore(invalid.toString()) }
+            }
+            assertTrue(target.dao().outings().isEmpty())
+            LocalBackup(target).restore(old.toString())
+            val trip = target.dao().outings().single()
+            assertEquals(10000.0, trip.state.meters, .001)
+            assertNull(trip.state.distanceLat)
+            target
+                .dao()
+                .update(
+                    trip.copy(
+                        state =
+                            trip.state.copy(
+                                distanceLat = 21.5,
+                                distanceLon = 39.2,
+                                lastTime = 4000,
+                                distanceTime = 4000,
+                                distanceAccuracy = 7.0,
+                            )
+                    )
+                )
+            LocalBackup(roundTrip).restore(LocalBackup(target).export())
+            assertEquals(target.dao().outings(), roundTrip.dao().outings())
+            assertEquals(target.dao().expenseRecords(), roundTrip.dao().expenseRecords())
+        } finally {
+            source.close()
+            target.close()
+            roundTrip.close()
         }
     }
 }

@@ -30,10 +30,13 @@ class CarBluetoothReceiver : BroadcastReceiver() {
                 if (
                     preferences.auto &&
                         preferences.bluetoothAddress == address &&
-                        TrackingService.backgroundAllowed(context) &&
-                        app.repository.dao.active() == null
+                        TrackingService.backgroundAllowed(context)
                 )
-                    TrackingService.launch(context, true)
+                    TrackingService.launch(
+                        context,
+                        app.repository.dao.active() == null,
+                        motionResume = true,
+                    )
             } finally {
                 pending.finish()
             }
@@ -53,6 +56,16 @@ data class TrackingHealth(
     val accuracy: Double = 0.0,
     val provider: String = "",
     val accepted: Boolean = false,
+    val service: String = "idle",
+    val reason: String = "",
+    val acceptedCount: Long = 0,
+    val rejectedCount: Long = 0,
+    val satellites: Int = 0,
+    val usedSatellites: Int = 0,
+    val averageCn0: Double = 0.0,
+    val dualFrequency: Int = 0,
+    val requestedInterval: Long = 0,
+    val updatedElapsed: Long = 0,
 )
 
 object LiveTrackingHealth {

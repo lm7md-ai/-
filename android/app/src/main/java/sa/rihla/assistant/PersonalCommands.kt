@@ -35,6 +35,13 @@ object AppCommands {
     val all =
         listOf(
             AppIntent(
+                "tracking_health",
+                "فتح مركز التتبع الذكي",
+                "navigate",
+                "tracking_health",
+                listOf("افحص التتبع", "افتح مركز التتبع", "جودة تتبع المشوار", "فحص إشارة الموقع"),
+            ),
+            AppIntent(
                 "spent_today",
                 "مصروفات اليوم",
                 "summary",

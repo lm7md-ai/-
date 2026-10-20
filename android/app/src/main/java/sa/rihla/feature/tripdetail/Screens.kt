@@ -82,6 +82,7 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
                     else stops,
                 onStopPick = { selectedStop = it.id },
             )
+            RouteQualityCard(points, o, data.now)
             Text(tr("attribution"), style = MaterialTheme.typography.labelSmall)
             if (data.settings.offlineAttribution.isNotEmpty())
                 Text(data.settings.offlineAttribution, style = MaterialTheme.typography.labelSmall)

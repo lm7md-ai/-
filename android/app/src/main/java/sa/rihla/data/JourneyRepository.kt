@@ -6,6 +6,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import sa.rihla.core.*
 
+data class RecordOutcome(val accepted: Boolean, val ended: Boolean)
+
 class JourneyRepository(private val db: JourneyDatabase, private val settings: Settings) {
     val dao = db.dao()
     private val engine = TrackingEngine()
@@ -108,9 +110,11 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
         )
     }
 
-    suspend fun record(f: Fix): Boolean = lock.withLock {
+    suspend fun record(f: Fix): Boolean = recordDetailed(f).ended
+
+    suspend fun recordDetailed(f: Fix): RecordOutcome = lock.withLock {
         db.withTransaction {
-            val o = dao.active() ?: return@withTransaction false
+            val o = dao.active() ?: return@withTransaction RecordOutcome(false, false)
             val places = dao.places()
             val result =
                 engine.accept(
@@ -119,7 +123,7 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                     area(places.find { it.type == "HOME" }),
                     area(places.find { it.type == "UNIVERSITY" }),
                 )
-            if (!result.accepted) return@withTransaction false
+            if (!result.accepted) return@withTransaction RecordOutcome(false, false)
             dao.point(
                 RoutePoint(
                     outingId = o.id,
@@ -132,7 +136,9 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                     recordedAt = f.time,
                     distanceDelta = result.state.meters - o.state.meters,
                     uncertainGap = result.state.gapMs > o.state.gapMs,
-                    breakBefore = o.state.lastTime > 0 && f.time - o.state.lastTime > 90_000,
+                    breakBefore =
+                        o.state.lastTime > 0 &&
+                            (f.discontinuous || f.time - o.state.lastTime > 90_000),
                 )
             )
             result.events.forEach { store(o.id, it) }
@@ -146,7 +152,7 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                 )
             if (result.autoEnd) updated = finish(updated, f.time, true)
             dao.update(updated)
-            result.autoEnd
+            RecordOutcome(true, result.autoEnd)
         }
     }
 
