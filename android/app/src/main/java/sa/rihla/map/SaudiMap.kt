@@ -63,6 +63,49 @@ object SaudiMap {
             }
     }
 
+    /** Raw geometry at all display levels, bounded to a small viewport and with an explicit cap. */
+    fun matchingRoads(
+        context: Context,
+        west: Double,
+        south: Double,
+        east: Double,
+        north: Double,
+    ): CountryScene {
+        if (east - west > .3 || north - south > .3)
+            return CountryScene(emptyList(), emptyList(), true)
+        return SQLiteDatabase.openDatabase(file(context).path, null, SQLiteDatabase.OPEN_READONLY)
+            .use { db ->
+                val roads =
+                    db.rawQuery(
+                            "SELECT r.kind,r.name,r.points FROM roads r WHERE " +
+                                gridPredicate(west, south, east, north, 18) +
+                                "r.kind!='coast' AND r.west<=? AND r.east>=? AND r.south<=? AND r.north>=? ORDER BY r.id LIMIT 8001",
+                            arrayOf(
+                                (east * 1e6).toString(),
+                                (west * 1e6).toString(),
+                                (north * 1e6).toString(),
+                                (south * 1e6).toString(),
+                            ),
+                        )
+                        .use { c ->
+                            buildList {
+                                while (c.moveToNext()) add(
+                                    RoadFeature(
+                                        c.getString(0),
+                                        c.getString(1),
+                                        decodeRoad(c.getString(2)),
+                                    )
+                                )
+                            }
+                        }
+                CountryScene(
+                    if (roads.size > 8000) emptyList() else roads,
+                    emptyList(),
+                    roads.size > 8000,
+                )
+            }
+    }
+
     fun scene(
         context: Context,
         west: Double,
@@ -214,6 +257,10 @@ class MapCamera {
 
     fun center(lat: Double, lon: Double) {
         view?.center(lat, lon)
+    }
+
+    fun inspect(index: Int) {
+        view?.selectRecordedPoint(index)
     }
 
     fun country() {

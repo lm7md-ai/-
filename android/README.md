@@ -1,3 +1,8 @@
+# Route tools 6.1
+
+[Confidence lines, display-only cleanup/matching, turn detail, colors, inspection, zoom simplification and recurring routes](docs/ROUTES_6_1.md).
+Journey schema 7 and audio schema 2 are unchanged. Install over the same edition with its retained signing certificate.
+
 # Tracking reliability 6.0
 
 [Implemented audit findings, diagnostics, adaptive tracking and verification limits](docs/TRACKING_6.md).

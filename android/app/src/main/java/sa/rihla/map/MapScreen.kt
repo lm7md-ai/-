@@ -42,6 +42,9 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
             .collectAsState(emptyList())
     val stops = remember(trip, events) { trip?.let { stopDetails(it, events) }.orEmpty() }
     val camera = remember { MapCamera() }
+    val style = rememberRouteStyle()
+    var pointSelection by remember { mutableStateOf<RoutePointSelection?>(null) }
+    var routeStats by remember { mutableStateOf<RouteDisplayStats?>(null) }
     var layers by remember { mutableStateOf(MapLayers()) }
     var measure by rememberSaveable { mutableStateOf(false) }
     var marks by remember { mutableStateOf<List<Pair<Double, Double>>>(emptyList()) }
@@ -53,6 +56,7 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
     var stop by remember { mutableStateOf<StopDetails?>(null) }
     var tools by rememberSaveable { mutableStateOf(false) }
     var follow by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(selectedTrip, measure) { pointSelection = null }
     LaunchedEffect(follow, points.lastOrNull()?.recordedAt) {
         if (follow) points.lastOrNull()?.let { camera.center(it.latitude, it.longitude) }
     }
@@ -113,6 +117,10 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                 camera = camera,
                 layers = layers,
                 measurement = marks,
+                display = style.value.copy(inspect = style.value.inspect && !measure),
+                onPointPick = if (measure) null else { value -> pointSelection = value },
+                onRouteStats = { routeStats = it },
+                highlightedTime = pointSelection?.point?.recordedAt,
                 pickStopsWithSelection = true,
                 centerSelection = false,
                 onPick = { lat, lon ->
@@ -120,10 +128,19 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                     if (measure) marks = marks + (lat to lon)
                 },
             )
-            Text(
-                "المسار: أزرق أقل من 30 · أخضر 30–80 · برتقالي أعلى من 80 كم/س. الألوان تعرض السرعة المسجلة ولا تحدد المخالفة.",
-                style = MaterialTheme.typography.bodySmall,
-            )
+            RouteStyleControls(style.value, routeStats) {
+                style.set(it)
+                pointSelection = null
+            }
+            pointSelection?.let { value ->
+                RoutePointDetails(
+                    value,
+                    trip?.startedAt ?: points.firstOrNull()?.recordedAt ?: 0,
+                    points.size,
+                    { camera.inspect(it) },
+                    { pointSelection = null },
+                )
+            }
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 FilterChip(follow, { follow = !follow }, label = { Text("متابعة آخر نقطة") })
                 FilterChip(
@@ -142,8 +159,17 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                     label = { Text("الأماكن") },
                 )
                 FilterChip(
-                    layers.speed,
-                    { layers = layers.copy(speed = !layers.speed) },
+                    style.value.color == RouteColorMode.SPEED,
+                    {
+                        style.set(
+                            style.value.copy(
+                                color =
+                                    if (style.value.color == RouteColorMode.SPEED)
+                                        RouteColorMode.PLAIN
+                                    else RouteColorMode.SPEED
+                            )
+                        )
+                    },
                     label = { Text("تلوين السرعة") },
                 )
                 FilterChip(
@@ -174,6 +200,15 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                 Text(if (tools) "إخفاء أدوات الخريطة" else "اختيار مشوار والأماكن والمشاركة")
             }
             if (tools) {
+                TextButton(
+                    onClick = {
+                        sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit(
+                            "repeated_routes"
+                        )
+                    }
+                ) {
+                    Text("مقارنة المسارات المتكررة")
+                }
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
                     FilterChip(
                         selectedTrip == null,

@@ -290,4 +290,51 @@ class TrackingServiceTest {
             app.database.close()
         }
     }
+
+    @Test
+    fun gradualTurnActuallyChangesBalancedProviderIntervalAndDisablingRestoresIt() = runBlocking {
+        val app = RuntimeEnvironment.getApplication() as RihlaApp
+        Shadows.shadowOf(app).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+        app.settings.precise(false)
+        app.settings.turnDetails(true)
+        app.repository.start(false, 1_000_000)
+        val controller = Robolectric.buildService(TrackingService::class.java).create()
+        val service = controller.get()
+        try {
+            service.onStartCommand(Intent(app, TrackingService::class.java), 0, 1)
+            val interval =
+                TrackingService::class.java.getDeclaredField("registeredInterval").apply {
+                    isAccessible = true
+                }
+            until { interval.get(service) == 5000L }
+            @Suppress("UNCHECKED_CAST")
+            val queue =
+                TrackingService::class
+                    .java
+                    .getDeclaredField("queue")
+                    .apply { isAccessible = true }
+                    .get(service) as Channel<Fix>
+            for (i in 0..3) queue.send(
+                Fix(
+                    21.5 + i * .0003,
+                    39.2,
+                    1_000_000 + i * 3000L,
+                    5.0,
+                    speed = 10.0,
+                    bearing = i * 10.0,
+                )
+            )
+            until { interval.get(service) == 2000L }
+            app.settings.turnDetails(false)
+            until { interval.get(service) == 5000L }
+            assertEquals(
+                4,
+                app.repository.dao.points(app.repository.dao.active()!!.id).first().size,
+            )
+        } finally {
+            controller.destroy()
+            app.settings.clear()
+            app.database.close()
+        }
+    }
 }

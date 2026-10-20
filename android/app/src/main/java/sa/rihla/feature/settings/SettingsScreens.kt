@@ -180,6 +180,11 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                     "أدوات التطبيق" to
                         listOf(
                             Triple(
+                                "repeated_routes",
+                                "المسارات المتكررة",
+                                "قارن الوقت والمسافة والتوقفات وساعة المغادرة",
+                            ),
+                            Triple(
                                 "tracking_health",
                                 "مركز التتبع الذكي",
                                 "فحص الإشارة والأذونات والأقمار واستئناف التسجيل",
@@ -251,6 +256,8 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                     label,
                     description,
                     when (key) {
+                        "repeated_routes" ->
+                            androidx.compose.material.icons.Icons.Default.Route
                         "tracking_health" -> androidx.compose.material.icons.Icons.Default.GpsFixed
                         "models" -> androidx.compose.material.icons.Icons.Default.Memory
                         "assistant",

@@ -1,3 +1,24 @@
+# Verification — version 6.1, 2026-10-20
+
+The eight selected route features and their limits are documented in [ROUTES_6_1.md](docs/ROUTES_6_1.md).
+
+- 161 Android tests passed, with no failures, errors or skipped tests. Includes the existing audio, SMS, journey, backup and migration suites.
+- 13 Python transfer/release/geometry tool tests passed; schema checks through journey version 7 passed. Journey schema 7 and audio schema 2 are unchanged in this release.
+- Route tests cover confidence runs, explicit/uncertain/time gaps, stationary display cleanup, original-data conservation, color/turn boundaries, 100,000-point simplification with full-point inspection, conservative road ambiguity including hairpin legs on the same polyline, shared-polyline connectors and offline raw-road queries.
+- Native View tap/drag events select the original points after simplification. Compose tests cover persisted options/original preset and More → recurring routes → recorded trip. Reviewed RTL screenshots use fixture data only.
+- Turn tests cover gradual signed headings, angle wrap, oscillation, missing bearing, stops/gaps/poor accuracy. Service integration confirms balanced requests change from 5s to 2s and return to 5s when disabled.
+- Recurring comparisons separate detours, opposite directions and gaps while tolerating small coordinate changes; hour summaries require three observations. Compact shapes avoid retaining full point lists for all historical journeys.
+- Full lint exposed two pre-existing API-flow errors in local speech-model download. The Android 13 guard now uses an explicit conditional before calling the newer APIs; it preserves the same unsupported-device message.
+
+- Both release APKs: versionCode 61/versionName 6.1, minSdk 26, non-debuggable; packages `sa.rihla` and `sa.rihla.next`. Signature verification confirms the retained certificate and increasing version against each edition's published 6.0 APK.
+- Classic is 102,263,327 bytes and next is 102,263,343 bytes, below GitHub's 100 MiB limit. ZIP alignment passes; all five native ARM64 libraries are byte-identical to 6.0 with 16 KiB ELF load alignment. The country-map asset SHA-256 is unchanged. No signing-store files are packaged.
+- Both full Android lint targets passed with 0 errors and 45 warnings each; warnings remain visible rather than suppressed. They include existing KTX/API convenience, compatibility, dependency notices and the exported media-session service.
+- [Published file hashes](../releases/SHA256SUMS-v6.1) and [reviewed interface previews](../releases/README.md).
+
+No physical RedMagic 11 Pro was available. Synthetic and native-rendered Android tests do not establish real-world GPS accuracy, provider cadence, road/lane correctness or battery savings. Road matching is explicitly estimated and optional; drawing improvements never rewrite saved coordinates, distance or cost.
+
+## Previous verification history
+
 # Verification — version 4.2, 2026-10-17
 
 Toolchain: JDK 21, Gradle 9.8.0, AGP 9.4.1, Kotlin 2.4.20/KSP 2.3.12,

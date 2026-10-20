@@ -158,6 +158,37 @@ class RouteMapView(c: Context) : View(c) {
     var onPick: ((Double, Double) -> Unit)? = null
     var pickStopsWithSelection = false
     var layers = MapLayers()
+    var display = RouteDisplayOptions()
+    var onPointPick: ((RoutePointSelection) -> Unit)? = null
+    var onRouteStats: ((RouteDisplayStats) -> Unit)? = null
+    var highlightedTime: Long? = null
+    private var inspecting = false
+    private var routeJob: Job? = null
+    private var routeGeneration = 0L
+    private var prepared: PreparedRoute? = null
+    private var preparedRaw: List<RoutePoint> = emptyList()
+    private var requestedPoints: List<RoutePoint>? = null
+    private var requestedStops: List<StopDetails>? = null
+    private var requestedDisplay: RouteDisplayOptions? = null
+    private var requestedZoom = -1
+    private var requestedBox: List<Double> = emptyList()
+    private var renderedRoute: PreparedRoute? = null
+    private var renderedRouteViewport: List<Double> = emptyList()
+    private val styledPaths = linkedMapOf<Pair<Int, Boolean>, Path>()
+    private val weakDash =
+        DashPathEffect(
+            floatArrayOf(
+                10f * resources.displayMetrics.density,
+                7f * resources.displayMetrics.density,
+            ),
+            0f,
+        )
+    val isRouteReady: Boolean
+        get() = requestedPoints === preparedRaw && prepared != null
+
+    val displayStats: RouteDisplayStats?
+        get() = prepared?.stats
+
     var measurement: List<Pair<Double, Double>> = emptyList()
     private var country: CountryScene? = null
     private var countryViewport: List<Double> = emptyList()
@@ -177,9 +208,6 @@ class RouteMapView(c: Context) : View(c) {
     private var centered = false
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val destinationRect = RectF()
-    private val routePath = Path()
-    private var routePoints: List<RoutePoint>? = null
-    private var routeViewport: List<Double> = emptyList()
     private val areaPath = Path()
     private val gestures =
         GestureDetector(
@@ -320,12 +348,197 @@ class RouteMapView(c: Context) : View(c) {
         lon = v.second.coerceIn(-180.0, 180.0)
     }
 
+    fun selectRecordedPoint(index: Int) {
+        val point = preparedRaw.getOrNull(index) ?: return
+        val drawn = prepared?.points?.getOrNull(index) ?: return
+        onPointPick?.invoke(RoutePointSelection(point, index, drawn))
+        center(drawn.latitude, drawn.longitude)
+    }
+
+    private fun inspectPoint(x: Float, y: Float): RoutePointSelection? {
+        if (!display.inspect || !layers.route || zoom < 12 || onPointPick == null) return null
+        val ready = prepared ?: return null
+        val raw = preparedRaw
+        if (raw.isEmpty()) return null
+        val center = world(lat, lon)
+        val tap = coordinate(center.first + x - width / 2, center.second + y - height / 2)
+        val radius = 32 * resources.displayMetrics.density
+        val metersPerPixel =
+            156543.03392 * cos(Math.toRadians(lat)) /
+                (1 shl zoom) /
+                resources.displayMetrics.density
+        var closest = radius.toDouble()
+        var chosen = -1
+        fun screen(p: DisplayPoint): XY {
+            val w = world(p.latitude, p.longitude)
+            return XY(w.first - center.first + width / 2, w.second - center.second + height / 2)
+        }
+        for (index in ready.hitIndex.candidates(tap.first, tap.second, radius * metersPerPixel)) {
+            val b = ready.points[index]
+            val q = screen(b)
+            val pointDistance = hypot(q.x - x, q.y - y)
+            if (pointDistance < closest) {
+                closest = pointDistance
+                chosen = index
+            }
+            if (index > 0 && !routeBreak(raw[index - 1], raw[index])) {
+                val a = ready.points[index - 1]
+                val first = screen(a)
+                val path =
+                    listOf(first) +
+                        ready.bridges[index].orEmpty().map { (lat, lon) ->
+                            val w = world(lat, lon)
+                            XY(
+                                w.first - center.first + width / 2,
+                                w.second - center.second + height / 2,
+                            )
+                        } +
+                        listOf(q)
+                path.zipWithNext().forEach { (start, end) ->
+                    val (fraction, distance) =
+                        projection(XY(x.toDouble(), y.toDouble()), start, end)
+                    if (distance < closest) {
+                        closest = distance
+                        chosen =
+                            if (ready.bridges[index].isNullOrEmpty()) {
+                                if (fraction < .5) index - 1 else index
+                            } else if (hypot(first.x - x, first.y - y) < hypot(q.x - x, q.y - y))
+                                index - 1
+                            else index
+                    }
+                }
+            }
+        }
+        return chosen.takeIf { it >= 0 }?.let { RoutePointSelection(raw[it], it, ready.points[it]) }
+    }
+
     override fun onTouchEvent(e: MotionEvent): Boolean {
         parent?.requestDisallowInterceptTouchEvent(true)
+        if (e.pointerCount > 1) inspecting = false
+        if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+            val selection = inspectPoint(e.x, e.y)
+            inspecting = selection != null
+            selection?.let { onPointPick?.invoke(it) }
+        }
+        if (inspecting) {
+            if (e.actionMasked == MotionEvent.ACTION_MOVE)
+                inspectPoint(e.x, e.y)?.let { onPointPick?.invoke(it) }
+            if (
+                e.actionMasked == MotionEvent.ACTION_UP ||
+                    e.actionMasked == MotionEvent.ACTION_CANCEL
+            ) {
+                inspecting = false
+                performClick()
+            }
+            return true
+        }
         scale.onTouchEvent(e)
         gestures.onTouchEvent(e)
         if (e.action == MotionEvent.ACTION_UP) performClick()
         return true
+    }
+
+    private fun prepareDisplay(left: Double, top: Double) {
+        val options =
+            display.copy(
+                inspect = false,
+                color = if (layers.speed) RouteColorMode.SPEED else display.color,
+            )
+        val box =
+            if (options.matchRoads) listOf(lat, lon, width.toDouble(), height.toDouble())
+            else listOf(floor(lat * 10) / 10)
+        if (
+            requestedPoints === points &&
+                requestedStops === stops &&
+                requestedDisplay == options &&
+                requestedZoom == zoom &&
+                requestedBox == box
+        )
+            return
+        requestedPoints = points
+        requestedStops = stops
+        requestedDisplay = options
+        requestedZoom = zoom
+        requestedBox = box
+        val raw = points
+        val stopList = stops
+        val level = zoom
+        val tolerance = 156543.03392 * cos(Math.toRadians(lat)) / (1 shl level)
+        val nw = coordinate(left, top)
+        val se = coordinate(left + width, top + height)
+        if (preparedRaw.firstOrNull()?.outingId != raw.firstOrNull()?.outingId) {
+            prepared = null
+            preparedRaw = emptyList()
+        }
+        val token = ++routeGeneration
+        routeJob?.cancel()
+        routeJob = scope.launch {
+            delay(100)
+            var matchingStatus = ""
+            val roads =
+                if (options.matchRoads && raw.isNotEmpty()) {
+                    if (level < 12) {
+                        matchingStatus = "كبّر الخريطة للمطابقة المحلية"
+                        emptyList()
+                    } else
+                        try {
+                            val scene =
+                                SaudiMap.matchingRoads(
+                                    context,
+                                    nw.second - .001,
+                                    se.first - .001,
+                                    se.second + .001,
+                                    nw.first + .001,
+                                )
+                            when {
+                                scene.clipped -> {
+                                    matchingStatus = "المنطقة واسعة أو مزدحمة؛ كبّر للمطابقة"
+                                    emptyList()
+                                }
+                                scene.roads.isEmpty() -> {
+                                    matchingStatus = "لا توجد طرق محلية مناسبة هنا"
+                                    emptyList()
+                                }
+                                else -> {
+                                    matchingStatus =
+                                        "مطابقة تقديرية محلية؛ النقاط الملتبسة تبقى أصلية"
+                                    scene.roads
+                                }
+                            }
+                        } catch (cancel: CancellationException) {
+                            throw cancel
+                        } catch (_: Exception) {
+                            matchingStatus = "تعذرت المطابقة؛ يُعرض GPS الأصلي"
+                            emptyList()
+                        }
+                } else emptyList()
+            val geometry =
+                withContext(Dispatchers.Default) {
+                    val current = currentCoroutineContext()
+                    val cancellation = { current.ensureActive() }
+                    val matcher =
+                        roads.takeIf { it.isNotEmpty() }?.let { RoadMatcher(it, cancellation) }
+                    if (matcher != null && !matcher.available)
+                        matchingStatus = "تفاصيل الطرق كثيرة؛ كبّر للمطابقة"
+                    prepareRoute(
+                        raw,
+                        stopList,
+                        options,
+                        tolerance,
+                        matcher,
+                        matchingStatus,
+                        cancellation,
+                    )
+                }
+            withContext(Dispatchers.Main) {
+                if (token == routeGeneration) {
+                    prepared = geometry
+                    preparedRaw = raw
+                    onRouteStats?.invoke(geometry.stats)
+                    invalidate()
+                }
+            }
+        }
     }
 
     override fun performClick(): Boolean {
@@ -359,7 +572,10 @@ class RouteMapView(c: Context) : View(c) {
                 val z = zoom
                 scope.launch {
                     val bytes = provider.load(z, x, y)
-                    val b = bytes?.takeIf(TileImages::valid)?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                    val b =
+                        bytes?.takeIf(TileImages::valid)?.let {
+                            BitmapFactory.decodeByteArray(it, 0, it.size)
+                        }
                     withContext(Dispatchers.Main) {
                         loading -= key
                         if (b != null) tiles.put(key, b)
@@ -469,41 +685,48 @@ class RouteMapView(c: Context) : View(c) {
                 paint,
             )
         }
-        paint.color = Color.rgb(16, 118, 106)
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 6f
-        val route = routePath
-        val viewport = listOf(left, top, zoom.toDouble())
-        if (routePoints !== points || routeViewport != viewport) {
-            route.reset()
-            points.forEachIndexed { i, p ->
-                val v = screen(p.latitude, p.longitude)
-                if (i == 0 || p.breakBefore) route.moveTo(v.first, v.second)
-                else route.lineTo(v.first, v.second)
-            }
-            routePoints = points
-            routeViewport = viewport
-        }
-        if (layers.route) {
-            if (layers.speed)
-                points.zipWithNext().forEach { (a, b) ->
-                    if (!b.breakBefore) {
-                        val first = screen(a.latitude, a.longitude)
-                        val second = screen(b.latitude, b.longitude)
-                        paint.color =
-                            if (b.speed * 3.6 < 30) Color.rgb(49, 111, 224)
-                            else if (b.speed * 3.6 < 80) Color.rgb(16, 160, 132)
-                            else Color.rgb(228, 139, 48)
-                        canvas.drawLine(
-                            first.first,
-                            first.second,
-                            second.first,
-                            second.second,
-                            paint,
-                        )
-                    }
+        prepareDisplay(left, top)
+        val geometry = prepared
+        if (geometry !== renderedRoute || renderedRouteViewport != viewportKey) {
+            styledPaths.clear()
+            geometry?.strokes?.forEach { stroke ->
+                val path = styledPaths.getOrPut(stroke.color to stroke.dashed) { Path() }
+                stroke.coordinates.forEachIndexed { index, p ->
+                    val xy = screen(p.first, p.second)
+                    if (index == 0) path.moveTo(xy.first, xy.second)
+                    else path.lineTo(xy.first, xy.second)
                 }
-            else canvas.drawPath(route, paint)
+            }
+            renderedRoute = geometry
+            renderedRouteViewport = viewportKey
+        }
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 4f * resources.displayMetrics.density
+        paint.strokeJoin = Paint.Join.ROUND
+        paint.strokeCap = Paint.Cap.ROUND
+        if (layers.route)
+            styledPaths.forEach { (style, path) ->
+                paint.color = style.first
+                paint.pathEffect = if (style.second) weakDash else null
+                canvas.drawPath(path, paint)
+            }
+        paint.pathEffect = null
+        paint.strokeCap = Paint.Cap.BUTT
+        highlightedTime?.let { time ->
+            geometry
+                ?.points
+                ?.firstOrNull { preparedRaw.getOrNull(it.index)?.recordedAt == time }
+                ?.let { point ->
+                    val xy = screen(point.latitude, point.longitude)
+                    paint.color = Color.BLACK
+                    paint.strokeWidth = 3f * resources.displayMetrics.density
+                    canvas.drawCircle(
+                        xy.first,
+                        xy.second,
+                        10f * resources.displayMetrics.density,
+                        paint,
+                    )
+                }
         }
         (if (layers.places) places else emptyList()).forEach { p ->
             val xy = screen(p.latitude, p.longitude)
@@ -617,6 +840,9 @@ class RouteMapView(c: Context) : View(c) {
     }
 
     override fun onDetachedFromWindow() {
+        routeGeneration++
+        routeJob?.cancel()
+        requestedPoints = null
         scope.cancel()
         super.onDetachedFromWindow()
     }
@@ -646,6 +872,10 @@ fun RouteMap(
     measurement: List<Pair<Double, Double>> = emptyList(),
     pickStopsWithSelection: Boolean = false,
     centerSelection: Boolean = true,
+    display: RouteDisplayOptions = RouteDisplayOptions(),
+    onPointPick: ((RoutePointSelection) -> Unit)? = null,
+    onRouteStats: ((RouteDisplayStats) -> Unit)? = null,
+    highlightedTime: Long? = null,
     onPick: ((Double, Double) -> Unit)? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -665,7 +895,9 @@ fun RouteMap(
                     v.polygonDraft != polygon ||
                     v.stops != stops ||
                     v.layers != layers ||
-                    v.measurement != measurement
+                    v.measurement != measurement ||
+                    v.display != display ||
+                    v.highlightedTime != highlightedTime
             v.points = points
             v.events = events
             v.places = places
@@ -677,6 +909,10 @@ fun RouteMap(
             v.pickStopsWithSelection = pickStopsWithSelection
             v.layers = layers
             v.measurement = measurement
+            v.display = display
+            v.onPointPick = onPointPick
+            v.onRouteStats = onRouteStats
+            v.highlightedTime = highlightedTime
             camera?.view = v
             v.online(preferences.onlineMaps)
             v.fit()

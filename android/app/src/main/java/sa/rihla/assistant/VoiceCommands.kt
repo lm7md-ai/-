@@ -128,8 +128,10 @@ class VoiceCommands(
 
     fun downloadLanguage() {
         try {
-            check(Build.VERSION.SDK_INT >= 33 && availableOffline()) {
-                "تنزيل اللغة من داخل التطبيق يحتاج خدمة تعرف على الجهاز وAndroid 13 أو أحدث؛ افتح إعدادات صوت الهاتف"
+            if (Build.VERSION.SDK_INT < 33 || !availableOffline()) {
+                error(
+                    "تنزيل اللغة من داخل التطبيق يحتاج خدمة تعرف على الجهاز وAndroid 13 أو أحدث؛ افتح إعدادات صوت الهاتف"
+                )
             }
             stop()
             val active = SpeechRecognizer.createOnDeviceSpeechRecognizer(context)

@@ -25,7 +25,7 @@ import sa.rihla.feature.settings.*
 import sa.rihla.feature.statistics.*
 import sa.rihla.feature.tripdetail.*
 import sa.rihla.feature.vehicle.*
-import sa.rihla.map.RouteMap
+import sa.rihla.map.*
 import sa.rihla.tracking.*
 import sa.rihla.ui.*
 
@@ -35,6 +35,10 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
         remember(o.id) { vm.repo.dao.points(o.id) }.collectAsStateWithLifecycle(emptyList())
     val events by
         remember(o.id) { vm.repo.dao.events(o.id) }.collectAsStateWithLifecycle(emptyList())
+    val camera = remember { MapCamera() }
+    val style = rememberRouteStyle()
+    var pointSelection by remember(o.id) { mutableStateOf<RoutePointSelection?>(null) }
+    var routeStats by remember(o.id) { mutableStateOf<RouteDisplayStats?>(null) }
     var deleting by remember { mutableStateOf(false) }
     val stops = remember(o, events) { stopDetails(o, events) }
     var selectedStop by remember(o.id) { mutableStateOf<Long?>(null) }
@@ -47,6 +51,7 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
             if (replay) points.take(cursor.coerceIn(0, points.lastIndex.coerceAtLeast(0)) + 1)
             else points
         }
+    LaunchedEffect(replay, cursor) { pointSelection = null }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -81,12 +86,29 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
                         }
                     else stops,
                 onStopPick = { selectedStop = it.id },
+                camera = camera,
+                display = style.value,
+                onPointPick = { pointSelection = it },
+                onRouteStats = { routeStats = it },
+                highlightedTime = pointSelection?.point?.recordedAt,
             )
+            RouteStyleControls(style.value, routeStats) {
+                style.set(it)
+                pointSelection = null
+            }
+            pointSelection?.let { value ->
+                RoutePointDetails(
+                    value,
+                    o.startedAt,
+                    previewPoints.size,
+                    { camera.inspect(it) },
+                    { pointSelection = null },
+                )
+            }
             RouteQualityCard(points, o, data.now)
             Text(tr("attribution"), style = MaterialTheme.typography.labelSmall)
             if (data.settings.offlineAttribution.isNotEmpty())
                 Text(data.settings.offlineAttribution, style = MaterialTheme.typography.labelSmall)
-            Text(tr("route_legend"))
             Text(tr("map_controls"), style = MaterialTheme.typography.labelSmall)
             if (o.endedAt != null && points.size > 1) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

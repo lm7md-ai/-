@@ -7,7 +7,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import java.time.YearMonth
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import sa.rihla.core.*
 import sa.rihla.data.*
@@ -37,27 +39,58 @@ fun RouteComparisonPanel(
         loading = true
         routes =
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                routeComparisons(selected.map { it to vm.repo.dao.points(it.id).first() })
+                val samples = selected.mapNotNull { outing ->
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    routeSample(
+                        outing,
+                        vm.repo.dao.points(outing.id).first(),
+                        vm.repo.dao.events(outing.id).first().count { it.type == "STOP" },
+                    )
+                }
+                compareRouteSamples(samples)
             }
         loading = false
     }
-    Panel("average_travel") {
-        Text("مقارنة المسارات المسجلة", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "نقارن آخر 100 مشوار منتهي بلا فجوات GPS حسب البداية والنهاية والممر الجغرافي؛ قد تُجمع الشوارع المتقاربة. الوقت يشمل التوقفات ولا يتنبأ بالازدحام.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (!loading && routes.isEmpty()) Text("لا توجد مسارات مكتملة كافية للمقارنة.")
-        routes.take(8).forEachIndexed { index, value ->
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("مقارنة المسارات المسجلة", style = MaterialTheme.typography.titleLarge)
             Text(
-                "مسار ${index+1} · ${value.trips} مشوار · " +
-                    num(value.averageMeters / 1000) +
-                    " كم · " +
-                    duration(value.averageMs)
+                "نقارن آخر 100 مشوار منتهي بلا فجوات GPS حسب الاتجاه وشكل المسار. التجميع تقريبي وقد يجمع شوارع متقاربة. الوقت يشمل التوقفات؛ أفضل ساعة ملاحظة تحتاج 3 رحلات على الأقل وليست توقعًا للازدحام.",
+                style = MaterialTheme.typography.bodySmall,
             )
-            TextButton(onClick = { onTrip(value.representative) }) {
-                Text("عرض مشوار من هذا المسار")
+            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (!loading && routes.isEmpty()) Text("لا توجد مسارات مكتملة كافية للمقارنة.")
+            val repeated = routes.filter { it.trips >= 2 }
+            if (!loading && routes.isNotEmpty() && repeated.isEmpty())
+                Text("لم يتكرر مسار متشابه بعد. ستظهر المقارنة بعد تسجيل مشوارين على المسار نفسه.")
+            repeated.forEachIndexed { index, value ->
+                Text(
+                    "مسار ${index+1} · ${value.trips} مشوار · " +
+                        num(value.averageMeters / 1000) +
+                        " كم · " +
+                        duration(value.averageMs)
+                )
+                Text(
+                    "الأسرع: ${duration(value.fastestMs)} · الأبطأ: ${duration(value.slowestMs)}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "متوسط الوقوف: ${duration(value.averageStoppedMs)} · ${num(value.averageStops,1)} توقف",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                value.bestHour?.let { hour ->
+                    Text(
+                        "أفضل ساعة مغادرة ملاحظة: ${hour.hour}:00 · ${hour.trips} رحلات · ${duration(hour.averageDrivingMs)}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                    ?: Text(
+                        "عينات ساعات المغادرة غير كافية للمقارنة بعد.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                TextButton(onClick = { onTrip(value.representative) }) {
+                    Text("عرض مشوار من هذا المسار")
+                }
             }
         }
     }
@@ -89,10 +122,8 @@ fun AdvancedAnalytics(data: ScreenData, bounds: Pair<Long, Long>) {
         if (destinations.isEmpty()) Text("تظهر الوجهات بعد إنهاء مشاوير لها نقاط GPS.")
         destinations.take(5).forEach { d ->
             Text(
-                (if (d.name in listOf("HOME", "UNIVERSITY")) tr(d.name.lowercase()) else d.name.removePrefix("PIN:")) +
-                    " · " +
-                    num(d.count.toDouble(), 0) +
-                    " مشوار"
+                (if (d.name in listOf("HOME", "UNIVERSITY")) tr(d.name.lowercase())
+                else d.name.removePrefix("PIN:")) + " · " + num(d.count.toDouble(), 0) + " مشوار"
             )
             Text(
                 "متوسط القيادة: " +

@@ -26,6 +26,7 @@ data class Preferences(
     val fuelBudget: Long = 0,
     val foodBudget: Long = 0,
     val otherBudget: Long = 0,
+    val turnDetails: Boolean = true,
 )
 
 class Settings(private val context: Context) {
@@ -50,6 +51,7 @@ class Settings(private val context: Context) {
                 it[longPreferencesKey("fuel_budget")] ?: 0,
                 it[longPreferencesKey("food_budget")] ?: 0,
                 it[longPreferencesKey("other_budget")] ?: 0,
+                it[booleanPreferencesKey("turn_detail")] ?: true,
             )
         }
 
@@ -113,6 +115,10 @@ class Settings(private val context: Context) {
             address.isEmpty() || android.bluetooth.BluetoothAdapter.checkBluetoothAddress(address)
         )
         context.store.edit { it[stringPreferencesKey("bluetooth_address")] = address }
+    }
+
+    suspend fun turnDetails(enabled: Boolean) {
+        context.store.edit { it[booleanPreferencesKey("turn_detail")] = enabled }
     }
 
     suspend fun precise(enabled: Boolean) {

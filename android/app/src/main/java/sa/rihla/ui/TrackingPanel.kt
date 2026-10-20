@@ -33,6 +33,14 @@ fun TrackingOptions(vm: JourneyViewModel, data: ScreenData) {
             "المتوازن يطلب 5 ثوانٍ أثناء الحركة و30 عند التوقف. الدقة الأعلى تطلب 3 ثوانٍ، وتتكيف إلى ثانيتين عند السرعة أو المنعطفات أو ضعف الدقة، و15 عند التوقف. عودة نشاط القيادة أو بلوتوث السيارة تعيد الطلب السريع. قد تزيد الدقة الأعلى استهلاك البطارية.",
             style = MaterialTheme.typography.bodySmall,
         )
+        Row {
+            Text("تفاصيل المنعطفات والدوارات", Modifier.weight(1f))
+            Switch(data.settings.turnDetails, { vm.turnDetails(it) })
+        }
+        Text(
+            "يرصد تغيّر الاتجاه التدريجي ويطلب نقطة كل ثانيتين لمدة 15 ثانية؛ يعمل في الوضع المتوازن أيضًا. يعتمد على إشارة GPS المتاحة وقد يزيد استهلاك البطارية أثناء المنعطفات.",
+            style = MaterialTheme.typography.bodySmall,
+        )
         TextButton(
             onClick = {
                 sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("tracking_health")

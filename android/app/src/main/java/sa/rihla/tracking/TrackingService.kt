@@ -49,7 +49,9 @@ class TrackingService : Service() {
     private var fusedRecoveryAt = 0L
     private var lastHeartbeat = 0L
     private var lastSpeed = 0.0
-    private var lastBearing: Double? = null
+    private val turnDetector = TurnDetailDetector()
+    private var turnDetails = true
+    private var turnBoostUntil = 0L
     private var boostUntil = 0L
     private var gnssRegistered = false
     private val gnss =
@@ -236,18 +238,15 @@ class TrackingService : Service() {
                         lastHeartbeat = nowElapsed
                     }
                     if (accepted) {
-                        val bearingChange =
-                            lastBearing
-                                ?.takeIf { f.hasBearing }
-                                ?.let {
-                                    kotlin.math.abs(((f.bearing - it + 540) % 360) - 180)
-                                } ?: 0.0
-                        if (f.speed >= 4 && (bearingChange >= 25 || f.accuracy > 25))
-                            boostUntil = nowElapsed + 30_000
-                        if (f.hasBearing) lastBearing = f.bearing
+                        if (turnDetails && turnDetector.inspect(f))
+                            turnBoostUntil = nowElapsed + 15_000
+                        if (f.speed >= 4 && f.accuracy > 25) boostUntil = nowElapsed + 30_000
                         lastSpeed = f.speed
                     }
-                    val shouldSlow = state.stopStart > 0 && nowElapsed >= boostUntil
+                    val shouldSlow =
+                        state.stopStart > 0 &&
+                            nowElapsed >= boostUntil &&
+                            nowElapsed >= turnBoostUntil
                     if (
                         shouldSlow != slow ||
                             registeredInterval !=
@@ -256,6 +255,7 @@ class TrackingService : Service() {
                                     precise,
                                     lastSpeed,
                                     nowElapsed < boostUntil,
+                                    turnDetails && nowElapsed < turnBoostUntil,
                                 )
                     ) {
                         slow = shouldSlow
@@ -291,8 +291,16 @@ class TrackingService : Service() {
         scope.launch {
             app.settings.flow.collect { preferences ->
                 commandLock.withLock {
-                    if (preferences.preciseTracking != precise) {
+                    if (
+                        preferences.preciseTracking != precise ||
+                            preferences.turnDetails != turnDetails
+                    ) {
                         precise = preferences.preciseTracking
+                        turnDetails = preferences.turnDetails
+                        if (!turnDetails) {
+                            turnBoostUntil = 0
+                            turnDetector.reset()
+                        }
                         if (registeredInterval != null)
                             withContext(Dispatchers.Main) { requestUpdates() }
                     }
@@ -340,6 +348,7 @@ class TrackingService : Service() {
                 }
                 health(this@TrackingService, if (autoPending) "checking_driving" else "running")
                 precise = preferences.preciseTracking
+                turnDetails = preferences.turnDetails
                 slow = app.repository.dao.active()?.state?.stopStart?.let { it > 0 } == true
                 if (i?.getBooleanExtra("motion_resume", false) == true) {
                     slow = false
@@ -378,6 +387,7 @@ class TrackingService : Service() {
                 precise,
                 lastSpeed,
                 SystemClock.elapsedRealtime() < boostUntil,
+                turnDetails && SystemClock.elapsedRealtime() < turnBoostUntil,
             )
         if (registeredInterval == interval) return
         generation++

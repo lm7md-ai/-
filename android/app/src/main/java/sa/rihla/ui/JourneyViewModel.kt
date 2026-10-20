@@ -157,7 +157,9 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun budget(value: String): Boolean {
-        val amount = if (value.isBlank() || normalizeSms(value).trim() == "0") 0L else decimalUnits(value, 2) ?: return false
+        val amount =
+            if (value.isBlank() || normalizeSms(value).trim() == "0") 0L
+            else decimalUnits(value, 2) ?: return false
         if (amount !in 0..100_000_000) return false
         work { app.settings.budget(amount) }
         return true
@@ -165,6 +167,10 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
 
     fun bluetooth(address: String) {
         work { app.settings.bluetooth(address) }
+    }
+
+    fun turnDetails(value: Boolean) {
+        work { app.settings.turnDetails(value) }
     }
 
     fun precise(value: Boolean) {
@@ -274,7 +280,12 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
 
     fun importPastedSms(body: String, result: (Boolean) -> Unit) {
         work {
-            result(repo.importPastedSms(android.provider.Telephony.Sms.getDefaultSmsPackage(app) ?: "sms", body))
+            result(
+                repo.importPastedSms(
+                    android.provider.Telephony.Sms.getDefaultSmsPackage(app) ?: "sms",
+                    body,
+                )
+            )
         }
     }
 
