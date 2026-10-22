@@ -44,6 +44,7 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
     val camera = remember { MapCamera() }
     val style = rememberRouteStyle()
     var pointSelection by remember { mutableStateOf<RoutePointSelection?>(null) }
+    val sectionState = remember(selectedTrip) { SectionSelectionState() }
     var routeStats by remember { mutableStateOf<RouteDisplayStats?>(null) }
     var layers by remember { mutableStateOf(MapLayers()) }
     var measure by rememberSaveable { mutableStateOf(false) }
@@ -56,7 +57,11 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
     var stop by remember { mutableStateOf<StopDetails?>(null) }
     var tools by rememberSaveable { mutableStateOf(false) }
     var follow by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(selectedTrip, measure) { pointSelection = null }
+    val analysis = rememberRouteAnalysis(points, stops)
+    LaunchedEffect(selectedTrip, measure) {
+        pointSelection = null
+        sectionState.reset()
+    }
     LaunchedEffect(follow, points.lastOrNull()?.recordedAt) {
         if (follow) points.lastOrNull()?.let { camera.center(it.latitude, it.longitude) }
     }
@@ -73,6 +78,14 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                         }
                 }
             else emptyList()
+    }
+    LaunchedEffect(points) {
+        pointSelection?.let { selected ->
+            if (points.getOrNull(selected.index)?.recordedAt != selected.point.recordedAt) {
+                pointSelection = null
+                sectionState.reset()
+            }
+        }
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
@@ -121,6 +134,7 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                 onPointPick = if (measure) null else { value -> pointSelection = value },
                 onRouteStats = { routeStats = it },
                 highlightedTime = pointSelection?.point?.recordedAt,
+                highlightedRange = sectionState.range(pointSelection),
                 pickStopsWithSelection = true,
                 centerSelection = false,
                 onPick = { lat, lon ->
@@ -131,16 +145,15 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
             RouteStyleControls(style.value, routeStats) {
                 style.set(it)
                 pointSelection = null
+                sectionState.reset()
             }
             pointSelection?.let { value ->
-                RoutePointDetails(
-                    value,
-                    trip?.startedAt ?: points.firstOrNull()?.recordedAt ?: 0,
-                    points.size,
-                    { camera.inspect(it) },
-                    { pointSelection = null },
-                )
+                RouteSectionInspector(analysis, value, trip, sectionState, camera) {
+                    pointSelection = null
+                }
             }
+            RouteSectionHighlights(analysis, sectionState, camera)
+
             Row(Modifier.horizontalScroll(rememberScrollState())) {
                 FilterChip(follow, { follow = !follow }, label = { Text("متابعة آخر نقطة") })
                 FilterChip(

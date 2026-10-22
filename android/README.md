@@ -1,3 +1,8 @@
+# Route segment details 6.2
+
+[Tap-to-inspect edges, indexed range metrics, historical fuel estimates, comparisons and route highlights](docs/SECTIONS_6_2.md).
+Read-only analysis; journey schema 7 and audio schema 2 remain unchanged. Update the same edition in place.
+
 # Route tools 6.1
 
 [Confidence lines, display-only cleanup/matching, turn detail, colors, inspection, zoom simplification and recurring routes](docs/ROUTES_6_1.md).

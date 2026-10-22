@@ -52,7 +52,19 @@ data class PreparedRoute(
     val bridges: Map<Int, List<Pair<Double, Double>>> = emptyMap(),
 )
 
-data class RoutePointSelection(val point: RoutePoint, val index: Int, val displayed: DisplayPoint)
+data class RoutePointSelection(
+    val point: RoutePoint,
+    val index: Int,
+    val displayed: DisplayPoint,
+    val segmentEnd: Int? = null,
+)
+
+fun adjacentRouteSegment(raw: List<RoutePoint>, index: Int): Int? =
+    when {
+        index > 0 && index < raw.size && !routeBreak(raw[index - 1], raw[index]) -> index
+        index >= 0 && index < raw.lastIndex && !routeBreak(raw[index], raw[index + 1]) -> index + 1
+        else -> null
+    }
 
 fun routeBreak(a: RoutePoint, b: RoutePoint) =
     b.breakBefore ||
@@ -385,4 +397,51 @@ class RouteHitIndex(
         for (x in fromX..toX) for (y in fromY..toY) cells[x to y]?.let { found.addAll(it) }
         return found
     }
+}
+
+/** Purple selection follows displayed geometry, retaining original confidence and true gaps. */
+fun selectionRouteStrokes(
+    geometry: PreparedRoute,
+    raw: List<RoutePoint>,
+    range: IntRange,
+    tolerance: Double,
+    confidence: Boolean,
+    check: () -> Unit = {},
+): List<RouteStroke> {
+    if (raw.isEmpty() || raw.size != geometry.points.size || range.isEmpty()) return emptyList()
+    val from = range.first.coerceIn(0, raw.lastIndex)
+    val to = range.last.coerceIn(from, raw.lastIndex)
+    val lines = ArrayList<RouteStroke>()
+    var line = ArrayList<Pair<Double, Double>>()
+    var dashed = false
+    fun flush() {
+        if (line.size > 1)
+            lines.add(
+                RouteStroke(
+                    0xFF5041D2.toInt(),
+                    dashed,
+                    simplifyRouteGeometry(line, tolerance, check),
+                )
+            )
+        line = ArrayList()
+    }
+    for (i in from + 1..to) {
+        if (i % 256 == 0) check()
+        if (routeBreak(raw[i - 1], raw[i])) {
+            flush()
+            continue
+        }
+        val weak = confidence && (raw[i - 1].accuracy !in .1..25.0 || raw[i].accuracy !in .1..25.0)
+        if (line.isNotEmpty() && dashed != weak) flush()
+        if (line.isEmpty()) {
+            dashed = weak
+            val a = geometry.points[i - 1]
+            line.add(a.latitude to a.longitude)
+        }
+        line.addAll(geometry.bridges[i].orEmpty())
+        val b = geometry.points[i]
+        line.add(b.latitude to b.longitude)
+    }
+    flush()
+    return lines
 }

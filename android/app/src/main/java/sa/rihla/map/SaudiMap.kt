@@ -251,6 +251,10 @@ class MapCamera {
         view?.changeZoom(delta)
     }
 
+    fun section(range: IntRange) {
+        view?.fitSection(range)
+    }
+
     fun fit() {
         view?.fitRoute()
     }

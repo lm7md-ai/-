@@ -162,6 +162,17 @@ class RouteMapView(c: Context) : View(c) {
     var onPointPick: ((RoutePointSelection) -> Unit)? = null
     var onRouteStats: ((RouteDisplayStats) -> Unit)? = null
     var highlightedTime: Long? = null
+    var highlightedRange: IntRange? = null
+    private var rangeJob: Job? = null
+    private var rangeGeometry: PreparedRoute? = null
+    private var requestedRange: IntRange? = null
+    private var rangeLevel = -1
+    private var rangeLines: List<RouteStroke> = emptyList()
+    private var rangeGeneration = 0L
+    private val rangeSolidPath = Path()
+    private val rangeDashedPath = Path()
+    private var renderedRangeLines: List<RouteStroke>? = null
+    private var rangeViewport: List<Double> = emptyList()
     private var inspecting = false
     private var routeJob: Job? = null
     private var routeGeneration = 0L
@@ -251,6 +262,10 @@ class RouteMapView(c: Context) : View(c) {
                             onStopPick?.invoke(stop)
                             return true
                         }
+                    }
+                    inspectPoint(e.x, e.y, requireMode = false)?.let { selection ->
+                        onPointPick?.invoke(selection)
+                        return true
                     }
                     val coord = coordinate(p.first + e.x - width / 2, p.second + e.y - height / 2)
                     onPick?.invoke(coord.first, coord.second)
@@ -350,25 +365,34 @@ class RouteMapView(c: Context) : View(c) {
 
     fun selectRecordedPoint(index: Int) {
         val point = preparedRaw.getOrNull(index) ?: return
+        if (points.getOrNull(index) != point) return
         val drawn = prepared?.points?.getOrNull(index) ?: return
-        onPointPick?.invoke(RoutePointSelection(point, index, drawn))
+        onPointPick?.invoke(
+            RoutePointSelection(point, index, drawn, adjacentRouteSegment(preparedRaw, index))
+        )
         center(drawn.latitude, drawn.longitude)
     }
 
-    private fun inspectPoint(x: Float, y: Float): RoutePointSelection? {
-        if (!display.inspect || !layers.route || zoom < 12 || onPointPick == null) return null
+    private fun inspectPoint(
+        x: Float,
+        y: Float,
+        requireMode: Boolean = true,
+    ): RoutePointSelection? {
+        if ((requireMode && !display.inspect) || !layers.route || zoom < 10 || onPointPick == null)
+            return null
         val ready = prepared ?: return null
         val raw = preparedRaw
         if (raw.isEmpty()) return null
         val center = world(lat, lon)
         val tap = coordinate(center.first + x - width / 2, center.second + y - height / 2)
-        val radius = 32 * resources.displayMetrics.density
+        val radius = (if (zoom < 12) 10 else 32) * resources.displayMetrics.density
         val metersPerPixel =
             156543.03392 * cos(Math.toRadians(lat)) /
                 (1 shl zoom) /
                 resources.displayMetrics.density
         var closest = radius.toDouble()
         var chosen = -1
+        var segment: Int? = null
         fun screen(p: DisplayPoint): XY {
             val w = world(p.latitude, p.longitude)
             return XY(w.first - center.first + width / 2, w.second - center.second + height / 2)
@@ -380,6 +404,7 @@ class RouteMapView(c: Context) : View(c) {
             if (pointDistance < closest) {
                 closest = pointDistance
                 chosen = index
+                segment = adjacentRouteSegment(raw, index)
             }
             if (index > 0 && !routeBreak(raw[index - 1], raw[index])) {
                 val a = ready.points[index - 1]
@@ -399,6 +424,7 @@ class RouteMapView(c: Context) : View(c) {
                         projection(XY(x.toDouble(), y.toDouble()), start, end)
                     if (distance < closest) {
                         closest = distance
+                        segment = index
                         chosen =
                             if (ready.bridges[index].isNullOrEmpty()) {
                                 if (fraction < .5) index - 1 else index
@@ -409,7 +435,9 @@ class RouteMapView(c: Context) : View(c) {
                 }
             }
         }
-        return chosen.takeIf { it >= 0 }?.let { RoutePointSelection(raw[it], it, ready.points[it]) }
+        return chosen
+            .takeIf { it >= 0 }
+            ?.let { RoutePointSelection(raw[it], it, ready.points[it], segment) }
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
@@ -436,6 +464,62 @@ class RouteMapView(c: Context) : View(c) {
         gestures.onTouchEvent(e)
         if (e.action == MotionEvent.ACTION_UP) performClick()
         return true
+    }
+
+    fun fitSection(range: IntRange) {
+        if (range.isEmpty() || points.isEmpty()) return
+        val section =
+            points.subList(
+                range.first.coerceIn(0, points.size),
+                (range.last + 1).coerceIn(0, points.size),
+            )
+        if (section.isEmpty()) return
+        val south = section.minOf { it.latitude }
+        val north = section.maxOf { it.latitude }
+        val west = section.minOf { it.longitude }
+        val east = section.maxOf { it.longitude }
+        lat = (south + north) / 2
+        lon = (west + east) / 2
+        for (level in 17 downTo 7) {
+            zoom = level
+            val a = world(north, west)
+            val b = world(south, east)
+            if (b.first - a.first <= width * .8 && b.second - a.second <= height * .8) break
+        }
+        centered = true
+        invalidate()
+    }
+
+    private fun prepareRange(geometry: PreparedRoute?) {
+        val range = highlightedRange
+        if (rangeGeometry === geometry && requestedRange == range && rangeLevel == zoom) return
+        rangeGeometry = geometry
+        requestedRange = range
+        rangeLevel = zoom
+        val token = ++rangeGeneration
+        rangeJob?.cancel()
+        rangeLines = emptyList()
+        if (geometry == null || range == null || preparedRaw.size != geometry.points.size) return
+        val raw = preparedRaw
+        val from = range.first.coerceIn(0, raw.lastIndex.coerceAtLeast(0))
+        val to = range.last.coerceIn(from, raw.lastIndex.coerceAtLeast(0))
+        if (raw.isEmpty()) return
+        val tolerance = 156543.03392 * cos(Math.toRadians(lat)) / (1 shl zoom)
+        val confidence = display.confidence
+        rangeJob =
+            scope.launch(Dispatchers.Default) {
+                val current = currentCoroutineContext()
+                val lines =
+                    selectionRouteStrokes(geometry, raw, from..to, tolerance, confidence) {
+                        current.ensureActive()
+                    }
+                withContext(Dispatchers.Main) {
+                    if (token == rangeGeneration) {
+                        rangeLines = lines
+                        invalidate()
+                    }
+                }
+            }
     }
 
     private fun prepareDisplay(left: Double, top: Double) {
@@ -712,6 +796,51 @@ class RouteMapView(c: Context) : View(c) {
             }
         paint.pathEffect = null
         paint.strokeCap = Paint.Cap.BUTT
+        prepareRange(geometry)
+        if (layers.route && highlightedRange != null) {
+            paint.color = Color.rgb(80, 65, 210)
+            paint.strokeWidth = 7f * resources.displayMetrics.density
+            if (renderedRangeLines !== rangeLines || rangeViewport != viewportKey) {
+                rangeSolidPath.reset()
+                rangeDashedPath.reset()
+                rangeLines.forEach { stroke ->
+                    val path = if (stroke.dashed) rangeDashedPath else rangeSolidPath
+                    stroke.coordinates.forEachIndexed { i, p ->
+                        val xy = screen(p.first, p.second)
+                        if (i == 0) path.moveTo(xy.first, xy.second)
+                        else path.lineTo(xy.first, xy.second)
+                    }
+                }
+                renderedRangeLines = rangeLines
+                rangeViewport = viewportKey
+            }
+            canvas.drawPath(rangeSolidPath, paint)
+            paint.pathEffect = weakDash
+            canvas.drawPath(rangeDashedPath, paint)
+            paint.pathEffect = null
+            listOf(highlightedRange!!.first, highlightedRange!!.last).distinct().forEachIndexed {
+                i,
+                index ->
+                geometry?.points?.getOrNull(index)?.let { point ->
+                    val xy = screen(point.latitude, point.longitude)
+                    paint.style = Paint.Style.FILL
+                    canvas.drawCircle(
+                        xy.first,
+                        xy.second,
+                        8f * resources.displayMetrics.density,
+                        paint,
+                    )
+                    paint.textSize = 14f * resources.displayMetrics.density
+                    canvas.drawText(
+                        if (i == 0) "A" else "B",
+                        xy.first + 12f * resources.displayMetrics.density,
+                        xy.second - 12f * resources.displayMetrics.density,
+                        paint,
+                    )
+                    paint.style = Paint.Style.STROKE
+                }
+            }
+        }
         highlightedTime?.let { time ->
             geometry
                 ?.points
@@ -841,6 +970,9 @@ class RouteMapView(c: Context) : View(c) {
 
     override fun onDetachedFromWindow() {
         routeGeneration++
+        rangeGeneration++
+        rangeJob?.cancel()
+        rangeGeometry = null
         routeJob?.cancel()
         requestedPoints = null
         scope.cancel()
@@ -876,6 +1008,7 @@ fun RouteMap(
     onPointPick: ((RoutePointSelection) -> Unit)? = null,
     onRouteStats: ((RouteDisplayStats) -> Unit)? = null,
     highlightedTime: Long? = null,
+    highlightedRange: IntRange? = null,
     onPick: ((Double, Double) -> Unit)? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -897,7 +1030,8 @@ fun RouteMap(
                     v.layers != layers ||
                     v.measurement != measurement ||
                     v.display != display ||
-                    v.highlightedTime != highlightedTime
+                    v.highlightedTime != highlightedTime ||
+                    v.highlightedRange != highlightedRange
             v.points = points
             v.events = events
             v.places = places
@@ -913,6 +1047,7 @@ fun RouteMap(
             v.onPointPick = onPointPick
             v.onRouteStats = onRouteStats
             v.highlightedTime = highlightedTime
+            v.highlightedRange = highlightedRange
             camera?.view = v
             v.online(preferences.onlineMaps)
             v.fit()

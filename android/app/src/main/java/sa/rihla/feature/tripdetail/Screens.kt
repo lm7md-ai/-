@@ -38,6 +38,7 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
     val camera = remember { MapCamera() }
     val style = rememberRouteStyle()
     var pointSelection by remember(o.id) { mutableStateOf<RoutePointSelection?>(null) }
+    val sectionState = remember(o.id) { SectionSelectionState() }
     var routeStats by remember(o.id) { mutableStateOf<RouteDisplayStats?>(null) }
     var deleting by remember { mutableStateOf(false) }
     val stops = remember(o, events) { stopDetails(o, events) }
@@ -51,7 +52,20 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
             if (replay) points.take(cursor.coerceIn(0, points.lastIndex.coerceAtLeast(0)) + 1)
             else points
         }
-    LaunchedEffect(replay, cursor) { pointSelection = null }
+    val analysis = rememberRouteAnalysis(previewPoints, stops)
+    LaunchedEffect(replay, cursor) {
+        pointSelection = null
+        sectionState.reset()
+        sectionState.comparison = sectionState.comparison?.takeIf { it.to < previewPoints.size }
+    }
+    LaunchedEffect(previewPoints) {
+        pointSelection?.let { selected ->
+            if (previewPoints.getOrNull(selected.index)?.recordedAt != selected.point.recordedAt) {
+                pointSelection = null
+                sectionState.reset()
+            }
+        }
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -91,20 +105,20 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
                 onPointPick = { pointSelection = it },
                 onRouteStats = { routeStats = it },
                 highlightedTime = pointSelection?.point?.recordedAt,
+                highlightedRange = sectionState.range(pointSelection),
             )
             RouteStyleControls(style.value, routeStats) {
                 style.set(it)
                 pointSelection = null
+                sectionState.reset()
             }
             pointSelection?.let { value ->
-                RoutePointDetails(
-                    value,
-                    o.startedAt,
-                    previewPoints.size,
-                    { camera.inspect(it) },
-                    { pointSelection = null },
-                )
+                RouteSectionInspector(analysis, value, o, sectionState, camera) {
+                    pointSelection = null
+                }
             }
+            RouteSectionHighlights(analysis, sectionState, camera)
+
             RouteQualityCard(points, o, data.now)
             Text(tr("attribution"), style = MaterialTheme.typography.labelSmall)
             if (data.settings.offlineAttribution.isNotEmpty())

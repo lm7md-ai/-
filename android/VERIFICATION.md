@@ -1,3 +1,23 @@
+# Verification — version 6.2, 2026-10-22
+
+[Interactive segment details and calculation limits](docs/SECTIONS_6_2.md).
+
+- 170 Android tests passed with zero failures, errors or skipped tests; includes all prior audio, SMS, journey, backup and migration suites. 13 Python tool tests and schema verification through journey schema 7 passed. Journey schema 7 and audio schema 2 remain unchanged.
+- Native taps select the actual recorded edge without enabling drag inspection. Stop markers retain priority; place selection/measurement callers without a route callback retain their behavior. Programmatic selection refuses cached points belonging to a different displayed trip.
+- Section tests distinguish persisted distance contributions, original GPS polyline length and endpoint displacement; reverse endpoints normalize; explicit/uncertain/time gaps contribute no connected distance or inferred speed. Overlapping stop intervals merge, boundaries and open stops clip correctly, and stop/gap overlap does not double-subtract known time.
+- Historical fuel snapshots drive estimates; gaps, unavailable snapshots and zero contributions with clear GPS displacement suppress misleading fuel estimates. Shared text contains timestamps and metrics without coordinates or the complete route.
+- Analysis uses cancellable background preparation, prefix arrays and block maxima. A 100,000-point recording and 1,000 range queries retain the original records. Selection geometry is prepared in the background; its two screen paths are cached by geometry/viewport and reused. Confidence dashes and real gaps survive highlighting.
+- Compose tests cover direct edge details, an arbitrary anchored range, comparison capture, share intent, original-point expansion and closing. Reviewed RTL preview uses fixture data only. Replay analysis receives only the visible point prefix and drops comparisons outside it.
+
+- Both signed release editions have versionCode 62/versionName 6.2 and minSdk 26, are non-debuggable, retain their respective `sa.rihla` / `sa.rihla.next` identities and the persistent signing certificate, and pass increasing-version checks against published 6.1. Classic is 102,292,935 bytes; next is 102,292,947 bytes, below 100 MiB each.
+- ZIP alignment passes; all five ARM64 native libraries are byte-identical to 6.1 with 16 KiB ELF load alignment. The country-map asset SHA-256 is unchanged. No signing-store files are packaged. [Release hashes](../releases/SHA256SUMS-v6.2).
+
+- Both full Android lint targets pass with 0 errors and 47 warnings each. Selection-path draw allocations were removed; remaining notices include existing convenience/API, dependency-update, ABI and exported media-session warnings.
+
+No physical RedMagic 11 Pro driving or battery test was available. GPS geometry is not a verified road distance; historical speed samples are not continuous telemetry. Time outside confirmed stops does not prove continuous movement. Fuel estimates are not an OBD reading and omit engine idling.
+
+## Previous verification history
+
 # Verification — version 6.1, 2026-10-20
 
 The eight selected route features and their limits are documented in [ROUTES_6_1.md](docs/ROUTES_6_1.md).
