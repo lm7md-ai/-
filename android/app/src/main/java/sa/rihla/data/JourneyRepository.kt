@@ -122,6 +122,7 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                     f,
                     area(places.find { it.type == "HOME" }),
                     area(places.find { it.type == "UNIVERSITY" }),
+                    allowHomeEnd = !insideActiveTemporaryPlace(places, f),
                 )
             if (!result.accepted) return@withTransaction RecordOutcome(false, false)
             dao.point(

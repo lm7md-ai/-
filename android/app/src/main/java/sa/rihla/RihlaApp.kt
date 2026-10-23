@@ -27,6 +27,8 @@ class RihlaApp : Application() {
             ?.forEach { it.delete() }
     }
 
+    val transfers by lazy { TransferStore(this) }
+
     val audioDatabase by lazy {
         Room.databaseBuilder(this, sa.rihla.audio.AudioDatabase::class.java, "audio_library.db")
             .addMigrations(sa.rihla.audio.AudioDatabase.MIGRATION_1_2)

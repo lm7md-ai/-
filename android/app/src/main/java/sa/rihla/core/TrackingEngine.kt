@@ -101,7 +101,13 @@ data class Update(
 )
 
 class TrackingEngine {
-    fun accept(s: EngineState, f: Fix, home: Area?, university: Area?): Update {
+    fun accept(
+        s: EngineState,
+        f: Fix,
+        home: Area?,
+        university: Area?,
+        allowHomeEnd: Boolean = true,
+    ): Update {
         if (
             !f.lat.isFinite() ||
                 !f.lon.isFinite() ||
@@ -252,7 +258,7 @@ class TrackingEngine {
                     )
             }
         }
-        val endCandidate = atHome && !movement && n.leftHome
+        val endCandidate = allowHomeEnd && atHome && !movement && n.leftHome
         n =
             n.copy(
                 homeSince =

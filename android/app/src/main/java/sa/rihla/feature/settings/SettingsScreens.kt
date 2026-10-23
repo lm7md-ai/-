@@ -180,6 +180,16 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                     "أدوات التطبيق" to
                         listOf(
                             Triple(
+                                "father_transfers",
+                                "حوالات الوالد",
+                                "الأرشيف والقديم والجديد وآخر حوالة",
+                            ),
+                            Triple(
+                                "temporary_places",
+                                "الأماكن المؤقتة والجامعة",
+                                "منزل أو استراحة مؤقتة وإحصائية الجامعة",
+                            ),
+                            Triple(
                                 "repeated_routes",
                                 "المسارات المتكررة",
                                 "قارن الوقت والمسافة والتوقفات وساعة المغادرة",
@@ -256,8 +266,7 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                     label,
                     description,
                     when (key) {
-                        "repeated_routes" ->
-                            androidx.compose.material.icons.Icons.Default.Route
+                        "repeated_routes" -> androidx.compose.material.icons.Icons.Default.Route
                         "tracking_health" -> androidx.compose.material.icons.Icons.Default.GpsFixed
                         "models" -> androidx.compose.material.icons.Icons.Default.Memory
                         "assistant",
@@ -557,7 +566,9 @@ fun PlaceDialog(vm: JourneyViewModel, data: ScreenData, type: String, onDismiss:
     var selected by remember { mutableStateOf(existing?.let { it.latitude to it.longitude }) }
     var radius by remember {
         mutableStateOf(
-            (existing?.radius ?: if (type == "HOME") 200.0 else 800.0).toInt().toString()
+            (existing?.radius ?: if (type == "HOME" || type.startsWith("TEMP_")) 200.0 else 800.0)
+                .toInt()
+                .toString()
         )
     }
     var polygonMode by remember { mutableStateOf(existing?.polygon?.isNotEmpty() == true) }
@@ -576,7 +587,11 @@ fun PlaceDialog(vm: JourneyViewModel, data: ScreenData, type: String, onDismiss:
                 Modifier.systemBarsPadding().padding(16.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Heading(if (type == "HOME") "configure_home" else "configure_university")
+                Text(
+                    if (type.startsWith("TEMP_")) "حدد موقع المكان المؤقت"
+                    else tr(if (type == "HOME") "configure_home" else "configure_university"),
+                    style = MaterialTheme.typography.titleLarge,
+                )
                 Text(tr("map_selection"))
                 RouteMap(
                     emptyList(),

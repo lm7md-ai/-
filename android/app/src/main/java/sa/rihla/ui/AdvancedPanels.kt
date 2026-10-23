@@ -123,6 +123,7 @@ fun AdvancedAnalytics(data: ScreenData, bounds: Pair<Long, Long>) {
         destinations.take(5).forEach { d ->
             Text(
                 (if (d.name in listOf("HOME", "UNIVERSITY")) tr(d.name.lowercase())
+                else if (temporaryPlaceInfo(d.name) != null) placeDisplayName(d.name)
                 else d.name.removePrefix("PIN:")) + " · " + num(d.count.toDouble(), 0) + " مشوار"
             )
             Text(

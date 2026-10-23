@@ -1,3 +1,22 @@
+# Verification — version 6.3, 2026-10-23
+
+[Temporary places, campus legs and father-transfer setup](docs/PERSONAL_6_3.md).
+
+- 183 Android tests passed with zero failures, errors or skipped tests. Includes prior audio, purchase SMS, tracking, editing, migration and backup suites. 13 Python tool tests and journey schema verification through version 7 passed. Journey schema 7 and audio schema 2 remain unchanged.
+- Parser fixtures use fictional names/account placeholders. The supplied Rajhi incoming-header structure extracts 130 SAR independently of account digits, rejects outgoing/failed/reversed/purchase/ambiguous amounts and handles strict Riyadh timestamps. Matching requires a privately configured full sender name or explicit confirmation.
+- Transfer-store tests cover fixed activation cutoff using original SMS seconds, exact rescan idempotence, cross-source duplicate review, separate totals/latest, manual decisions and private JSON restore without replacing current rows. XML tests accept incoming messages only, reject DTD and enforce import size bounds. The new additive SQLite store does not alter purchases or journeys.
+- Temporary-leg tests require recorded dwell or a confirmed stop and confirmed campus arrival; pass-bys, expired places and broken dwell do not create legs. Original points and outing records remain intact. A temporary rest overlapping permanent home suspends automatic trip ending while active; after expiry the normal fresh home dwell is required. Permanent-home origin classification and distance remain intact.
+- Native-rendered Compose tests navigate More → each new feature, activate the transfer cutoff and display fixture totals, then open the original trip from a campus-leg card. Reviewed RTL previews contain fixture data only.
+
+- Both release APKs are versionCode 63/versionName 6.3, minSdk 26 and non-debuggable, with packages `sa.rihla` and `sa.rihla.next`. Each verifies against its published 6.2 baseline with the retained signing certificate and an increasing version.
+- Classic is 102,355,375 bytes; next is 102,355,387 bytes, both below GitHub's 100 MiB limit. ZIP alignment passes, all five native ARM64 libraries are byte-identical to 6.2 with 16 KiB ELF load alignment, the country-map SHA-256 remains unchanged, and no signing stores are packaged. [Release hashes](../releases/SHA256SUMS-v6.3).
+
+- Both full release lint targets pass with 0 errors and 49 warnings each. The two added notices suggest KTX convenience wrappers for existing SQLite/SharedPreferences APIs; prior dependency/API/ABI/media-session notices remain visible. Complete combined test/build/lint invocation finished successfully.
+
+No physical RedMagic 11 Pro or personal SMS inbox was available. The cloud tests do not establish device permission grants, actual background delivery, real-world GPS accuracy or battery savings. History totals cover available recognized messages, not deleted SMS or bank records. Possible duplicate receipts are excluded from automatic totals pending review. Journey backups include temporary place definitions; transfers have a separate JSON backup.
+
+## Previous verification history
+
 # Verification — version 6.2, 2026-10-22
 
 [Interactive segment details and calculation limits](docs/SECTIONS_6_2.md).

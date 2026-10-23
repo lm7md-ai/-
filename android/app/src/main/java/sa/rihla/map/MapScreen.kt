@@ -216,6 +216,15 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                 TextButton(
                     onClick = {
                         sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit(
+                            "temporary_places"
+                        )
+                    }
+                ) {
+                    Text("منزل أو استراحة مؤقتة وإحصائية الجامعة")
+                }
+                TextButton(
+                    onClick = {
+                        sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit(
                             "repeated_routes"
                         )
                     }
@@ -303,10 +312,7 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                             },
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text(
-                                if (place.type.startsWith("PIN:")) place.type.removePrefix("PIN:")
-                                else tr(place.type.lowercase())
-                            )
+                            Text(sa.rihla.core.placeDisplayName(place.type))
                         }
                         if (place.type.startsWith("PIN:"))
                             TextButton(onClick = { vm.deletePin(place.type) }) { Text("حذف") }

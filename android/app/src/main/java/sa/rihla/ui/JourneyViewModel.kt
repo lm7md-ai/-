@@ -251,7 +251,17 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun place(p: SavedPlace) {
-        work { repo.dao.place(p) }
+        work {
+            repo.dao.place(p)
+            sa.rihla.tracking.HomeGeofences.restore(app)
+        }
+    }
+
+    fun deleteTemporaryPlace(type: String) {
+        work {
+            repo.dao.deleteTemporaryPlace(type)
+            sa.rihla.tracking.HomeGeofences.restore(app)
+        }
     }
 
     fun deletePin(type: String) {

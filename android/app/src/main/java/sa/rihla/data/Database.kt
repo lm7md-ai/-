@@ -147,6 +147,9 @@ data class FuelFillUp(
 
 @Dao
 interface JourneyDao {
+    @Query("DELETE FROM places WHERE type=:type AND (type LIKE 'TEMP_HOME:%' OR type LIKE 'TEMP_REST:%')")
+    suspend fun deleteTemporaryPlace(type:String)
+
     @Query("DELETE FROM places WHERE type=:type AND type LIKE 'PIN:%'")
     suspend fun deletePin(type: String)
 

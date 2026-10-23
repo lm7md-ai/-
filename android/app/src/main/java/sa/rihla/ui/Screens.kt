@@ -263,6 +263,8 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                             page == "voice" -> "الأوامر الصوتية"
                                             page == "studio" -> "استوديو المحاضرات"
                                             page == "player" -> "المشغل"
+                                            page == "father_transfers" -> "حوالات الوالد"
+                                            page == "temporary_places" -> "الأماكن المؤقتة والجامعة"
                                             page == "repeated_routes" -> "المسارات المتكررة"
                                             page == "tracking_health" -> "مركز التتبع الذكي"
                                             page == "settings" -> tr("more")
@@ -368,6 +370,9 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                         "history" -> History(data) { selected = it }
                                         "calendar" -> CalendarScreen(data) { selected = it }
                                         "map" -> sa.rihla.map.MapScreen(vm, data)
+                                        "father_transfers" -> FatherTransfersScreen()
+                                        "temporary_places" ->
+                                            TemporaryPlacesScreen(vm, data) { selected = it }
                                         "repeated_routes" ->
                                             androidx.compose.foundation.lazy.LazyColumn {
                                                 item {

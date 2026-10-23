@@ -1,3 +1,8 @@
+# Temporary places and incoming transfers 6.3
+
+[Temporary rests, independent campus-leg statistics and private father-transfer history](docs/PERSONAL_6_3.md).
+Journey schema 7 and audio schema 2 remain unchanged. Incoming transfers use a separate additive local store and JSON backup.
+
 # Route segment details 6.2
 
 [Tap-to-inspect edges, indexed range metrics, historical fuel estimates, comparisons and route highlights](docs/SECTIONS_6_2.md).
