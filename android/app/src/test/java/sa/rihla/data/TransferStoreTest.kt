@@ -142,4 +142,48 @@ class TransferStoreTest {
             store.close()
         }
     }
+
+    @Test
+    fun restoringAnotherSourceQuarantinesMatchingAutomaticRowsWithoutChangingDecisions() {
+        val context = RuntimeEnvironment.getApplication()
+        var backup = ""
+        TransferStore(context).use { store ->
+            store.configure(setOf("سالم عبدالله مثال"), 1603351090000, true)
+            store.import(text, 1603351080000, "xml:1")
+            backup = store.export()
+        }
+        context.deleteDatabase("incoming_transfers.db")
+        TransferStore(context).use { store ->
+            store.import(text, 1603351080000, "inbox:1")
+            assertEquals(1, store.restore(backup))
+            assertEquals(2, store.rows().size)
+            assertEquals(13000L, transferTotals(store.rows(), store.aliases, store.cutoff).all)
+            assertTrue(store.rows().first { it.origin == "xml:1" }.duplicate)
+            assertEquals(0, store.restore(backup))
+            store.decide(store.rows().first { it.origin == "xml:1" }.id, 1)
+            assertEquals(26000L, transferTotals(store.rows(), store.aliases, store.cutoff).all)
+        }
+    }
+
+    @Test
+    fun fractionalFinancialValuesAndFutureOriginalTimestampsAreRejectedAtomically() {
+        val context = RuntimeEnvironment.getApplication()
+        TransferStore(context).use { store ->
+            store.configure(setOf("سالم عبدالله مثال"), 1603351090000, true)
+            store.import(text, 1603351080000, "inbox:1")
+            val backup = store.export()
+            for ((key, value) in
+                listOf(
+                    "amount" to 13000.5,
+                    "decision" to 1.5,
+                    "receivedAt" to System.currentTimeMillis() + 86400000L,
+                )) {
+                val bad = JSONObject(backup)
+                bad.getJSONArray("items").getJSONObject(0).put(key, value)
+                assertThrows(Exception::class.java) { store.restore(bad.toString()) }
+                assertEquals(1, store.rows().size)
+                assertEquals(0, store.rows().single().decision)
+            }
+        }
+    }
 }

@@ -6,7 +6,7 @@ android {
  namespace = "sa.rihla"; compileSdk = 37
  compileSdkMinor = 2
  buildToolsVersion = "37.0.0"
- defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 63; versionName = "6.3"; ndk { abiFilters += "arm64-v8a" } }
+ defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 64; versionName = "6.4"; ndk { abiFilters += "arm64-v8a" } }
  packaging { jniLibs.useLegacyPackaging = true }
  sourceSets.getByName("main").assets.setSrcDirs(listOf("src/main/countryAssets"))
  flavorDimensions += "edition"

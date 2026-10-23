@@ -19,7 +19,9 @@ fun temporaryCommutes(
     points: List<RoutePoint>,
     events: List<JourneyEvent>,
     places: List<SavedPlace>,
+    check: () -> Unit = {},
 ): List<TemporaryCommute> {
+    check()
     if (points.size < 2) return emptyList()
     val arrivals =
         (events.filter { it.type == "VISIT" && it.confirmed }.map { it.startedAt } +
@@ -39,7 +41,14 @@ fun temporaryCommutes(
             var entered = -1
             var lastInside = -1
             for (i in 0..end) {
+                if (i % 128 == 0) check()
                 val p = points[i]
+                // Expiry is not evidence of leaving the location.
+                if (p.recordedAt !in info.created until info.expires) {
+                    entered = -1
+                    lastInside = -1
+                    continue
+                }
                 if (p.recordedAt <= priorArrival) {
                     entered = -1
                     lastInside = -1
@@ -81,7 +90,7 @@ fun temporaryCommutes(
                     if (
                         confirmed &&
                             lastInside < end &&
-                            (best == null || stop.recordedAt > best!!.departure)
+                            (best == null || stop.recordedAt > best.departure)
                     )
                         best =
                             TemporaryCommute(place.type, lastInside, end, stop.recordedAt, arrival)

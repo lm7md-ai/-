@@ -33,6 +33,38 @@ import sa.rihla.RihlaApp
 @Config(sdk=[35],application=RihlaApp::class)
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class AudioPlaybackTest {
+    @Test
+    fun catalogRelocationRefreshesCurrentAndQueuedUrisWithoutLosingPlaybackPosition() {
+        val app = RuntimeEnvironment.getApplication() as RihlaApp
+        val first = AudioTrack("move-a", "content://audio-fixture/first.wav", "أول", durationMs=120000)
+        val second = AudioTrack("move-b", "content://audio-fixture/second.wav", "ثان", durationMs=120000)
+        runBlocking { app.audio.add(first); app.audio.add(second) }
+        val controller = Robolectric.buildService(AudioPlaybackService::class.java).create()
+        try {
+            val player = AudioPlaybackService::class.java.getDeclaredField("player").apply { isAccessible = true }.get(controller.get()) as ExoPlayer
+            player.setMediaItems(listOf(AudioViewModel.item(first), AudioViewModel.item(second)), 1, 20000)
+            player.repeatMode = androidx.media3.common.Player.REPEAT_MODE_ALL
+            player.shuffleModeEnabled = true
+            runBlocking {
+                app.audio.dao.relink(first.id, "content://audio-fixture/moved-first.wav")
+                app.audio.dao.relink(second.id, "content://audio-fixture/moved-second.wav")
+            }
+            val deadline = System.nanoTime() + 10_000_000_000L
+            while (player.currentMediaItem?.localConfiguration?.uri.toString() != "content://audio-fixture/moved-second.wav" && System.nanoTime() < deadline) {
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(10)
+            }
+            assertEquals("content://audio-fixture/moved-first.wav", player.getMediaItemAt(0).localConfiguration!!.uri.toString())
+            assertEquals("content://audio-fixture/moved-second.wav", player.currentMediaItem!!.localConfiguration!!.uri.toString())
+            assertEquals(1, player.currentMediaItemIndex)
+            assertEquals(20000L, player.currentPosition)
+            assertFalse(player.playWhenReady)
+            assertTrue(player.shuffleModeEnabled)
+            assertEquals(androidx.media3.common.Player.REPEAT_MODE_ALL, player.repeatMode)
+            assertTrue(app.getSharedPreferences("audio_player", Context.MODE_PRIVATE).getString("queue", "")!!.contains("moved-second.wav"))
+        } finally { controller.destroy(); AudioLive.state.value = AudioPlayback() }
+    }
+
     @Test fun phoneMediaMuteIsReportedAndRecoveryRestoresOnlyTheAppVolume() {
         val app=RuntimeEnvironment.getApplication() as RihlaApp
         val manager=app.getSystemService(android.media.AudioManager::class.java)

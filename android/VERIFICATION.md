@@ -1,3 +1,25 @@
+# Verification — version 6.4, 2026-10-23
+
+[Audit scope, concrete fixes and device limitations](docs/AUDIT_6_4.md).
+
+- Final full suite: 191 Android tests passed, with zero failures, errors or skipped tests. All 13 Python tool tests and schema verification through journey version 7 passed.
+
+- Seven added regression cases failed against the pre-fix implementation: cross-source transfer-JSON duplication, fractional/invalid transfer restore, expiry interpreted as departure, omitted uncertain tracking edges, swallowed audio-import cancellation, audio-folder overwrite and stale relocated audio queue URIs. An additional cancellation-callback test covers interruption of temporary-leg analysis.
+- Transfer restore validates exact whole numeric values and original timestamps before changes. Automatic cross-source duplicates are quarantined during merge while explicit user decisions/current records survive. Restore remains additive and transactional; no reclassification of existing user decisions occurs.
+- Expiry never establishes departure; UI expiry has its own clock while the screen is open. Temporary route preparation and audio file/folder/MediaStore enumeration now cooperate with cancellation. A quality report counts an uncertain edge even without a second break flag; original geometry and distances are unchanged.
+- Audio backup refuses nonempty folder metadata as well as tracks/playlists. A library URI observer updates playback entries after physical relocation and restored stale queues; it preserves selected index, position, paused state, repeat and shuffle. Its URI-only projection avoids refreshing playback for ordinary progress writes. The new service regression exposed a masked-index reset during replacement and verifies explicit restoration of the index and position.
+- Restored home definitions re-register the permanent home geofence under the existing auto/background-permission settings. SMS readiness accepts direct SMS reception as well as the notification listener. These checks do not grant device permissions.
+- Main journey schema 7, audio schema 2 and incoming-transfer schema 1 remain unchanged. The existing migration, backup, route, audio and SMS suites remain part of the full run. No retained signing key is changed.
+
+- Final APK verification: versionCode 64/versionName 6.4, packages `sa.rihla` and `sa.rihla.next`, minSdk 26 and non-debuggable. Both verify with the retained certificate and increasing version against their published 6.3 baselines.
+- Classic is 102,359,915 bytes and next is 102,359,927 bytes. Both remain below 100 MiB and pass ZIP alignment. All five ARM64 native libraries remain byte-identical to 6.3 with 16 KiB ELF load alignment; the bundled map SHA-256 is unchanged. No keystore files are packaged. [SHA-256 sums](../releases/SHA256SUMS-v6.4).
+
+- Both final full release lint targets pass with 0 errors and 49 warnings each. Remaining notices include KTX convenience suggestions, existing API/ABI/dependency notices and media-session export guidance; they remain visible rather than suppressed. The complete combined full-suite/build/lint invocation finished successfully.
+
+No physical RedMagic 11 Pro, actual SMS inbox or driving session was available. This audit does not prove that all possible defects are absent. Background delivery/GPS cadence, field battery use, recognition services and large-model inference on that phone remain unverified. UI and AudioTrack tests exercise Android rendering/output under Robolectric rather than that hardware.
+
+## Previous verification history
+
 # Verification — version 6.3, 2026-10-23
 
 [Temporary places, campus legs and father-transfer setup](docs/PERSONAL_6_3.md).

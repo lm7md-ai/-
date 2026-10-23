@@ -96,7 +96,7 @@ fun routeQuality(points: List<RoutePoint>, start: Long, end: Long): RouteQuality
         else (accuracy[accuracy.size / 2 - 1] + accuracy[accuracy.size / 2]) / 2
     val missing =
         valid.zipWithNext().filter { (a, b) ->
-            b.breakBefore || b.recordedAt - a.recordedAt > 90000
+            b.breakBefore || b.uncertainGap || b.recordedAt - a.recordedAt > 90000
         }
     return RouteQuality(
         valid.size,

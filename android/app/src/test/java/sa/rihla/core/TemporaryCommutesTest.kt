@@ -104,4 +104,27 @@ class TemporaryCommutesTest {
             resting = update.state
         }
     }
+
+    @Test
+    fun expiryWhileStillInsideDoesNotFabricateADepartureToCampus() {
+        val until = place.copy(type = temporaryPlaceType(false, 1000, 140000, "مؤقت"))
+        val stillInside = (0..9).map { point(it, if (it < 7) 21.5 else 21.55) }
+        val arrival =
+            visit.copy(startedAt = stillInside[8].recordedAt, endedAt = stillInside[9].recordedAt)
+        assertTrue(temporaryCommutes(trip, stillInside, listOf(arrival), listOf(until)).isEmpty())
+    }
+
+    @Test
+    fun longTemporaryAnalysisRespondsToCancellationWithoutChangingRecords() {
+        val original = points.toList()
+        var checks = 0
+        assertThrows(java.util.concurrent.CancellationException::class.java) {
+            temporaryCommutes(trip, points, listOf(visit), listOf(place)) {
+                checks++
+                throw java.util.concurrent.CancellationException()
+            }
+        }
+        assertTrue(checks > 0)
+        assertEquals(original, points)
+    }
 }

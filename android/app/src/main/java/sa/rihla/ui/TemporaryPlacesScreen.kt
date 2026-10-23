@@ -25,6 +25,18 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
     }
     var loading by remember { mutableStateOf(false) }
     val temporary = data.places.filter { temporaryPlaceInfo(it.type) != null }
+    val placeTime by
+        produceState(System.currentTimeMillis(), temporary) {
+            while (isActive) {
+                value = System.currentTimeMillis()
+                val next =
+                    temporary
+                        .mapNotNull { temporaryPlaceInfo(it.type)?.expires }
+                        .filter { it > value }
+                        .minOrNull()
+                delay(((next ?: (value + 60000)) - value).coerceIn(1, 60000))
+            }
+        }
     LaunchedEffect(
         data.outings.take(100).map {
             listOf(
@@ -45,10 +57,15 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
                     currentCoroutineContext().ensureActive()
                     val points = vm.repo.dao.points(trip.id).first()
                     val events = vm.repo.dao.events(trip.id).first()
-                    val legs = temporaryCommutes(trip, points, events, temporary)
+                    val active = currentCoroutineContext()
+                    val legs =
+                        temporaryCommutes(trip, points, events, temporary) { active.ensureActive() }
                     if (legs.isEmpty()) emptyList()
                     else {
-                        val analysis = RouteAnalysis(points, stopDetails(trip, events))
+                        val analysis =
+                            RouteAnalysis(points, stopDetails(trip, events)) {
+                                active.ensureActive()
+                            }
                         legs.mapNotNull { leg ->
                             analysis.summary(leg.from, leg.to)?.let { Triple(trip, leg, it) }
                         }
@@ -100,7 +117,7 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            if (data.now < info.expires) "مفعّل حتى ${stamp(info.expires)}"
+                            if (placeTime < info.expires) "مفعّل حتى ${stamp(info.expires)}"
                             else "انتهت صلاحيته؛ تبقى إحصاءاته التاريخية"
                         )
                         TextButton(onClick = { vm.deleteTemporaryPlace(place.type) }) {

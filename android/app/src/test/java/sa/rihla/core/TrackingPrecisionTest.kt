@@ -129,4 +129,23 @@ class TrackingPrecisionTest {
         assertEquals(100000L, report.tailDelayMs)
         assertNull(routeQuality(emptyList(), 0, 1000).medianAccuracy)
     }
+
+    @Test
+    fun qualityReportCountsExplicitUncertaintyEvenWithoutABreakFlag() {
+        val start =
+            RoutePoint(
+                outingId = 1,
+                latitude = 21.5,
+                longitude = 39.2,
+                accuracy = 5.0,
+                speed = 1.0,
+                altitude = 0.0,
+                bearing = 0.0,
+                recordedAt = 1000,
+            )
+        val end = start.copy(recordedAt = 11000, uncertainGap = true, breakBefore = false)
+        val report = routeQuality(listOf(start, end), 1000, 11000)
+        assertEquals(1, report.gaps)
+        assertEquals(10000L, report.gapMs)
+    }
 }

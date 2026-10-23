@@ -10,7 +10,7 @@ import androidx.media3.exoplayer.audio.*
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.*
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.channels.Channel
 import sa.rihla.RihlaApp
 
@@ -83,8 +83,39 @@ class AudioPlaybackService : MediaSessionService() {
         getSystemService(android.media.AudioManager::class.java).registerAudioDeviceCallback(devices,handler)
         applySettings()
         restoreQueue()
+        scope.launch {
+            app.audio.dao.tracks()
+                .map { tracks -> tracks.associate { it.id to it.uri } }
+                .distinctUntilChanged()
+                .catch { playbackError = "تعذر تحديث مواقع الملفات في قائمة التشغيل" }
+                .collect { uris ->
+                    handler.post { if (!destroying) refreshUris(uris) }
+                }
+        }
         handler.post(tick)
     }
+    private fun refreshUris(uris: Map<String, String>) {
+        val originalIndex = player.currentMediaItemIndex
+        val originalPosition = player.currentPosition.coerceAtLeast(0)
+        val playWhenReady = player.playWhenReady
+        var changed = false
+        var currentChanged = false
+        for (index in 0 until player.mediaItemCount) {
+            val item = player.getMediaItemAt(index)
+            val uri = uris[item.mediaId] ?: continue
+            if (item.localConfiguration?.uri.toString() == uri) continue
+            if (index == originalIndex) currentChanged = true
+            player.replaceMediaItem(index, item.buildUpon().setUri(uri).build())
+            changed = true
+        }
+        if (changed) {
+            if (originalIndex in 0 until player.mediaItemCount) player.seekTo(originalIndex, originalPosition)
+            player.playWhenReady = playWhenReady
+            if (currentChanged && player.playerError != null) player.prepare()
+            persist(true)
+        }
+    }
+
     private fun createPlayer() {
         currentScene=AudioScene.read(prefs)
         stereo=StereoSpaceProcessor().apply { scene=currentScene;amount=prefs.getFloat("width",0f) }

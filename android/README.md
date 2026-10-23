@@ -1,3 +1,8 @@
+# Application audit and fixes 6.4
+
+[Reproduced transfer/temporary-place/audio defects, regression fixes and verification limits](docs/AUDIT_6_4.md).
+Journey schema 7, audio schema 2 and incoming-transfer schema 1 remain unchanged. Install over the same edition.
+
 # Temporary places and incoming transfers 6.3
 
 [Temporary rests, independent campus-leg statistics and private father-transfer history](docs/PERSONAL_6_3.md).

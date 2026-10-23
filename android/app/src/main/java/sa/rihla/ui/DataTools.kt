@@ -132,7 +132,7 @@ fun DataTools(vm: JourneyViewModel, data: ScreenData) {
                     Intent(
                         Intent.ACTION_VIEW,
                         android.net.Uri.parse(
-                            "https://github.com/m7mdxzx9/-/blob/main/android/docs/WINDOWS_MIGRATION.md"
+                            "https://github.com/lm7md-ai/-/blob/main/android/docs/WINDOWS_MIGRATION.md"
                         ),
                     )
                 )
@@ -162,6 +162,7 @@ fun DataTools(vm: JourneyViewModel, data: ScreenData) {
                                 withContext(Dispatchers.IO) { backup.restore(text) }
                                 vm.app.settings.smsImport(false)
                                 vm.app.settings.onboard()
+                                sa.rihla.tracking.HomeGeofences.restore(vm.app)
                                 pending = null
                                 vm.error.value = "backup_restored"
                             } catch (cancelled: CancellationException) {
@@ -226,7 +227,7 @@ fun DeviceReadiness(data: ScreenData) {
         Metric("background_battery", tr(if (battery) "unrestricted" else "system_managed"))
         Metric(
             "sms_access",
-            tr(if (PurchaseNotificationService.allowed(context)) "allowed" else "denied"),
+            tr(if (PurchaseNotificationService.allowed(context) || sa.rihla.sms.PurchaseSmsReceiver.allowed(context)) "allowed" else "denied"),
         )
         Text(tr("redmagic_help"), style = MaterialTheme.typography.bodySmall)
         OutlinedButton(

@@ -116,24 +116,7 @@ class TransferStore(context: Context) :
         val origin = source ?: "paste:${receivedAt?:time}"
         val id = transferHash("$hash\n$origin")
         val db = writableDatabase
-        val possible =
-            db.rawQuery(
-                    "SELECT amount,sender,bodyHash FROM incoming WHERE id!=? AND time BETWEEN ? AND ?",
-                    arrayOf(id, (time - 120000).toString(), (time + 120000).toString()),
-                )
-                .use { cursor ->
-                    var match = false
-                    while (cursor.moveToNext()) if (
-                        cursor.getString(2) == hash ||
-                            (parsed.sender.isNotBlank() &&
-                                cursor.getLong(0) == parsed.amount &&
-                                transferName(cursor.getString(1)) == transferName(parsed.sender))
-                    ) {
-                        match = true
-                        break
-                    }
-                    match
-                }
+        val possible = possibleDuplicate(db, id, time, hash, parsed.amount, parsed.sender)
         val added =
             db.insertWithOnConflict(
                 "incoming",
@@ -153,6 +136,33 @@ class TransferStore(context: Context) :
             ) != -1L
         if (added) changed()
         return added
+    }
+
+    private fun possibleDuplicate(
+        db: SQLiteDatabase,
+        id: String,
+        time: Long,
+        hash: String,
+        amount: Long,
+        sender: String,
+    ): Boolean {
+        return db.rawQuery(
+                "SELECT amount,sender,bodyHash FROM incoming WHERE id!=? AND time BETWEEN ? AND ?",
+                arrayOf(id, (time - 120000).toString(), (time + 120000).toString()),
+            )
+            .use { cursor ->
+                var match = false
+                while (cursor.moveToNext()) if (
+                    cursor.getString(2) == hash ||
+                        (sender.isNotBlank() &&
+                            cursor.getLong(0) == amount &&
+                            transferName(cursor.getString(1)) == transferName(sender))
+                ) {
+                    match = true
+                    break
+                }
+                match
+            }
     }
 
     @Synchronized
@@ -227,8 +237,12 @@ class TransferStore(context: Context) :
             json.getJSONArray("aliases").let { a ->
                 (0 until a.length()).map { a.getString(it) }.toSet()
             }
-        val time = json.getLong("cutoff")
-        require(names.size <= 30 && names.all { it.length in 2..120 } && time > 0)
+        val time = wholeLong(json, "cutoff")
+        require(
+            names.size <= 30 &&
+                names.all { it.length in 2..120 && it.any(Char::isLetter) } &&
+                time in 1..System.currentTimeMillis() + 120000
+        )
         val items = json.getJSONArray("items")
         require(items.length() <= 100000)
         val data =
@@ -236,14 +250,14 @@ class TransferStore(context: Context) :
                 val row = items.getJSONObject(index)
                 TransferRow(
                         row.getString("id"),
-                        row.getLong("amount"),
+                        wholeLong(row, "amount"),
                         row.getString("sender"),
-                        row.getLong("time"),
+                        wholeLong(row, "time"),
                         row.getString("bodyHash"),
-                        row.getInt("decision"),
+                        wholeLong(row, "decision").also { require(it in -1L..1L) }.toInt(),
                         row.getBoolean("duplicate"),
                         row.getString("origin"),
-                        row.getLong("receivedAt"),
+                        wholeLong(row, "receivedAt"),
                     )
                     .also {
                         require(
@@ -251,7 +265,7 @@ class TransferStore(context: Context) :
                                 it.bodyHash.matches(Regex("[a-f0-9]{64}")) &&
                                 it.id == transferHash("${it.bodyHash}\n${it.origin}") &&
                                 it.origin.length in 1..120 &&
-                                it.receivedAt > 0 &&
+                                it.receivedAt in 1..System.currentTimeMillis() + 120000 &&
                                 it.amount in 1..1_000_000_000 &&
                                 it.sender.length <= 120 &&
                                 it.time in 1..System.currentTimeMillis() + 120000 &&
@@ -275,7 +289,23 @@ class TransferStore(context: Context) :
                             put("time", row.time)
                             put("bodyHash", row.bodyHash)
                             put("decision", row.decision)
-                            put("duplicate", if (row.duplicate) 1 else 0)
+                            put(
+                                "duplicate",
+                                if (
+                                    row.duplicate ||
+                                        (row.decision == 0 &&
+                                            possibleDuplicate(
+                                                db,
+                                                row.id,
+                                                row.time,
+                                                row.bodyHash,
+                                                row.amount,
+                                                row.sender,
+                                            ))
+                                )
+                                    1
+                                else 0,
+                            )
                             put("origin", row.origin)
                             put("receivedAt", row.receivedAt)
                         },
@@ -310,4 +340,10 @@ fun readTransferBackup(input: java.io.InputStream, limit: Int = 32 * 1024 * 1024
         out.write(buffer, 0, size)
     }
     return out.toString("UTF-8")
+}
+
+private fun wholeLong(json: JSONObject, key: String): Long {
+    val value = json.get(key)
+    require(value is Number)
+    return java.math.BigDecimal(value.toString()).longValueExact()
 }
