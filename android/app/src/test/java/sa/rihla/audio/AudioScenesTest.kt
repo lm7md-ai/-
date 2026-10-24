@@ -44,7 +44,7 @@ class AudioScenesTest {
         val prefs=app.getSharedPreferences("audio_player",Context.MODE_PRIVATE)
         prefs.edit().putString("queue","keep-queue").putLong("queue_position",22000).putBoolean("eq_enabled",true).putInt("bass",900).apply()
         selectAudioScene(prefs,AudioScene.SURROUND_71)
-        assertEquals(AudioScene.SURROUND_71,AudioScene.read(prefs));assertFalse(prefs.getBoolean("eq_enabled",true))
+        assertEquals(AudioScene.SURROUND_71,AudioScene.read(prefs));assertTrue(prefs.getBoolean("eq_enabled",false))
         assertEquals("keep-queue",prefs.getString("queue",null));assertEquals(22000L,prefs.getLong("queue_position",0))
         val effects=AudioSound(app);effects.connect(23);effects.apply();assertFalse(effects.hasNativeEffects())
         selectAudioScene(prefs,AudioScene.NATURAL);effects.apply();assertFalse(effects.hasNativeEffects());effects.release()

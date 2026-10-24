@@ -8,7 +8,11 @@ android {
  buildToolsVersion = "37.0.0"
  defaultConfig { applicationId = "sa.rihla"; minSdk = 26; targetSdk = 37; versionCode = 64; versionName = "6.4"; ndk { abiFilters += "arm64-v8a" } }
  packaging { jniLibs.useLegacyPackaging = true }
- sourceSets.getByName("main").assets.setSrcDirs(listOf("src/main/countryAssets"))
+ // Include ordinary assets as well as the deliberately separate country-pack assets.
+ // The legacy MBTiles and raw Saudi SQLite source remain in the repository for tooling;
+ // only the current compact country pack belongs in the APK. No source binary is deleted.
+ sourceSets.getByName("main").assets.setSrcDirs(listOf("src/main/assets", "src/main/countryAssets"))
+ androidResources.ignoreAssetsPatterns.addAll(listOf("jeddah-makkah.mbtiles", "saudi-roads.db"))
  flavorDimensions += "edition"
  productFlavors {
   create("classic") { dimension = "edition" }

@@ -419,6 +419,10 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
 @Composable
 fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
     val context = LocalContext.current
+    val health =
+        remember(context) {
+            context.getSharedPreferences("sms_health", android.content.Context.MODE_PRIVATE)
+        }
     var refresh by remember { mutableIntStateOf(0) }
     var enabling by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var pasting by remember { mutableStateOf(false) }
@@ -477,13 +481,18 @@ fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
         "بإذنك، يُستخرج المبلغ والتاجر من رسائل الشراء الجديدة على الجهاز، دون رفع الرسائل أو حفظ نصها. لا يقرأ هذا الإذن الرسائل السابقة. إذا منع الهاتف الإذن، استخدم إشعارات الرسائل أو الصق الرسالة هنا.",
         style = MaterialTheme.typography.bodySmall,
     )
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(5000)
-            refresh++
+    DisposableEffect(health) {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val listener =
+            android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+                main.post { refresh++ }
+            }
+        health.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            health.unregisterOnSharedPreferenceChangeListener(listener)
+            main.removeCallbacksAndMessages(null)
         }
     }
-    val health = context.getSharedPreferences("sms_health", android.content.Context.MODE_PRIVATE)
     val lastResult =
         when (health.getString("result", null)) {
             "imported" -> "تم تسجيل عملية شراء"

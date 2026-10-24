@@ -3,7 +3,7 @@ package sa.rihla.map
 import android.content.Context
 import java.io.File
 
-/** Bundled data requires no download or first-run connection. */
+/** Legacy optional MBTiles cache. The current bundled country map is supplied by SaudiMap. */
 object OfflineMapStore {
     const val Asset = "maps/jeddah-makkah.mbtiles"
     const val Attribution = "© OpenStreetMap contributors · ODbL 1.0 · Geofabrik (2026-10-12)"
@@ -13,6 +13,7 @@ object OfflineMapStore {
     fun existing(context: Context): File? =
         File(context.noBackupFilesDir, FileName).takeIf { it.exists() }
 
+    @Deprecated("Legacy preparation helper; this MBTiles asset is intentionally excluded from current APKs")
     fun bundled(context: Context): File =
         synchronized(lock) {
             val target = File(context.noBackupFilesDir, FileName)

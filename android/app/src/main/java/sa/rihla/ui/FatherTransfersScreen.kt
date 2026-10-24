@@ -68,9 +68,11 @@ fun FatherTransfersScreen() {
             if (uri != null)
                 action {
                     val result =
-                        context.contentResolver.openInputStream(uri)?.use {
-                            TransferArchive.xml(it, store)
-                        } ?: error("FILE_UNAVAILABLE")
+                        withContext(Dispatchers.IO) {
+                            context.contentResolver.openInputStream(uri)?.use {
+                                TransferArchive.xml(it, store)
+                            } ?: error("FILE_UNAVAILABLE")
+                        }
                     "فُحصت ${result.first} رسالة واردة وأضيفت ${result.second} حوالة. راجع غير المؤكد والمكرر المحتمل."
                 }
         }
@@ -374,6 +376,11 @@ fun FatherTransfersScreen() {
                             TextButton(
                                 onClick = {
                                     action {
+                                        names =
+                                            (names.lines().filter { it.isNotBlank() } + row.sender)
+                                                .map { it.trim() }
+                                                .distinct()
+                                                .joinToString("\n")
                                         withContext(Dispatchers.IO) {
                                             store.configure(
                                                 store.aliases + row.sender,

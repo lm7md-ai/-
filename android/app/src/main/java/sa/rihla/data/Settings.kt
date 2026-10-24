@@ -63,8 +63,8 @@ class Settings(private val context: Context) {
         context.store.edit { it[booleanPreferencesKey("auto")] = value }
     }
 
-    suspend fun onboard() {
-        context.store.edit { it[booleanPreferencesKey("onboarded")] = true }
+    suspend fun onboard(ready: Boolean = true) {
+        context.store.edit { it[booleanPreferencesKey("onboarded")] = ready }
     }
 
     suspend fun attribution(value: String) {

@@ -158,7 +158,17 @@ fun FormField(key: String, value: String, onChange: (String) -> Unit, decimal: B
 fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
     val data by vm.state.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
+    val notice by vm.notice.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    val clearing by vm.clearing.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val noticeMessage = notice?.let { tr(it) }
+    LaunchedEffect(notice, noticeMessage) {
+        notice?.let { key ->
+            snackbar.showSnackbar(noticeMessage ?: return@LaunchedEffect)
+            if (vm.notice.value == key) vm.notice.value = null
+        }
+    }
     val audioPlayback by sa.rihla.audio.AudioLive.state.collectAsStateWithLifecycle()
     if (!data.loaded) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -228,9 +238,16 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                 }
                 var expense by rememberSaveable { mutableStateOf(false) }
                 var expenseOuting by rememberSaveable { mutableStateOf<Long?>(null) }
-                if (!data.settings.onboarded) Onboarding(vm, data)
+                if (!data.settings.onboarded)
+                    Scaffold(
+                        snackbarHost = { SnackbarHost(snackbar) },
+                        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                    ) { padding ->
+                        Box(Modifier.padding(padding)) { Onboarding(vm, data) }
+                    }
                 else
                     Scaffold(
+                        snackbarHost = { SnackbarHost(snackbar) },
                         topBar = {
                             Row(
                                 Modifier.fillMaxWidth()
@@ -326,7 +343,11 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                                         Icon(
                                                             icon,
                                                             if (key == "assistant") "المساعد الذكي"
-                                                            else tr(key),
+                                                            else
+                                                                tr(
+                                                                    if (key == "settings") "more"
+                                                                    else key
+                                                                ),
                                                         )
                                                     },
                                                     label = {
@@ -416,6 +437,18 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                         }
                     }
                 if (expense) ExpenseDialog(vm, data, expenseOuting) { expense = false }
+                if (clearing)
+                    androidx.compose.ui.window.Dialog(onDismissRequest = {}) {
+                        Card {
+                            Column(
+                                Modifier.padding(24.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                CircularProgressIndicator()
+                                Text(tr("deleting_data"))
+                            }
+                        }
+                    }
                 if (error != null)
                     AlertDialog(
                         onDismissRequest = { vm.error.value = null },

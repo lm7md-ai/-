@@ -22,8 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -845,17 +845,28 @@ private fun AudioAddSheet(
 
 @Composable
 internal fun AudioCover(track: AudioTrack, size: Int) {
+    val context = LocalContext.current.applicationContext
     val image by
-        produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, track.artwork) {
+        produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+            null,
+            track.id,
+            track.uri,
+            track.artwork,
+        ) {
             value =
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    if (track.artwork.isBlank()) null
-                    else
-                        runCatching {
-                            android.graphics.BitmapFactory.decodeFile(track.artwork)
-                                ?.asImageBitmap()
+                    val file =
+                        (context as? sa.rihla.RihlaApp)?.audio?.ensureArtwork(track)
+                            ?: track.artwork
+                                .takeIf { it.isNotBlank() }
+                                ?.let { java.io.File(it) }
+                                ?.takeIf { it.isFile }
+                    runCatching {
+                            file?.let {
+                                android.graphics.BitmapFactory.decodeFile(it.path)?.asImageBitmap()
+                            }
                         }
-                            .getOrNull()
+                        .getOrNull()
                 }
         }
     Surface(

@@ -1,0 +1,4 @@
+Map data: © OpenStreetMap contributors, ODbL 1.0.
+https://www.openstreetmap.org/copyright
+The current bundled country map is maps/saudi-roads.pack.
+Legacy source databases remain in the repository for development and are explicitly excluded from the APK.

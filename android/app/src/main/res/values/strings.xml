@@ -279,4 +279,6 @@
   <string name="export_csv">حفظ المصاريف بصيغة CSV</string>
   <string name="search_expense_hint">غيّر البحث أو التصنيف لعرض المصاريف.</string>
   <string name="legacy_transfer_help">طريقة نقل مشاوير النسخة القديمة من الهاتف</string>
+  <string name="deleting_data">جارٍ حذف بيانات المشاوير وملفات الخريطة…</string>
+  <string name="restore_places_required">استُعيدت المشاوير. حدّد المنزل والجامعة لإكمال الإعداد والتتبع التلقائي.</string>
 </resources>

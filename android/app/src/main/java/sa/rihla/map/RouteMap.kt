@@ -7,6 +7,7 @@ import android.view.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.withTranslation
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -21,17 +22,58 @@ interface TileProvider {
     fun load(z: Int, x: Int, y: Int): ByteArray?
 }
 
-class HybridTiles(private val c: Context) : TileProvider {
+class HybridTiles(
+    private val c: Context,
+    private val openDatabase: (File) -> SQLiteDatabase = {
+        SQLiteDatabase.openDatabase(it.path, null, SQLiteDatabase.OPEN_READONLY)
+    },
+    private val observeQuery: () -> Unit = {},
+) : TileProvider, AutoCloseable {
     @Volatile var onlineEnabled = false
 
+    private data class OfflineConnection(val stamp: Pair<Long, Long>, val db: SQLiteDatabase)
+
+    private val offlineConnections = mutableMapOf<String, OfflineConnection>()
+    private val missing = android.util.LruCache<String, Boolean>(1024)
+    private var closed = false
+
+    @Synchronized
+    override fun close() {
+        closed = true
+        offlineConnections.values.forEach { it.db.close() }
+        offlineConnections.clear()
+        missing.evictAll()
+    }
+
+    @Synchronized
+    fun reopen() {
+        closed = false
+    }
+
+    private fun database(file: File): SQLiteDatabase {
+        val stamp = file.lastModified() to file.length()
+        val previous = offlineConnections[file.path]
+        if (previous?.stamp == stamp && previous.db.isOpen) return previous.db
+        previous?.db?.close()
+        missing.evictAll()
+        return openDatabase(file).also {
+            offlineConnections[file.path] = OfflineConnection(stamp, it)
+        }
+    }
+
+    @Synchronized
     private fun offlineTile(file: File, z: Int, x: Int, y: Int): ByteArray? {
-        if (!file.exists()) return null
+        if (closed || !file.exists()) return null
+        val key = "${file.path}:${file.lastModified()}:${file.length()}:$z/$x/$y"
+        if (missing.get(key) == true) return null
         return try {
-            SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            val db = database(file)
+            run {
                 for (level in z downTo 7) {
                     val factor = 1 shl (z - level)
                     val parentX = x / factor
                     val parentY = y / factor
+                    observeQuery()
                     val data =
                         db.rawQuery(
                                 "SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=? AND length(tile_data)<=2000000",
@@ -66,6 +108,7 @@ class HybridTiles(private val c: Context) : TileProvider {
                     bitmap.recycle()
                     return bytes.toByteArray()
                 }
+                missing.put(key, true)
                 null
             }
         } catch (_: Exception) {
@@ -135,6 +178,40 @@ class HybridTiles(private val c: Context) : TileProvider {
 class RouteMapView(c: Context) : View(c) {
     private val provider = HybridTiles(c)
 
+    private fun textPixels(sp: Float) =
+        android.util.TypedValue.applyDimension(
+            android.util.TypedValue.COMPLEX_UNIT_SP,
+            sp,
+            resources.displayMetrics,
+        )
+
+    private val attributionPaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG)
+    private var attributionLayout: android.text.StaticLayout? = null
+    private var attributionWidth = 0
+    private var attributionSize = 0f
+
+    private fun attribution(): android.text.StaticLayout {
+        val available = (width - 24 * resources.displayMetrics.density).toInt().coerceAtLeast(1)
+        val size = textPixels(22f)
+        if (attributionLayout == null || attributionWidth != available || attributionSize != size) {
+            attributionWidth = available
+            attributionSize = size
+            attributionPaint.textSize = size
+            attributionPaint.color = Color.DKGRAY
+            attributionLayout =
+                android.text.StaticLayout.Builder.obtain(
+                        "© OpenStreetMap contributors",
+                        0,
+                        28,
+                        attributionPaint,
+                        available,
+                    )
+                    .setIncludePad(false)
+                    .build()
+        }
+        return attributionLayout!!
+    }
+
     fun online(enabled: Boolean) {
         if (provider.onlineEnabled != enabled) {
             provider.onlineEnabled = enabled
@@ -144,6 +221,7 @@ class RouteMapView(c: Context) : View(c) {
     }
 
     private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(2))
+    private var tileScope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(4))
     private val tiles = android.util.LruCache<String, Bitmap>(80)
     private val loading = mutableSetOf<String>()
     private val failed = mutableMapOf<String, Long>()
@@ -386,6 +464,9 @@ class RouteMapView(c: Context) : View(c) {
         val center = world(lat, lon)
         val tap = coordinate(center.first + x - width / 2, center.second + y - height / 2)
         val radius = (if (zoom < 12) 10 else 32) * resources.displayMetrics.density
+        val attribution = attribution()
+        val footerHeight = attribution.height + 16 * resources.displayMetrics.density
+        val scaleBaseline = height - footerHeight - 12 * resources.displayMetrics.density
         val metersPerPixel =
             156543.03392 * cos(Math.toRadians(lat)) /
                 (1 shl zoom) /
@@ -654,7 +735,7 @@ class RouteMapView(c: Context) : View(c) {
             } else if (key !in loading && System.currentTimeMillis() - (failed[key] ?: 0) > 30000) {
                 loading += key
                 val z = zoom
-                scope.launch {
+                tileScope.launch {
                     val bytes = provider.load(z, x, y)
                     val b =
                         bytes?.takeIf(TileImages::valid)?.let {
@@ -740,7 +821,7 @@ class RouteMapView(c: Context) : View(c) {
                         if (xy.first in 15f..width - 15f && xy.second in 30f..height - 60f) {
                             paint.style = Paint.Style.FILL
                             paint.color = Color.rgb(80, 74, 65)
-                            paint.textSize = 10f * resources.displayMetrics.density
+                            paint.textSize = textPixels(10f)
                             canvas.drawText(road.name.take(30), xy.first, xy.second, paint)
                             paint.style = Paint.Style.STROKE
                         }
@@ -748,24 +829,24 @@ class RouteMapView(c: Context) : View(c) {
                 }
             paint.style = Paint.Style.FILL
             paint.color = Color.rgb(45, 62, 71)
-            paint.textSize = 13f * resources.displayMetrics.density
+            paint.textSize = textPixels(13f)
             scene.labels.forEach { label ->
                 val p = screen(label.latitude, label.longitude)
                 canvas.drawText(label.name, p.first, p.second, paint)
             }
             if (scene.clipped) {
-                paint.textSize = 10f * resources.displayMetrics.density
+                paint.textSize = textPixels(10f)
                 canvas.drawText("كبّر لعرض تفاصيل إضافية", 16f, height - 100f, paint)
             }
         }
         if (!drawn && country == null) {
             paint.color = Color.DKGRAY
-            paint.textSize = 32f
+            paint.textSize = textPixels(32f)
             canvas.drawText(
                 if (countryFailed) context.getString(R.string.map_unavailable)
                 else "تجهيز خريطة السعودية محليًا…",
-                20f,
-                45f,
+                20f * resources.displayMetrics.density,
+                textPixels(32f) + 8f * resources.displayMetrics.density,
                 paint,
             )
         }
@@ -830,7 +911,7 @@ class RouteMapView(c: Context) : View(c) {
                         8f * resources.displayMetrics.density,
                         paint,
                     )
-                    paint.textSize = 14f * resources.displayMetrics.density
+                    paint.textSize = textPixels(14f)
                     canvas.drawText(
                         if (i == 0) "A" else "B",
                         xy.first + 12f * resources.displayMetrics.density,
@@ -917,6 +998,9 @@ class RouteMapView(c: Context) : View(c) {
         if (layers.accuracy)
             points.lastOrNull()?.let { last ->
                 val p = screen(last.latitude, last.longitude)
+                val attribution = attribution()
+                val footerHeight = attribution.height + 16 * resources.displayMetrics.density
+                val scaleBaseline = height - footerHeight - 12 * resources.displayMetrics.density
                 val metersPerPixel =
                     156543.03392 * cos(last.latitude * PI / 180) /
                         (1 shl zoom) /
@@ -939,6 +1023,9 @@ class RouteMapView(c: Context) : View(c) {
         }
         paint.style = Paint.Style.FILL
         measurement.forEach { marker(it.first, it.second, Color.rgb(144, 61, 155)) }
+        val attribution = attribution()
+        val footerHeight = attribution.height + 16 * resources.displayMetrics.density
+        val scaleBaseline = height - footerHeight - 12 * resources.displayMetrics.density
         val metersPerPixel =
             156543.03392 * cos(lat * PI / 180) / (1 shl zoom) / resources.displayMetrics.density
         val scaleMeters =
@@ -946,26 +1033,31 @@ class RouteMapView(c: Context) : View(c) {
                 .lastOrNull { it <= metersPerPixel * 100 * resources.displayMetrics.density } ?: 10
         paint.color = Color.DKGRAY
         paint.strokeWidth = 3f
-        paint.textSize = 11f * resources.displayMetrics.density
+        paint.textSize = textPixels(11f)
         canvas.drawLine(
             16f,
-            height - 65f,
+            scaleBaseline,
             (16 + scaleMeters / metersPerPixel).toFloat(),
-            height - 65f,
+            scaleBaseline,
             paint,
         )
         canvas.drawText(
             if (scaleMeters >= 1000) "${scaleMeters/1000} كم" else "$scaleMeters م",
             16f,
-            height - 75f,
+            scaleBaseline - textPixels(8f),
             paint,
         )
         canvas.drawText("N ↑", width - 65f, 45f, paint)
         paint.color = Color.argb(225, 255, 255, 255)
-        canvas.drawRect(0f, height - 42f, width.toFloat(), height.toFloat(), paint)
+        canvas.drawRect(0f, height - footerHeight, width.toFloat(), height.toFloat(), paint)
         paint.color = Color.DKGRAY
-        paint.textSize = 22f
-        canvas.drawText("© OpenStreetMap contributors", 12f, height - 14f, paint)
+        paint.textSize = textPixels(22f)
+        canvas.withTranslation(
+            12 * resources.displayMetrics.density,
+            height - attribution.height - 8 * resources.displayMetrics.density,
+        ) {
+            attribution.draw(this)
+        }
     }
 
     override fun onDetachedFromWindow() {
@@ -976,13 +1068,17 @@ class RouteMapView(c: Context) : View(c) {
         routeJob?.cancel()
         requestedPoints = null
         scope.cancel()
+        tileScope.cancel()
+        provider.close()
         super.onDetachedFromWindow()
     }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        provider.reopen()
         if (!scope.isActive) {
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(2))
+            tileScope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(4))
             loading.clear()
             countryViewport = emptyList()
         }
