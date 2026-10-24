@@ -6,15 +6,66 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
 import androidx.room.withTransaction
 import java.security.MessageDigest
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class AudioImport(val added: Int, val updated: Int, val failed: Int)
 
 class AudioRepository(private val context: Context, val database: AudioDatabase) {
     val dao = database.dao()
+    private val artworkLock = Mutex()
+
+    suspend fun ensureArtwork(track: AudioTrack): java.io.File? =
+        withContext(Dispatchers.IO) {
+            artworkLock.withLock {
+                val current = dao.track(track.id) ?: track
+                val existing =
+                    current.artwork
+                        .takeIf { it.isNotBlank() }
+                        ?.let { java.io.File(it) }
+                        ?.takeIf { it.isFile }
+                if (
+                    existing != null &&
+                        existing.canonicalPath.startsWith(
+                            context.noBackupFilesDir.canonicalPath + java.io.File.separator
+                        )
+                )
+                    return@withLock existing
+                val restored = runCatching {
+                    if (existing != null) {
+                        require(existing.length() in 1..2_000_000)
+                        val directory =
+                            java.io.File(context.noBackupFilesDir, "audio_art").apply { mkdirs() }
+                        // Restored track IDs are untrusted filenames; hash instead of using them as
+                        // paths.
+                        val target = java.io.File(directory, id(current.id) + ".jpg")
+                        val pending = java.io.File.createTempFile("cover-", ".pending", directory)
+                        try {
+                            existing.copyTo(pending, overwrite = true)
+                            check(pending.renameTo(target))
+                        } finally {
+                            pending.delete()
+                        }
+                        target
+                    } else {
+                        metadata(current.uri.toUri())
+                            .artwork
+                            .takeIf { it.isNotBlank() }
+                            ?.let { java.io.File(it) }
+                            ?.takeIf { it.isFile }
+                    }
+                }
+                    .getOrNull()
+                if (restored != null && dao.track(current.id) != null)
+                    dao.artwork(current.id, restored.path)
+                restored
+            }
+        }
 
     suspend fun add(track: AudioTrack): Boolean = database.withTransaction {
         require(
@@ -150,10 +201,19 @@ class AudioRepository(private val context: Context, val database: AudioDatabase)
                     android.graphics.BitmapFactory.decodeByteArray(data, 0, data.size, options)
                         ?: return@runCatching ""
                 try {
-                    val directory = java.io.File(context.cacheDir, "audio_art").apply { mkdirs() }
+                    val directory =
+                        java.io.File(context.noBackupFilesDir, "audio_art").apply { mkdirs() }
                     val file = java.io.File(directory, id(uri.toString()) + ".jpg")
-                    file.outputStream().use {
-                        image.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it)
+                    val pending = java.io.File.createTempFile("cover-", ".pending", directory)
+                    try {
+                        pending.outputStream().use {
+                            check(
+                                image.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it)
+                            )
+                        }
+                        check(pending.renameTo(file))
+                    } finally {
+                        pending.delete()
                     }
                     file.path
                 } finally {

@@ -38,6 +38,8 @@ jobs:
         run: ./gradlew :app:lintClassicRelease :app:lintNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8'
       - name: Build both editions
         run: ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8'
+      - name: Verify packaged asset contract
+        run: python3 tools/verify_apk_assets.py app/build/outputs/apk/classic/release/app-classic-release.apk app/build/outputs/apk/next/release/app-next-release.apk
       - name: Test and lint reports
         if: always()
         uses: actions/upload-artifact@v4

@@ -1,3 +1,8 @@
+# Reviewed Android defects — source fixes, version unchanged
+
+[Item-by-item revalidation, regression tests, CI proof and preservation report](docs/REVIEW_2026_10_24.md).
+Version remains 64 / 6.4; schemas 7 / 2 / 1 and signing/package identity are unchanged. No distribution APK is published by these changes.
+
 # Application audit and fixes 6.4
 
 [Reproduced transfer/temporary-place/audio defects, regression fixes and verification limits](docs/AUDIT_6_4.md).
@@ -114,7 +119,7 @@ Settings support light, dark, and system themes. RTL is explicit. User text come
 
 ## Tracking
 
-Automatic mode registers IN_VEHICLE transitions plus low-power activity updates to detect a device that is already driving. A configured car Bluetooth connection can trigger the same motion check without activity-recognition permission. Background start requires precise/background location and the relevant recognition/Bluetooth permission. A trigger is only a candidate: two sufficiently accurate positions must show driving evidence before an outing is created. A failed candidate expires in 150 seconds. Activity recognition cannot identify a private car versus a bus or taxi; incorrect recordings can be reviewed, merged/split or deleted.
+Automatic mode registers IN_VEHICLE transitions plus low-power activity updates to detect a device that is already driving. A configured car Bluetooth connection can trigger the same motion check without activity-recognition permission. Background start requires precise/background location and the relevant recognition/Bluetooth permission. A trigger is only a candidate: two sufficiently accurate positions must show driving evidence before an outing is created. A failed candidate expires in 150 seconds (`TrackingService.PENDING_TIMEOUT_MS`); confirmed active trips are not ended by this candidate deadline. Activity recognition cannot identify a private car versus a bus or taxi; incorrect recordings can be reviewed, merged/split or deleted.
 
 Manual start is available from the foreground with precise location. GPS samples arrive approximately every five seconds during driving, and every thirty seconds after a confirmed stop. An ongoing system notification opens the app or ends the outing. No other notifications are scheduled.
 

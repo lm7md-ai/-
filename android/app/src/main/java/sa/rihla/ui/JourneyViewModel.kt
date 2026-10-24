@@ -131,6 +131,8 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
             .combine(repo.dao.recurringFlow()) { d, recurring -> d.copy(recurring = recurring) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScreenData())
     val error = MutableStateFlow<String?>(null)
+    val notice = MutableStateFlow<String?>(null)
+    val clearing = MutableStateFlow(false)
 
     private fun work(block: suspend () -> Unit) {
         viewModelScope.launch {
@@ -379,14 +381,31 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun clear() {
+        if (clearing.value) return
+        clearing.value = true
         work {
-            app.settings.smsImport(false)
-            app.stopService(trackingIntent)
-            Detection.register(app, false)
-            repo.clear()
-            app.settings.clear()
-            java.io.File(app.filesDir, "offline.mbtiles").delete()
-            java.io.File(app.filesDir, "tiles").deleteRecursively()
+            try {
+                app.settings.smsImport(false)
+                app.stopService(trackingIntent)
+                Detection.register(app, false)
+                repo.clear()
+                app.settings.clear()
+                deleteMapCaches(app.filesDir)
+            } finally {
+                clearing.value = false
+            }
         }
+    }
+}
+
+// Injectable filesystem operation for verifying the dispatcher used by explicit cache deletion.
+internal suspend fun deleteMapCaches(
+    root: java.io.File,
+    erase: (java.io.File) -> Boolean = {
+        if (it.isDirectory) it.deleteRecursively() else it.delete()
+    },
+) {
+    withContext(Dispatchers.IO) {
+        listOf("offline.mbtiles", "tiles").forEach { erase(java.io.File(root, it)) }
     }
 }

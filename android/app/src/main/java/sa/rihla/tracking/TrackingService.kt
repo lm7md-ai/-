@@ -42,17 +42,18 @@ class TrackingService : Service() {
     @Volatile private var nativeActive = false
     @Volatile private var precise = false
     private var pendingTimeout: Job? = null
+    internal var candidateWait: suspend (Long) -> Unit = { delay(it) }
     private val qualityGate = FixQualityGate()
     private var generation = 0L
     private var fusedRegistered = false
     private var lastFusedAttempt = 0L
     private var fusedRecoveryAt = 0L
     private var lastHeartbeat = 0L
-    private var lastSpeed = 0.0
+    @Volatile private var lastSpeed = 0.0
     private val turnDetector = TurnDetailDetector()
-    private var turnDetails = true
-    private var turnBoostUntil = 0L
-    private var boostUntil = 0L
+    @Volatile private var turnDetails = true
+    @Volatile private var turnBoostUntil = 0L
+    @Volatile private var boostUntil = 0L
     private var gnssRegistered = false
     private val gnss =
         object : android.location.GnssStatus.Callback() {
@@ -357,7 +358,7 @@ class TrackingService : Service() {
                 pendingTimeout?.cancel()
                 if (autoPending)
                     pendingTimeout = scope.launch {
-                        delay(600_000)
+                        candidateWait(PENDING_TIMEOUT_MS)
                         commandLock.withLock {
                             if (app.repository.dao.active() == null) stopSelf()
                         }
@@ -482,6 +483,8 @@ class TrackingService : Service() {
     }
 
     companion object {
+        internal const val PENDING_TIMEOUT_MS = 150_000L
+
         fun fineAllowed(c: Context) =
             c.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
                 PackageManager.PERMISSION_GRANTED
