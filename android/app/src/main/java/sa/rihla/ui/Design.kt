@@ -16,9 +16,10 @@ import androidx.compose.ui.unit.*
 
 val NewShapes =
     Shapes(
-        small = RoundedCornerShape(12.dp),
-        medium = RoundedCornerShape(20.dp),
-        large = RoundedCornerShape(20.dp),
+        extraSmall = RoundedCornerShape(6.dp),
+        small = RoundedCornerShape(10.dp),
+        medium = RoundedCornerShape(16.dp),
+        large = RoundedCornerShape(24.dp),
     )
 val NewTypography =
     Typography(
@@ -41,82 +42,77 @@ val NewTypography =
 fun journeyColors(dark: Boolean): ColorScheme =
     if (dark)
         darkColorScheme(
-            primary = Color(0xFF6EDAC6),
-            primaryContainer = Color(0xFF143E37),
-            onPrimaryContainer = Color(0xFFB8F1E5),
-            secondaryContainer = Color(0xFF253D4C),
-            onSecondaryContainer = Color(0xFFD0E7F5),
-            surfaceContainer = Color(0xFF191F23),
-            surfaceContainerLow = Color(0xFF151B1E),
-            surfaceContainerHigh = Color(0xFF242C31),
-            surfaceContainerHighest = Color(0xFF2E383C),
-            outlineVariant = Color(0xFF2E3A3D),
-            surfaceTint = Color(0xFF6EDAC6),
-            onPrimary = Color(0xFF00382E),
-            secondary = Color(0xFFAACBDD),
-            background = Color(0xFF101518),
-            surface = Color(0xFF191F23),
-            surfaceVariant = Color(0xFF242C31),
-            onBackground = Color(0xFFE5ECEF),
-            onSurface = Color(0xFFE5ECEF),
-            onSurfaceVariant = Color(0xFFA3B3BA),
-            outline = Color(0xFF405057),
-            error = Color(0xFFFFB4AB),
+            primary = Color(0xFFFFBC83),
+            onPrimary = Color(0xFF482609),
+            primaryContainer = Color(0xFF603C20),
+            onPrimaryContainer = Color(0xFFFFDCC2),
+            secondary = Color(0xFFA5D5D0),
+            onSecondary = Color(0xFF103735),
+            secondaryContainer = Color(0xFF244542),
+            onSecondaryContainer = Color(0xFFC2ECE5),
+            background = Color(0xFF10171D),
+            onBackground = Color(0xFFECE7DF),
+            surface = Color(0xFF172128),
+            onSurface = Color(0xFFECE7DF),
+            surfaceVariant = Color(0xFF283139),
+            onSurfaceVariant = Color(0xFFBDC2C6),
+            surfaceContainerLowest = Color(0xFF0D1318),
+            surfaceContainerLow = Color(0xFF141E25),
+            surfaceContainer = Color(0xFF1B262E),
+            surfaceContainerHigh = Color(0xFF253039),
+            surfaceContainerHighest = Color(0xFF303B43),
+            outline = Color(0xFF899298),
+            outlineVariant = Color(0xFF39434B),
+            surfaceTint = Color(0xFFFFBC83),
         )
     else
         lightColorScheme(
-            primary = Color(0xFF006D5B),
-            primaryContainer = Color(0xFFD8F3E9),
-            onPrimaryContainer = Color(0xFF004D40),
-            secondaryContainer = Color(0xFFE3EEF6),
-            onSecondaryContainer = Color(0xFF2D4B60),
-            surfaceContainer = Color(0xFFEBF0EF),
-            surfaceContainerLow = Color(0xFFF0F4F2),
-            surfaceContainerHigh = Color(0xFFE5ECE8),
-            surfaceContainerHighest = Color(0xFFDCE5E0),
-            outlineVariant = Color(0xFFDEE6E1),
-            surfaceTint = Color(0xFF006D5B),
+            primary = Color(0xFF8E481C),
             onPrimary = Color.White,
-            secondary = Color(0xFF496B80),
-            background = Color(0xFFF5F7F6),
-            surface = Color.White,
-            surfaceVariant = Color(0xFFE7EEEB),
-            onBackground = Color(0xFF192C29),
-            onSurface = Color(0xFF192C29),
-            onSurfaceVariant = Color(0xFF63756F),
-            outline = Color(0xFFCBD8D2),
+            primaryContainer = Color(0xFFF6DDC7),
+            onPrimaryContainer = Color(0xFF482609),
+            secondary = Color(0xFF315F5A),
+            onSecondary = Color.White,
+            secondaryContainer = Color(0xFFDCECE7),
+            onSecondaryContainer = Color(0xFF183D38),
+            background = Color(0xFFF6F3EC),
+            onBackground = Color(0xFF1B2931),
+            surface = Color(0xFFFFFDFA),
+            onSurface = Color(0xFF1B2931),
+            surfaceVariant = Color(0xFFEAE6DE),
+            onSurfaceVariant = Color(0xFF586168),
+            surfaceContainerLowest = Color.White,
+            surfaceContainerLow = Color(0xFFF1EEE6),
+            surfaceContainer = Color(0xFFEDE9E1),
+            surfaceContainerHigh = Color(0xFFE6E2D9),
+            surfaceContainerHighest = Color(0xFFDFDBD2),
+            outline = Color(0xFF797C7B),
+            outlineVariant = Color(0xFFD8D5CD),
+            surfaceTint = Color(0xFF8E481C),
         )
 
 @Composable
 fun MetricGrid(values: List<Pair<String, String>>) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        values.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { (label, value) ->
-                    Surface(
-                        Modifier.weight(1f),
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                    ) {
+    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
+            values.chunked(2).forEachIndexed { index, row ->
+                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    row.forEach { (label, value) ->
                         Column(
-                            Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            Modifier.weight(1f).padding(vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Text(
                                 tr(label),
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Text(
-                                value,
-                                style = MaterialTheme.typography.titleLarge,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Text(value, style = MaterialTheme.typography.titleLarge)
                         }
                     }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -129,7 +125,7 @@ fun Panel(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -201,39 +197,38 @@ fun Hero(
     icon: ImageVector = Icons.Default.Explore,
     onAction: () -> Unit,
 ) {
-    Box(
-        Modifier.fillMaxWidth()
-            .background(
-                Brush.linearGradient(listOf(Color(0xFF083F35), Color(0xFF126B58))),
-                RoundedCornerShape(24.dp),
-            )
+    Surface(
+        color = Color(0xFF1B2931),
+        contentColor = Color(0xFFF6F3EC),
+        shape = RoundedCornerShape(24.dp),
     ) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(title, color = Color(0xFFB6DFD0), style = MaterialTheme.typography.labelLarge)
-                Icon(
-                    icon,
-                    null,
-                    tint = Color(0xFF9AE4C6),
-                    modifier = Modifier.size(32.dp),
+        Column(
+            Modifier.fillMaxWidth().padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    title,
+                    Modifier.weight(1f),
+                    color = Color(0xFFE6B48C),
+                    style = MaterialTheme.typography.labelLarge,
                 )
+                Icon(icon, null, tint = Color(0xFFE6B48C), modifier = Modifier.size(24.dp))
             }
-            Text(value, color = Color.White, style = MaterialTheme.typography.headlineLarge)
-            Text(subtitle, color = Color(0xFFD6EBE2), style = MaterialTheme.typography.bodyMedium)
+            Text(value, style = MaterialTheme.typography.headlineLarge)
+            Text(subtitle, color = Color(0xFFD2D8DA), style = MaterialTheme.typography.bodyMedium)
             Button(
                 onClick = onAction,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                modifier = Modifier.heightIn(min = 52.dp),
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF79E4CB),
-                        contentColor = Color(0xFF092D38),
+                        containerColor = Color(0xFFF0B886),
+                        contentColor = Color(0xFF302316),
                     ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
             ) {
+                Icon(Icons.Default.ArrowOutward, null, Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(tr(action))
             }
         }

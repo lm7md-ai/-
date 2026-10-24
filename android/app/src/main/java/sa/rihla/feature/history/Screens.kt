@@ -10,7 +10,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import sa.rihla.R
 import sa.rihla.core.*
 import sa.rihla.core.Period
 import sa.rihla.ui.*
@@ -32,7 +34,10 @@ fun History(data: ScreenData, onOpen: (Long) -> Unit) {
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
-            SectionTitle("سجل مشاويرك", "ابحث عن رحلة وارجع إلى تفاصيلها ومسارها")
+            SectionTitle(
+                stringResource(R.string.atlas_log),
+                stringResource(R.string.atlas_log_hint),
+            )
             OutlinedTextField(
                 query,
                 { query = it },
@@ -51,7 +56,7 @@ fun History(data: ScreenData, onOpen: (Long) -> Unit) {
                 Spacer(Modifier.weight(1f))
                 Box {
                     IconButton(onClick = { sortMenu = true }) {
-                        Icon(Icons.Default.Sort, "ترتيب المشاوير")
+                        Icon(Icons.Default.Sort, stringResource(R.string.atlas_sort))
                     }
                     DropdownMenu(sortMenu, { sortMenu = false }) {
                         listOf(

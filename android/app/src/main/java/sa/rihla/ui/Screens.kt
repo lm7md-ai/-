@@ -16,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
@@ -27,6 +28,7 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.*
+import sa.rihla.R
 import sa.rihla.core.*
 import sa.rihla.data.*
 import sa.rihla.feature.calendar.*
@@ -246,194 +248,194 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                         Box(Modifier.padding(padding)) { Onboarding(vm, data) }
                     }
                 else
-                    Scaffold(
-                        snackbarHost = { SnackbarHost(snackbar) },
-                        topBar = {
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .statusBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                if (
-                                    selected != null ||
-                                        page !in
-                                            setOf(
-                                                "dashboard",
-                                                "history",
-                                                "audio",
-                                                "assistant",
-                                                "settings",
-                                            )
+                    BoxWithConstraints {
+                        val wide = maxWidth >= 840.dp
+                        Scaffold(
+                            snackbarHost = { SnackbarHost(snackbar) },
+                            topBar = {
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.background)
+                                        .statusBarsPadding()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    IconButton(onClick = ::goBack) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع")
-                                    }
-                                }
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        when {
-                                            selected != null -> tr("detail")
-                                            page == "assistant" -> "المساعد الذكي"
-                                            page == "models" -> "نماذج الذكاء الاصطناعي"
-                                            page == "assistant_profile" -> "تخصيص مساعدي"
-                                            page == "voice" -> "الأوامر الصوتية"
-                                            page == "studio" -> "استوديو المحاضرات"
-                                            page == "player" -> "المشغل"
-                                            page == "father_transfers" -> "حوالات الوالد"
-                                            page == "temporary_places" -> "الأماكن المؤقتة والجامعة"
-                                            page == "repeated_routes" -> "المسارات المتكررة"
-                                            page == "tracking_health" -> "مركز التتبع الذكي"
-                                            page == "settings" -> tr("more")
-                                            else -> tr(page)
-                                        },
-                                        style = MaterialTheme.typography.titleLarge,
-                                    )
-                                }
-                                if (page == "player")
-                                    IconButton(onClick = { openPage("audio") }) {
-                                        Icon(
-                                            Icons.Default.KeyboardArrowDown,
-                                            "طي المشغل إلى المكتبة",
-                                        )
-                                    }
-                                else
-                                    IconButton(onClick = { openPage("map") }) {
-                                        Icon(Icons.Default.Map, "الخريطة")
-                                    }
-                            }
-                        },
-                        bottomBar = {
-                            if (page != "player")
-                                Column {
-                                    if (audioPlayback.id.isNotBlank() && page != "player")
-                                        sa.rihla.audio.AudioMiniPlayer(
-                                            onOpen = { openPage("player") }
-                                        )
-                                    NavigationBar(
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                        tonalElevation = 0.dp,
+                                    if (
+                                        selected != null ||
+                                            page !in
+                                                setOf(
+                                                    "dashboard",
+                                                    "history",
+                                                    "audio",
+                                                    "map",
+                                                    "settings",
+                                                )
                                     ) {
-                                        listOf(
-                                                "dashboard" to Icons.Default.Home,
-                                                "history" to Icons.Default.Route,
-                                                "audio" to Icons.Default.Headphones,
-                                                "assistant" to Icons.Default.AutoAwesome,
-                                                "settings" to Icons.Default.GridView,
+                                        IconButton(onClick = ::goBack) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.ArrowBack,
+                                                stringResource(R.string.atlas_back),
                                             )
-                                            .forEach { (key, icon) ->
-                                                NavigationBarItem(
-                                                    selected =
-                                                        (page == key ||
-                                                            (key == "assistant" &&
-                                                                page in
-                                                                    setOf(
-                                                                        "models",
-                                                                        "assistant_profile",
-                                                                        "voice",
-                                                                    )) ||
-                                                            (key == "audio" &&
-                                                                page in
-                                                                    setOf("studio", "player"))) &&
-                                                            selected == null,
-                                                    onClick = {
-                                                        openPage(key)
-                                                    },
-                                                    icon = {
-                                                        Icon(
-                                                            icon,
-                                                            if (key == "assistant") "المساعد الذكي"
-                                                            else
-                                                                tr(
-                                                                    if (key == "settings") "more"
-                                                                    else key
-                                                                ),
-                                                        )
-                                                    },
-                                                    label = {
-                                                        Text(
-                                                            if (key == "assistant") "المساعد"
-                                                            else
-                                                                tr(
-                                                                    if (key == "settings") "more"
-                                                                    else key
-                                                                ),
-                                                            maxLines = 1,
-                                                        )
-                                                    },
+                                        }
+                                    }
+                                    AtlasMark(Modifier.padding(end = 10.dp).size(25.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            when {
+                                                selected != null -> tr("detail")
+                                                page == "assistant" -> "المساعد الذكي"
+                                                page == "models" -> "نماذج الذكاء الاصطناعي"
+                                                page == "assistant_profile" -> "تخصيص مساعدي"
+                                                page == "voice" -> "الأوامر الصوتية"
+                                                page == "studio" -> "استوديو المحاضرات"
+                                                page == "player" -> "المشغل"
+                                                page == "father_transfers" -> "حوالات الوالد"
+                                                page == "temporary_places" ->
+                                                    "الأماكن المؤقتة والجامعة"
+                                                page == "repeated_routes" -> "المسارات المتكررة"
+                                                page == "tracking_health" -> "مركز التتبع الذكي"
+                                                page == "settings" -> tr("more")
+                                                else -> tr(page)
+                                            },
+                                            style = MaterialTheme.typography.titleLarge,
+                                        )
+                                    }
+                                    if (page == "player")
+                                        IconButton(onClick = { openPage("audio") }) {
+                                            Icon(
+                                                Icons.Default.KeyboardArrowDown,
+                                                stringResource(R.string.atlas_back_library),
+                                            )
+                                        }
+                                    else
+                                        IconButton(
+                                            onClick = {
+                                                openPage(
+                                                    if (page == "map") "settings" else "assistant"
                                                 )
                                             }
+                                        ) {
+                                            Icon(
+                                                if (page == "map") Icons.Default.Tune
+                                                else Icons.Default.AutoAwesome,
+                                                if (page == "map") tr("more")
+                                                else stringResource(R.string.atlas_assistant),
+                                            )
+                                        }
+                                }
+                            },
+                            bottomBar = {
+                                if (page != "player")
+                                    Column {
+                                        if (audioPlayback.id.isNotBlank() && page != "player")
+                                            sa.rihla.audio.AudioMiniPlayer(
+                                                onOpen = { openPage("player") }
+                                            )
+                                        if (!wide)
+                                            AtlasNavigation(
+                                                page,
+                                                selected != null,
+                                                false,
+                                                ::openPage,
+                                            )
                                     }
-                                }
-                        },
-                    ) { padding ->
-                        Column(Modifier.padding(padding).padding(horizontal = 16.dp)) {
-                            val o = data.outings.find { it.id == selected }
-                            if (o != null)
-                                OutingDetail(vm, data, o) {
-                                    expenseOuting = o.id
-                                    expense = true
-                                }
-                            else
-                                pageStates.SaveableStateProvider(page) {
-                                    when (page) {
-                                        "dashboard" ->
-                                            Dashboard(
-                                                vm,
-                                                data,
-                                                onOpen = { selected = it },
-                                                onLive = { selected = data.active?.id },
-                                                onExpense = {
-                                                    expenseOuting = data.active?.id
-                                                    expense = true
-                                                },
+                            },
+                        ) { padding ->
+                            Row(Modifier.padding(padding)) {
+                                if (wide) AtlasNavigation(page, selected != null, true, ::openPage)
+                                Box(
+                                    Modifier.weight(1f).fillMaxHeight(),
+                                    contentAlignment = Alignment.TopCenter,
+                                ) {
+                                    Column(
+                                        Modifier.widthIn(
+                                                max = if (page == "map") 1200.dp else 840.dp
                                             )
-                                        "history" -> History(data) { selected = it }
-                                        "calendar" -> CalendarScreen(data) { selected = it }
-                                        "map" -> sa.rihla.map.MapScreen(vm, data)
-                                        "father_transfers" -> FatherTransfersScreen()
-                                        "temporary_places" ->
-                                            TemporaryPlacesScreen(vm, data) { selected = it }
-                                        "repeated_routes" ->
-                                            androidx.compose.foundation.lazy.LazyColumn {
-                                                item {
-                                                    RouteComparisonPanel(
-                                                        vm,
-                                                        data,
-                                                        0L to Long.MAX_VALUE,
-                                                    ) {
-                                                        selected = it
-                                                    }
-                                                }
-                                            }
-                                        "tracking_health" -> TrackingDiagnosticsScreen(vm, data)
-                                        "audio" ->
-                                            sa.rihla.audio.AudioScreen(
-                                                onOpenPlayer = { openPage("player") }
+                                            .fillMaxWidth()
+                                            .padding(
+                                                horizontal = if (page == "map") 0.dp else 20.dp
                                             )
-                                        "player" -> sa.rihla.audio.AudioPlayerScreen()
-                                        "assistant" -> sa.rihla.assistant.AssistantScreen()
-                                        "voice" ->
-                                            sa.rihla.assistant.AssistantScreen(voiceOnly = true)
-                                        "assistant_profile" ->
-                                            sa.rihla.assistant.PersonalAssistantScreen()
-                                        "models" -> sa.rihla.assistant.ModelCenterScreen()
-                                        "studio" ->
-                                            sa.rihla.audio.studio.StudioScreen(
-                                                viewModel(),
-                                                { openPage("audio") },
-                                                showHeading = false,
-                                            )
-                                        "statistics" -> StatisticsScreen(data, vm) { selected = it }
-                                        "vehicle" -> VehicleScreen(data)
-                                        "expenses" ->
-                                            ExpensesScreen(data, vm) {
-                                                expenseOuting = data.active?.id
+                                    ) {
+                                        val o = data.outings.find { it.id == selected }
+                                        if (o != null)
+                                            OutingDetail(vm, data, o) {
+                                                expenseOuting = o.id
                                                 expense = true
                                             }
-                                        "settings" -> SettingsScreen(vm, data) { openPage(it) }
+                                        else
+                                            pageStates.SaveableStateProvider(page) {
+                                                when (page) {
+                                                    "dashboard" ->
+                                                        Dashboard(
+                                                            vm,
+                                                            data,
+                                                            onOpen = { selected = it },
+                                                            onLive = { selected = data.active?.id },
+                                                            onExpense = {
+                                                                expenseOuting = data.active?.id
+                                                                expense = true
+                                                            },
+                                                        )
+                                                    "history" -> History(data) { selected = it }
+                                                    "calendar" ->
+                                                        CalendarScreen(data) { selected = it }
+                                                    "map" -> sa.rihla.map.MapScreen(vm, data)
+                                                    "father_transfers" -> FatherTransfersScreen()
+                                                    "temporary_places" ->
+                                                        TemporaryPlacesScreen(vm, data) {
+                                                            selected = it
+                                                        }
+                                                    "repeated_routes" ->
+                                                        androidx.compose.foundation.lazy
+                                                            .LazyColumn {
+                                                                item {
+                                                                    RouteComparisonPanel(
+                                                                        vm,
+                                                                        data,
+                                                                        0L to Long.MAX_VALUE,
+                                                                    ) {
+                                                                        selected = it
+                                                                    }
+                                                                }
+                                                            }
+                                                    "tracking_health" ->
+                                                        TrackingDiagnosticsScreen(vm, data)
+                                                    "audio" ->
+                                                        sa.rihla.audio.AudioScreen(
+                                                            onOpenPlayer = { openPage("player") }
+                                                        )
+                                                    "player" -> sa.rihla.audio.AudioPlayerScreen()
+                                                    "assistant" ->
+                                                        sa.rihla.assistant.AssistantScreen()
+                                                    "voice" ->
+                                                        sa.rihla.assistant.AssistantScreen(
+                                                            voiceOnly = true
+                                                        )
+                                                    "assistant_profile" ->
+                                                        sa.rihla.assistant.PersonalAssistantScreen()
+                                                    "models" ->
+                                                        sa.rihla.assistant.ModelCenterScreen()
+                                                    "studio" ->
+                                                        sa.rihla.audio.studio.StudioScreen(
+                                                            viewModel(),
+                                                            { openPage("audio") },
+                                                            showHeading = false,
+                                                        )
+                                                    "statistics" ->
+                                                        StatisticsScreen(data, vm) { selected = it }
+                                                    "vehicle" -> VehicleScreen(data)
+                                                    "expenses" ->
+                                                        ExpensesScreen(data, vm) {
+                                                            expenseOuting = data.active?.id
+                                                            expense = true
+                                                        }
+                                                    "settings" ->
+                                                        SettingsScreen(vm, data) { openPage(it) }
+                                                }
+                                            }
                                     }
                                 }
+                            }
                         }
                     }
                 if (expense) ExpenseDialog(vm, data, expenseOuting) { expense = false }
@@ -464,53 +466,79 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
 
 @Composable
 fun OutingCard(o: Outing, now: Long, details: TripDetails? = null, onClick: () -> Unit) {
-    Card(
+    Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(12.dp),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Icon(
-                    Icons.Default.Route,
+                    Icons.Default.TripOrigin,
                     null,
-                    modifier = Modifier.padding(end = 10.dp),
                     tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
                 )
-                Text(
-                    details?.title?.takeIf { it.isNotBlank() } ?: tr(o.classification),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
+                Box(
+                    Modifier.width(2.dp)
+                        .height(36.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
                 )
-                if (details?.favorite == true)
-                    Icon(
-                        Icons.Default.Star,
-                        tr("favorite"),
-                        tint = MaterialTheme.colorScheme.secondary,
-                    )
+                Icon(
+                    Icons.Default.Place,
+                    null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(20.dp),
+                )
             }
-            Text(
-                stamp(o.startedAt),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                num(o.state.meters / 1000) +
-                    " " +
-                    tr("km") +
-                    " · " +
-                    duration((o.endedAt ?: now) - o.startedAt)
-            )
-            if (o.endedAt == null) Text(tr("active"), color = MaterialTheme.colorScheme.primary)
-            if (!details?.note.isNullOrBlank())
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        details?.title?.takeIf { it.isNotBlank() } ?: tr(o.classification),
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    if (details?.favorite == true)
+                        Icon(
+                            Icons.Default.Star,
+                            tr("favorite"),
+                            Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                }
                 Text(
-                    details.note,
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    stamp(o.startedAt),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text(
+                    num(o.state.meters / 1000) + " " + tr("km"),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Text(
+                    duration((o.endedAt ?: now) - o.startedAt),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (o.endedAt == null) StatusPill(tr("active"), true)
+                if (!details?.note.isNullOrBlank())
+                    Text(
+                        details.note,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+            }
+            Icon(
+                Icons.Default.ChevronLeft,
+                null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

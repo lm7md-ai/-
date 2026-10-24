@@ -35,8 +35,10 @@ class TrackingUiTest {
         }
         compose.setContent { FreshTestApplication { RihlaRoot() } }
         compose.waitUntil(20000) {
-            compose.onAllNodesWithText("مركز التتبع الذكي").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("المزيد").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithText("المزيد").performClick()
+        compose.onNodeWithText("الطريق والأماكن").performClick()
         compose.onNodeWithText("مركز التتبع الذكي").performScrollTo().performClick()
         compose.onNodeWithText("جاهزية التتبع").assertIsDisplayed()
         compose.onNodeWithText("الموقع الدقيق").assertIsDisplayed()

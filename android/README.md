@@ -1,3 +1,8 @@
+# Android experience redesign — source preview
+
+[Design system](docs/DESIGN_SYSTEM.md) · [Before/after screenshots and validation](docs/REDESIGN_2026_10_24.md).
+Version 64 / 6.4, existing data schemas and signing stay unchanged. This branch builds on the reviewed defect fixes.
+
 # Reviewed Android defects — source fixes, version unchanged
 
 [Item-by-item revalidation, regression tests, CI proof and preservation report](docs/REVIEW_2026_10_24.md).
