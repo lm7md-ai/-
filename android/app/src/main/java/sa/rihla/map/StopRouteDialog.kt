@@ -67,6 +67,7 @@ fun StopRouteMetrics(leg: StopRouteSection) {
             stringResource(R.string.map_leg_unsampled, duration(leg.unsampledMs)),
             style = MaterialTheme.typography.bodySmall,
         )
+    leg.samples?.let { RouteAiAnalysis(it) }
     Text(stringResource(R.string.map_leg_boundary_note), style = MaterialTheme.typography.bodySmall)
     if (leg.liveEnd)
         Text(

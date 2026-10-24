@@ -385,4 +385,11 @@
   <string name="map_measure_undo">تراجع عن نقطة</string>
   <string name="map_measure_clear">مسح القياس</string>
   <string name="map_measure_done">إنهاء القياس</string>
+  <string name="route_ai_analyze">تفسير الجزء بالذكاء الاصطناعي المحلي</string>
+  <string name="route_ai_cancel">إلغاء التحليل</string>
+  <string name="route_ai_failed">لم يكتمل تحليل النموذج. تحقق من تنزيله والتحقق من ملفه في مركز النماذج، ومن الذاكرة المتاحة، ثم حاول مجددًا. لم تُعدّل بيانات المشوار.</string>
+  <string name="route_ai_success">نجح اختبار التوليد لهذه المحاولة · تفسير مولّد محليًا</string>
+  <string name="route_ai_note">يتطلب تنزيل نموذج المساعد مرة واحدة (نحو 1.6 جيجابايت). التحليل اختياري على الجهاز، وقد يخطئ النموذج. الأرقام أعلاه من التسجيل؛ لا يثبت النموذج ازدحامًا أو سبب التوقف أو صحة القيادة. يحلل نقاط الجزء المتاحة فقط، ولا يعرف حركة غير مسجلة.</string>
+  <string name="route_ai_models">فتح مركز النماذج والتنزيل</string>
+  <string name="route_ai_snapshot">تفسير لقطة التسجيل حتى %1$s؛ لا يتحدث تلقائيًا مع النقاط التالية. أعد طلب التحليل لتحديثه.</string>
 </resources>

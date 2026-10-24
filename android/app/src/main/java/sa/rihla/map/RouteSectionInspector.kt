@@ -143,7 +143,10 @@ fun RouteSectionInspector(
                     Text(stringResource(R.string.map_leg_gps_details))
                 }
                 if (sampleDetails) SectionMetrics(section)
-            } else SectionMetrics(section)
+            } else {
+                SectionMetrics(section)
+                RouteAiAnalysis(section)
+            }
             TextButton(
                 onClick = {
                     state.reset()
