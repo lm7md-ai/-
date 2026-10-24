@@ -1,3 +1,8 @@
+# مشواري 6.5 — إصدار التصميم الجديد
+
+[التنزيل من GitHub Releases](https://github.com/lm7md-ai/-/releases/tag/v6.5) · [دليل الإصدار والتثبيت](docs/RELEASE_6_5.md).
+الإصدار 6.5 / رقم البناء 65 يجمع إعادة التصميم وإصلاحات المراجعة. تبقى الحزمتان والتوقيع ومخططات البيانات 7 / 2 / 1 كما هي؛ ثبّت نسخة حزمتك الحالية فوقها دون حذف التطبيق.
+
 # Android experience redesign — source preview
 
 [Design system](docs/DESIGN_SYSTEM.md) · [Before/after screenshots and validation](docs/REDESIGN_2026_10_24.md).
