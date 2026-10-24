@@ -124,6 +124,7 @@ class RouteUiTest {
             compose.onAllNodesWithText("المزيد").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("المزيد").performClick()
+        compose.onNodeWithText("الطريق والأماكن").performClick()
         compose.onNodeWithText("المسارات المتكررة").performScrollTo().performClick()
         compose.waitUntil(20000) {
             compose.onAllNodesWithText("عرض مشوار من هذا المسار").fetchSemanticsNodes().isNotEmpty()

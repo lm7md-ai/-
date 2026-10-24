@@ -45,7 +45,7 @@ fun ExportDocument(
                                 it.write(bytes)
                             }
                         }
-                        vm.error.value = "file_saved"
+                        vm.notice.value = "file_saved"
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
@@ -161,10 +161,15 @@ fun DataTools(vm: JourneyViewModel, data: ScreenData) {
                             try {
                                 withContext(Dispatchers.IO) { backup.restore(text) }
                                 vm.app.settings.smsImport(false)
-                                vm.app.settings.onboard()
+                                val places = withContext(Dispatchers.IO) { vm.repo.dao.places() }
+                                val configured =
+                                    places.any { it.type == "HOME" } &&
+                                        places.any { it.type == "UNIVERSITY" }
+                                vm.app.settings.onboard(configured)
                                 sa.rihla.tracking.HomeGeofences.restore(vm.app)
                                 pending = null
-                                vm.error.value = "backup_restored"
+                                vm.notice.value =
+                                    if (configured) "backup_restored" else "restore_places_required"
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
                             } catch (error: Exception) {
@@ -227,7 +232,14 @@ fun DeviceReadiness(data: ScreenData) {
         Metric("background_battery", tr(if (battery) "unrestricted" else "system_managed"))
         Metric(
             "sms_access",
-            tr(if (PurchaseNotificationService.allowed(context) || sa.rihla.sms.PurchaseSmsReceiver.allowed(context)) "allowed" else "denied"),
+            tr(
+                if (
+                    PurchaseNotificationService.allowed(context) ||
+                        sa.rihla.sms.PurchaseSmsReceiver.allowed(context)
+                )
+                    "allowed"
+                else "denied"
+            ),
         )
         Text(tr("redmagic_help"), style = MaterialTheme.typography.bodySmall)
         OutlinedButton(

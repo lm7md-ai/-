@@ -13,10 +13,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.*
 import com.google.android.gms.location.*
 import java.time.*
 import kotlinx.coroutines.*
+import sa.rihla.R
 import sa.rihla.core.*
 import sa.rihla.data.*
 import sa.rihla.feature.calendar.*
@@ -53,14 +55,38 @@ fun ExpensesScreen(data: ScreenData, vm: JourneyViewModel, onAdd: () -> Unit) {
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
-            Hero(
-                tr("wallet_caption"),
-                num(visible.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
-                tr("visible_spending"),
-                "add_expense",
-                icon = androidx.compose.material.icons.Icons.Default.AccountBalanceWallet,
-                onAction = onAdd,
+            SectionTitle(
+                stringResource(R.string.atlas_wallet),
+                stringResource(R.string.atlas_wallet_hint),
             )
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(22.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(tr("visible_spending"), style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        num(visible.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
+                        style = MaterialTheme.typography.headlineLarge,
+                    )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalButton(onClick = onAdd) { Text(tr("add_expense")) }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(
+                            onClick = {
+                                sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit(
+                                    "father_transfers"
+                                )
+                            }
+                        ) {
+                            Text(stringResource(R.string.atlas_wallet_transfers))
+                        }
+                    }
+                }
+            }
             Spacer(Modifier.height(12.dp))
             PageTabs(listOf("سجل المصروفات", "التحليل والميزانية"), page) { page = it }
             if (page == 0) {

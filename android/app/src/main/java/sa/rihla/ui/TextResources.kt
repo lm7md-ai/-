@@ -257,6 +257,7 @@ fun textResource(key: String): Int =
         "tap_chart_day" -> R.string.tap_chart_day
         "file_saved" -> R.string.file_saved
         "working" -> R.string.working
+        "deleting_data" -> R.string.deleting_data
         "backup_tools" -> R.string.backup_tools
         "backup_explanation" -> R.string.backup_explanation
         "export_backup" -> R.string.export_backup
@@ -264,6 +265,7 @@ fun textResource(key: String): Int =
         "backup_privacy" -> R.string.backup_privacy
         "backup_invalid" -> R.string.backup_invalid
         "backup_restored" -> R.string.backup_restored
+        "restore_places_required" -> R.string.restore_places_required
         "restore_empty_only" -> R.string.restore_empty_only
         "device_readiness" -> R.string.device_readiness
         "gps_signal" -> R.string.gps_signal

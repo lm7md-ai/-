@@ -16,7 +16,7 @@ enum class AudioScene(val key:String,val label:String,val width:Float,val reflec
 }
 
 fun selectAudioScene(prefs:SharedPreferences,scene:AudioScene) {
-    prefs.edit().putString("scene",scene.key).putFloat("width",scene.width)
-        .putInt("bass",0).putInt("surround",0).putBoolean("eq_enabled",false)
-        .remove("eq_levels").putString("eq_preset","flat").apply()
+    // Keep the established key and every manual effect value. Software presets use
+    // their AudioScene profile; returning to CUSTOM restores the untouched controls.
+    prefs.edit().putString("scene",scene.key).apply()
 }

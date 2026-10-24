@@ -37,10 +37,11 @@ object TransferArchive {
                         val body = cursor.getString(1).orEmpty()
                         val time = cursor.getLong(3).takeIf { it > 0 } ?: cursor.getLong(2)
                         if (store.import(body, time, "inbox:${cursor.getLong(0)}")) added++
-                        if (scanned % 100 == 0) progress(scanned, added)
+                        if (scanned % 100 == 0)
+                            withContext(Dispatchers.Main) { progress(scanned, added) }
                     }
                 } ?: error("SMS_ARCHIVE_UNAVAILABLE")
-            progress(scanned, added)
+            withContext(Dispatchers.Main) { progress(scanned, added) }
             scanned to added
         }
 

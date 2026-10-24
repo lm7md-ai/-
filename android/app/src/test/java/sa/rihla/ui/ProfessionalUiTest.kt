@@ -135,7 +135,7 @@ class ProfessionalUiTest {
         }
         compose.onNodeWithText("كيف نفهم أنفسنا").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("أوضاع الصوت الجاهزة").assertDoesNotExist()
-        compose.onNodeWithText("قيد الاستماع").assertDoesNotExist()
+        compose.onNodeWithText("جلسة الاستماع").assertDoesNotExist()
         capture("audio-5.2-light.png")
         runBlocking { app.settings.theme("DARK") }
         compose.waitForIdle()
@@ -147,7 +147,7 @@ class ProfessionalUiTest {
         compose.onNodeWithText("كيف نفهم أنفسنا").performScrollTo().performClick()
         compose.waitUntil(15000) {
             Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
-            compose.onAllNodesWithText("قيد الاستماع").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("جلسة الاستماع").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("أوضاع الصوت الجاهزة").assertDoesNotExist()
         compose.onNodeWithContentDescription("رجوع 15 ثانية").assertIsDisplayed()
@@ -166,7 +166,7 @@ class ProfessionalUiTest {
             }
         compose.onNodeWithContentDescription("رجوع").performClick()
         compose.onNodeWithText("كيف").assertExists()
-        compose.onNodeWithText("قيد الاستماع").assertDoesNotExist()
+        compose.onNodeWithText("جلسة الاستماع").assertDoesNotExist()
         compose.onNodeWithText("محاضرات مختارة · 0:10").assertExists()
         capture("mini-player-5.2-dark.png")
         compose.onNodeWithContentDescription("مسح البحث").performClick()
@@ -196,7 +196,9 @@ class ProfessionalUiTest {
             )
         }
         start()
-        compose.onNodeWithText("محفظتي").performScrollTo().performClick()
+        compose.onNodeWithText("المزيد").performClick()
+        compose.onNodeWithText("المحفظة والرسائل").performClick()
+        compose.onNode(hasText("المصروفات") and hasClickAction()).performScrollTo().performClick()
         compose.onNodeWithText("متجر الاختبار").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("التحليل والميزانية").performScrollTo().performClick()
         compose.onNodeWithText("متجر الاختبار").assertDoesNotExist()
@@ -216,7 +218,7 @@ class ProfessionalUiTest {
         prepare()
         start()
         compose.onNodeWithText("المزيد").performClick()
-        compose.onNodeWithText("ابحث في الإعدادات والأدوات").performTextInput("سيارتي")
+        compose.onNodeWithText("ابحث عن أداة أو إعداد").performTextInput("سيارتي")
         compose.onNode(hasText("سيارتي") and !hasSetTextAction()).performClick()
         compose.onNodeWithText("المواصفات").performClick()
         compose.onNodeWithText("4A92", substring = true).assertIsDisplayed()
@@ -225,8 +227,8 @@ class ProfessionalUiTest {
         compose.onNodeWithText("4A92", substring = true).assertDoesNotExist()
         compose.onNodeWithText("سجل الوقود").assertIsSelected()
         compose.onNodeWithContentDescription("رجوع").performClick()
-        compose.onNodeWithText("ابحث في الإعدادات والأدوات").performTextClearance()
-        compose.onNodeWithText("ابحث في الإعدادات والأدوات").performTextInput("الإحصاءات")
+        compose.onNodeWithText("ابحث عن أداة أو إعداد").performTextClearance()
+        compose.onNodeWithText("ابحث عن أداة أو إعداد").performTextInput("الإحصاءات")
         compose.onNode(hasText("الإحصاءات") and !hasSetTextAction()).performClick()
         compose.onNodeWithText("صورة أوضح لرحلاتك").assertIsDisplayed()
         capture("statistics-5.2-light.png")

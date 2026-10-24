@@ -9,8 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -19,15 +19,16 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import sa.rihla.R
 
 @Composable
 fun AudioMiniPlayer(onOpen: () -> Unit, vm: AudioViewModel = viewModel()) {
@@ -36,8 +37,8 @@ fun AudioMiniPlayer(onOpen: () -> Unit, vm: AudioViewModel = viewModel()) {
     if (playback.id.isBlank()) return
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp),
     ) {
         Column {
             Row(
@@ -210,15 +211,21 @@ fun AudioScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("مكتبتك الصوتية", style = MaterialTheme.typography.headlineMedium)
                     Text(
-                        "${catalog.tracks.size} مقطع · على جهازك",
+                        stringResource(R.string.atlas_listen),
+                        style = MaterialTheme.typography.headlineLarge,
+                    )
+                    Text(
+                        stringResource(
+                            R.string.atlas_library_count,
+                            sa.rihla.ui.num(catalog.tracks.size.toDouble(), 0),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 FilledTonalIconButton(onClick = { addMenu = true }, enabled = !busy) {
-                    Icon(Icons.Default.Add, "إضافة صوتيات")
+                    Icon(Icons.Default.Add, stringResource(R.string.atlas_add_audio))
                 }
                 Box {
                     IconButton(onClick = { libraryMenu = true }) {
@@ -295,6 +302,91 @@ fun AudioScreen(
                 }
             }
         }
+        if (
+            query.isBlank() && playlist == null && album == null && artist == null && tab == "all"
+        ) {
+            val resumable =
+                catalog.tracks
+                    .filter { audioResume(it.positionMs, it.durationMs) > 0 }
+                    .sortedByDescending { it.lastPlayedAt }
+                    .take(6)
+            if (resumable.isNotEmpty()) {
+                item {
+                    Text(
+                        stringResource(R.string.atlas_resume),
+                        Modifier.padding(top = 16.dp, bottom = 8.dp),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                }
+                item {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 12.dp),
+                    ) {
+                        items(resumable, key = { "resume:${it.id}" }) { track ->
+                            Surface(
+                                onClick = {
+                                    play(track, visible)
+                                    onOpenPlayer()
+                                },
+                                enabled = connected,
+                                modifier = Modifier.width(280.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                            ) {
+                                Column(
+                                    Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    ) {
+                                        AudioCover(track, 56)
+                                        Column(Modifier.weight(1f)) {
+                                            Text(
+                                                track.title,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.titleMedium,
+                                            )
+                                            Text(
+                                                track.artist,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                        }
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = {
+                                            (track.positionMs.toFloat() /
+                                                    track.durationMs.coerceAtLeast(1))
+                                                .coerceIn(0f, 1f)
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            stringResource(
+                                                R.string.atlas_continue_at,
+                                                audioTime(track.positionMs),
+                                            ),
+                                            Modifier.weight(1f),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                        Icon(Icons.Default.PlayArrow, null)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item {
             val tabs =
                 listOf(
@@ -305,14 +397,14 @@ fun AudioScreen(
                     "artists" to "الفنانون",
                     "recent" to "الأخيرة",
                 )
-            ScrollableTabRow(
-                selectedTabIndex = tabs.indexOfFirst { it.first == tab }.coerceAtLeast(0),
-                edgePadding = 0.dp,
-                containerColor = MaterialTheme.colorScheme.background,
-                divider = {},
+            Row(
+                Modifier.fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 tabs.forEach { (key, label) ->
-                    Tab(
+                    FilterChip(
                         selected = tab == key,
                         onClick = {
                             tab = key
@@ -320,11 +412,12 @@ fun AudioScreen(
                             album = null
                             artist = null
                         },
-                        text = { Text(label, maxLines = 1) },
+                        label = { Text(label) },
                     )
                 }
             }
         }
+
         if (tab == "lists") {
             val playlists =
                 catalog.playlists.filter { query.isBlank() || it.name.contains(query.trim(), true) }
@@ -456,7 +549,7 @@ fun AudioScreen(
                     ) {
                         Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("تشغيل الكل")
+                        Text(stringResource(R.string.atlas_play_all))
                     }
                     IconButton(
                         onClick = {
@@ -845,64 +938,80 @@ private fun AudioAddSheet(
 
 @Composable
 internal fun AudioCover(track: AudioTrack, size: Int) {
+    val context = LocalContext.current.applicationContext
     val image by
-        produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, track.artwork) {
+        produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+            null,
+            track.id,
+            track.uri,
+            track.artwork,
+        ) {
             value =
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    if (track.artwork.isBlank()) null
-                    else
-                        runCatching {
-                            android.graphics.BitmapFactory.decodeFile(track.artwork)
-                                ?.asImageBitmap()
+                    val file =
+                        (context as? sa.rihla.RihlaApp)?.audio?.ensureArtwork(track)
+                            ?: track.artwork
+                                .takeIf { it.isNotBlank() }
+                                ?.let { java.io.File(it) }
+                                ?.takeIf { it.isFile }
+                    runCatching {
+                        file?.let {
+                            android.graphics.BitmapFactory.decodeFile(it.path)?.asImageBitmap()
                         }
-                            .getOrNull()
+                    }
+                        .getOrNull()
                 }
         }
     Surface(
         Modifier.size(size.dp),
-        shape = RoundedCornerShape((size / 6).dp),
+        shape = RoundedCornerShape((size / 12).coerceAtLeast(6).dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
     ) {
         val cover = image
-        if (cover != null) Image(cover, "غلاف المقطع", contentScale = ContentScale.Crop)
-        else
-            Box(
-                Modifier.fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.secondaryContainer,
-                            )
-                        )
+        if (cover != null)
+            Image(cover, stringResource(R.string.atlas_cover), contentScale = ContentScale.Crop)
+        else AudioSleeve(track, size)
+    }
+}
+
+@Composable
+private fun AudioSleeve(track: AudioTrack, size: Int) {
+    val colors = MaterialTheme.colorScheme
+    Box(Modifier.fillMaxSize().background(colors.secondaryContainer)) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+            for (i in 0..5) {
+                val x = this.size.width * (i + 1) / 7f
+                drawLine(
+                    colors.onSecondaryContainer.copy(alpha = .10f),
+                    androidx.compose.ui.geometry.Offset(x, 0f),
+                    androidx.compose.ui.geometry.Offset(
+                        x - this.size.width * .4f,
+                        this.size.height,
                     ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier.size((size * .72f).dp)
-                        .border(
-                            1.dp,
-                            MaterialTheme.colorScheme.primary.copy(alpha = .12f),
-                            CircleShape,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        Modifier.size((size * .5f).dp)
-                            .background(
-                                MaterialTheme.colorScheme.primary.copy(alpha = .08f),
-                                CircleShape,
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Default.GraphicEq,
-                            null,
-                            Modifier.size((size * .3f).dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
+                    strokeWidth = 2.dp.toPx(),
+                )
             }
+            drawCircle(
+                colors.onSecondaryContainer.copy(alpha = .08f),
+                radius = this.size.minDimension * .32f,
+                style =
+                    androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = this.size.minDimension * .08f
+                    ),
+            )
+        }
+        Icon(
+            Icons.Default.Headphones,
+            null,
+            Modifier.align(Alignment.Center).size((size * .3f).dp),
+            tint = colors.onSecondaryContainer,
+        )
+        if (size >= 100)
+            Text(
+                track.title.take(1),
+                Modifier.align(Alignment.BottomStart).padding((size * .08f).dp),
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.onSecondaryContainer,
+            )
     }
 }

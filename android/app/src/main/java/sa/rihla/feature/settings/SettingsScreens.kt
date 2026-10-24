@@ -8,14 +8,17 @@ import android.os.Build
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -23,6 +26,7 @@ import androidx.core.net.toUri
 import com.google.android.gms.location.*
 import java.io.File
 import kotlinx.coroutines.*
+import sa.rihla.R
 import sa.rihla.data.*
 import sa.rihla.feature.calendar.*
 import sa.rihla.feature.dashboard.*
@@ -131,28 +135,33 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
     var section by
         androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var expandedGroup by
+        androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<Int?>(null) }
     androidx.activity.compose.BackHandler(enabled = section != null) { section = null }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (section == null) {
-            Text("كل ما تحتاجه", style = MaterialTheme.typography.headlineMedium)
             Text(
-                "أدواتك وإعداداتك في مكان واحد",
+                stringResource(R.string.atlas_tools),
+                style = MaterialTheme.typography.headlineLarge,
+            )
+            Text(
+                stringResource(R.string.atlas_tools_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedTextField(
                 query,
                 { query = it },
-                label = { Text("ابحث في الإعدادات والأدوات") },
+                label = { Text(stringResource(R.string.atlas_search_tools)) },
                 singleLine = true,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                 leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Search, null) },
                 modifier = Modifier.fillMaxWidth(),
             )
-            val groups =
+            val originalGroups =
                 listOf(
                     "الذكاء الاصطناعي" to
                         listOf(
@@ -251,63 +260,154 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
                             ),
                         ),
                 )
-            for ((title, entries) in groups) {
-                val visible = entries.filter {
-                    query.isBlank() || (it.second + " " + it.third).contains(query.trim(), true)
-                }
-                if (visible.isNotEmpty())
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp, start = 4.dp),
-                    )
-                for ((key, label, description) in visible) sa.rihla.assistant.FeatureRow(
-                    label,
-                    description,
-                    when (key) {
-                        "repeated_routes" -> androidx.compose.material.icons.Icons.Default.Route
-                        "tracking_health" -> androidx.compose.material.icons.Icons.Default.GpsFixed
-                        "models" -> androidx.compose.material.icons.Icons.Default.Memory
-                        "assistant",
-                        "assistant_profile" ->
-                            androidx.compose.material.icons.Icons.Default.AutoAwesome
-                        "voice" -> androidx.compose.material.icons.Icons.Default.Mic
-                        "audio",
-                        "studio" -> androidx.compose.material.icons.Icons.Default.Headphones
-                        "map",
-                        "maps_settings" -> androidx.compose.material.icons.Icons.Default.Map
-                        "calendar" -> androidx.compose.material.icons.Icons.Default.CalendarMonth
-                        "expenses" -> androidx.compose.material.icons.Icons.Default.Payments
-                        "statistics" -> androidx.compose.material.icons.Icons.Default.BarChart
-                        "vehicle" -> androidx.compose.material.icons.Icons.Default.DirectionsCar
-                        "tracking" -> androidx.compose.material.icons.Icons.Default.Route
-                        "finance" -> androidx.compose.material.icons.Icons.Default.LocalGasStation
-                        "sms" -> androidx.compose.material.icons.Icons.Default.Sms
-                        "permissions" -> androidx.compose.material.icons.Icons.Default.Shield
-                        "appearance" -> androidx.compose.material.icons.Icons.Default.Palette
-                        "backup" -> androidx.compose.material.icons.Icons.Default.Backup
-                        "privacy" -> androidx.compose.material.icons.Icons.Default.Lock
-                        else -> androidx.compose.material.icons.Icons.Default.Tune
-                    },
-                ) {
-                    if (
-                        key in
-                            setOf(
-                                "tracking",
-                                "finance",
-                                "sms",
-                                "permissions",
-                                "appearance",
-                                "maps_settings",
-                                "backup",
-                                "privacy",
-                            )
-                    )
-                        section = key
-                    else navigate(key)
+            val allEntries = originalGroups.flatMap { it.second }.associateBy { it.first }
+            val groups =
+                listOf(
+                    R.string.atlas_journeys to
+                        listOf(
+                            "tracking",
+                            "tracking_health",
+                            "temporary_places",
+                            "repeated_routes",
+                            "calendar",
+                            "map",
+                            "statistics",
+                            "vehicle",
+                        ),
+                    R.string.atlas_finance to
+                        listOf("expenses", "father_transfers", "sms", "finance"),
+                    R.string.atlas_audio to listOf("audio", "studio"),
+                    R.string.atlas_ai to
+                        listOf("models", "assistant", "assistant_profile", "voice"),
+                    R.string.atlas_preferences to
+                        listOf("appearance", "permissions", "maps_settings", "backup", "privacy"),
+                )
+            if (query.isBlank()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(
+                        onClick = { navigate("models") },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(Icons.Default.Memory, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.atlas_models))
+                    }
+                    OutlinedButton(
+                        onClick = { section = "backup" },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.atlas_backup))
+                    }
                 }
             }
+            var matches = 0
+            groups.forEach { (title, keys) ->
+                val visible =
+                    keys
+                        .mapNotNull { allEntries[it] }
+                        .filter {
+                            query.isBlank() ||
+                                (it.second + " " + it.third).contains(query.trim(), true)
+                        }
+                matches += visible.size
+                if (visible.isNotEmpty()) {
+                    val expanded = expandedGroup == title || query.isNotBlank()
+                    Surface(
+                        onClick = { expandedGroup = if (expandedGroup == title) null else title },
+                        color =
+                            if (expanded) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surface,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(18.dp).heightIn(min = 56.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            Icon(
+                                when (title) {
+                                    R.string.atlas_journeys -> Icons.Default.Route
+                                    R.string.atlas_finance -> Icons.Default.AccountBalanceWallet
+                                    R.string.atlas_audio -> Icons.Default.Headphones
+                                    R.string.atlas_ai -> Icons.Default.AutoAwesome
+                                    else -> Icons.Default.Tune
+                                },
+                                null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Column(
+                                Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Text(
+                                    stringResource(title),
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                if (query.isBlank())
+                                    Text(
+                                        visible.take(2).joinToString(" · ") { it.second },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                            }
+                            Icon(
+                                if (expanded) Icons.Default.ExpandLess
+                                else Icons.Default.ExpandMore,
+                                stringResource(
+                                    if (expanded) R.string.atlas_collapse else R.string.atlas_expand
+                                ),
+                            )
+                        }
+                    }
+                    AnimatedVisibility(expanded) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            visible.forEach { (key, label, description) ->
+                                AtlasLink(
+                                    label,
+                                    description,
+                                    when (key) {
+                                        "models" -> Icons.Default.Memory
+                                        "voice" -> Icons.Default.Mic
+                                        "backup" -> Icons.Default.Backup
+                                        "privacy" -> Icons.Default.Lock
+                                        "sms" -> Icons.Default.Sms
+                                        "father_transfers",
+                                        "expenses",
+                                        "finance" -> Icons.Default.Payments
+                                        "audio",
+                                        "studio" -> Icons.Default.Headphones
+                                        "map",
+                                        "maps_settings",
+                                        "temporary_places" -> Icons.Default.Map
+                                        else -> Icons.Default.Tune
+                                    },
+                                ) {
+                                    if (
+                                        key in
+                                            setOf(
+                                                "tracking",
+                                                "finance",
+                                                "sms",
+                                                "permissions",
+                                                "appearance",
+                                                "maps_settings",
+                                                "backup",
+                                                "privacy",
+                                            )
+                                    )
+                                        section = key
+                                    else navigate(key)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (matches == 0)
+                Text(
+                    stringResource(R.string.atlas_no_tools),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
         } else {
             TextButton(onClick = { section = null }) { Text("العودة إلى الإعدادات والأدوات") }
             when (section) {
@@ -419,6 +519,10 @@ fun SettingsScreen(vm: JourneyViewModel, data: ScreenData, navigate: (String) ->
 @Composable
 fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
     val context = LocalContext.current
+    val health =
+        remember(context) {
+            context.getSharedPreferences("sms_health", android.content.Context.MODE_PRIVATE)
+        }
     var refresh by remember { mutableIntStateOf(0) }
     var enabling by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var pasting by remember { mutableStateOf(false) }
@@ -477,13 +581,18 @@ fun SmsImportSettings(vm: JourneyViewModel, data: ScreenData) {
         "بإذنك، يُستخرج المبلغ والتاجر من رسائل الشراء الجديدة على الجهاز، دون رفع الرسائل أو حفظ نصها. لا يقرأ هذا الإذن الرسائل السابقة. إذا منع الهاتف الإذن، استخدم إشعارات الرسائل أو الصق الرسالة هنا.",
         style = MaterialTheme.typography.bodySmall,
     )
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(5000)
-            refresh++
+    DisposableEffect(health) {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val listener =
+            android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+                main.post { refresh++ }
+            }
+        health.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            health.unregisterOnSharedPreferenceChangeListener(listener)
+            main.removeCallbacksAndMessages(null)
         }
     }
-    val health = context.getSharedPreferences("sms_health", android.content.Context.MODE_PRIVATE)
     val lastResult =
         when (health.getString("result", null)) {
             "imported" -> "تم تسجيل عملية شراء"

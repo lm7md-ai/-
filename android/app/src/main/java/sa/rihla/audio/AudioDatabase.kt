@@ -44,6 +44,7 @@ interface AudioDao {
     @Query("SELECT * FROM audio_tracks WHERE uri=:uri") suspend fun byUri(uri: String): AudioTrack?
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insert(track: AudioTrack): Long
     @Query("UPDATE audio_tracks SET title=:title,artist=:artist,album=:album,durationMs=:duration,artwork=:artwork WHERE id=:id") suspend fun metadata(id: String, title: String, artist: String, album: String, duration: Long, artwork: String)
+    @Query("UPDATE audio_tracks SET artwork=:artwork WHERE id=:id") suspend fun artwork(id: String, artwork: String)
     @Query("UPDATE audio_tracks SET uri=:uri WHERE id=:id") suspend fun relink(id: String, uri: String)
     @Query("UPDATE audio_tracks SET favorite=NOT favorite WHERE id=:id") suspend fun favorite(id: String)
     @Query("UPDATE audio_tracks SET positionMs=:position,lastPlayedAt=CASE WHEN :time>0 THEN :time ELSE lastPlayedAt END WHERE id=:id") suspend fun progress(id: String, position: Long, time: Long)

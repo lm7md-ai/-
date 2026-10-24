@@ -42,14 +42,16 @@ class RedesignUiTest {
         compose.waitUntil(20000) {
             compose.onAllNodesWithText("رحلتك تبدأ هنا").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithContentDescription("الخريطة").performClick()
-        compose.onNodeWithText("خريطة السعودية دون إنترنت").assertIsDisplayed()
-        compose.onNodeWithText("تكبير +").performClick()
-        compose.onNodeWithText("تصغير −").performClick()
+        compose.onNodeWithText("الخريطة").performClick()
+        compose.onNodeWithText("مدينة أو حي أو مكان").assertIsDisplayed()
+        compose.onNodeWithContentDescription("تكبير +").performClick()
+        compose.onNodeWithContentDescription("تصغير −").performClick()
+        compose.onNodeWithText("الطبقات والقياس").performClick()
         compose.onNodeWithText("قياس المسافات").performScrollTo().performClick()
         compose.onNodeWithText("قياس المسافات").assertIsSelected()
-        compose.onNodeWithText("السعودية كاملة").performScrollTo().performClick()
-        compose.onNodeWithText("ابحث عن مدينة أو حي بالعربية").performScrollTo()
+        compose.onNodeWithContentDescription("إغلاق التفاصيل والأدوات").performClick()
+        compose.onNodeWithContentDescription("السعودية").performClick()
+        compose.onNodeWithText("مدينة أو حي أو مكان").assertIsDisplayed()
         val activity =
             (compose as androidx.compose.ui.test.junit4.AndroidComposeTestRule<*, *>).activity
         fun map(view: android.view.View): sa.rihla.map.RouteMapView? {
@@ -126,9 +128,9 @@ class RedesignUiTest {
         compose.waitForIdle()
         capture("app-dark.png")
         compose.onNodeWithText("المزيد").performClick()
-        compose.onNodeWithText("نسخ بياناتك محليًا").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("نسخ بياناتك").performScrollTo().assertIsDisplayed()
         capture("more-dark.png")
-        compose.onNodeWithText("نسخ بياناتك محليًا").performClick()
+        compose.onNodeWithText("نسخ بياناتك").performClick()
         compose.onNodeWithText("حفظ نسخة محلية").performScrollTo().assertExists()
     }
 

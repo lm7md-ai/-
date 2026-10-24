@@ -53,7 +53,7 @@ class AssistantUiTest {
             )
         compose.setContent { sa.rihla.ui.FreshTestApplication { RihlaRoot() } }
         compose.waitUntil(20000) {
-            compose.onAllNodesWithText("المساعد").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithContentDescription("المساعد").fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -100,7 +100,7 @@ class AssistantUiTest {
                 )
             )
         }
-        compose.onNodeWithText("المساعد").performClick()
+        compose.onNodeWithContentDescription("المساعد").performClick()
         compose.onNodeWithText("أمرك للمساعد").performScrollTo().performTextInput("كم صرفت اليوم")
         compose.onNodeWithText("فهم الأمر").performScrollTo().performClick()
         compose.waitUntil(10000) {
@@ -119,9 +119,9 @@ class AssistantUiTest {
     fun modelsAreDirectlyDiscoverableAndSettingsAreGrouped() {
         prepare()
         compose.onNodeWithText("المزيد").performClick()
-        compose.onNodeWithText("نماذج الذكاء الاصطناعي").assertIsDisplayed()
+        compose.onNodeWithText("النماذج المحلية").assertIsDisplayed()
         capture("settings-5.2.png")
-        compose.onNodeWithText("نماذج الذكاء الاصطناعي").performClick()
+        compose.onNodeWithText("النماذج المحلية").performClick()
         compose.onNodeWithText("مشواري · نموذج أوامري").assertIsDisplayed()
         capture("models-5.2.png")
         compose
@@ -129,12 +129,12 @@ class AssistantUiTest {
             .performScrollTo()
             .assertIsDisplayed()
         compose.onNodeWithContentDescription("رجوع").performClick()
-        compose.onNodeWithText("ابحث في الإعدادات والأدوات").performTextInput("المظهر")
+        compose.onNodeWithText("ابحث عن أداة أو إعداد").performTextInput("المظهر")
         compose.onNode(hasText("المظهر") and !hasSetTextAction()).performClick()
         compose.onNodeWithText("المظهر").assertExists()
         compose.onNodeWithText("العودة إلى الإعدادات والأدوات").performClick()
-        compose.onNodeWithText("ابحث في الإعدادات والأدوات").performTextClearance()
-        compose.onNodeWithText("ابحث في الإعدادات والأدوات").performTextInput("الأذونات")
+        compose.onNodeWithText("ابحث عن أداة أو إعداد").performTextClearance()
+        compose.onNodeWithText("ابحث عن أداة أو إعداد").performTextInput("الأذونات")
         compose.onNode(hasText("الأذونات والبطارية") and !hasSetTextAction()).performClick()
         compose
             .onNodeWithText("منح إذن الميكروفون للأوامر الصوتية")
@@ -145,7 +145,7 @@ class AssistantUiTest {
     @Test
     fun personalPhraseCanBeTrainedAndVoiceEntryIsVisibleWithoutDownloadingQwen() {
         prepare()
-        compose.onNodeWithText("المساعد").performClick()
+        compose.onNodeWithContentDescription("المساعد").performClick()
         compose.onNodeWithText("تحدث بأمر صوتي").assertIsDisplayed()
         capture("assistant-5.2.png")
         compose.onNodeWithText("تخصيص مساعدي وتدريب نموذجي").performScrollTo().performClick()
@@ -169,10 +169,7 @@ class AssistantUiTest {
         compose.onNodeWithText("مراجعة الاقتراح").assertIsDisplayed()
         compose.onNodeWithText("تنفيذ الاقتراح").performClick()
         compose.waitUntil(10000) {
-            compose
-                .onAllNodesWithText("خريطة السعودية دون إنترنت")
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            compose.onAllNodesWithText("مدينة أو حي أو مكان").fetchSemanticsNodes().isNotEmpty()
         }
     }
 }
