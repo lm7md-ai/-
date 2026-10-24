@@ -8,12 +8,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.location.*
 import java.time.*
 import kotlinx.coroutines.*
+import sa.rihla.R
 import sa.rihla.core.*
 import sa.rihla.data.*
 import sa.rihla.feature.calendar.*
@@ -41,6 +44,7 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
     val sectionState = remember(o.id) { SectionSelectionState() }
     var routeStats by remember(o.id) { mutableStateOf<RouteDisplayStats?>(null) }
     var deleting by remember { mutableStateOf(false) }
+    var tab by rememberSaveable(o.id) { mutableIntStateOf(0) }
     val stops = remember(o, events) { stopDetails(o, events) }
     var selectedStop by remember(o.id) { mutableStateOf<Long?>(null) }
     var editing by remember { mutableStateOf(false) }
@@ -66,7 +70,10 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
             }
         }
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 28.dp),
+    ) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -86,163 +93,210 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
                 }
             }
             if (details.note.isNotBlank()) Text(details.note)
-            RouteMap(
-                previewPoints,
-                if (replay)
-                    events.filter { it.startedAt <= (previewPoints.lastOrNull()?.recordedAt ?: 0L) }
-                else events,
-                data.places,
-                Modifier.fillMaxWidth().height(320.dp),
-                stops =
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                AtlasStat(
+                    num(o.state.meters / 1000) + " " + tr("km"),
+                    tr("distance"),
+                    Modifier.weight(1f),
+                )
+                AtlasStat(
+                    duration((o.endedAt ?: data.now) - o.startedAt),
+                    tr("total_time"),
+                    Modifier.weight(1f),
+                )
+            }
+            PageTabs(
+                listOf(
+                    stringResource(R.string.atlas_trip_route),
+                    stringResource(R.string.atlas_trip_times),
+                    stringResource(R.string.atlas_trip_stops),
+                ),
+                tab,
+            ) {
+                tab = it
+            }
+        }
+        if (tab == 0)
+            item {
+                RouteMap(
+                    previewPoints,
                     if (replay)
-                        stops.filter {
+                        events.filter {
                             it.startedAt <= (previewPoints.lastOrNull()?.recordedAt ?: 0L)
                         }
-                    else stops,
-                onStopPick = { selectedStop = it.id },
-                camera = camera,
-                display = style.value,
-                onPointPick = { pointSelection = it },
-                onRouteStats = { routeStats = it },
-                highlightedTime = pointSelection?.point?.recordedAt,
-                highlightedRange = sectionState.range(pointSelection),
-            )
-            RouteStyleControls(style.value, routeStats) {
-                style.set(it)
-                pointSelection = null
-                sectionState.reset()
-            }
-            pointSelection?.let { value ->
-                RouteSectionInspector(analysis, value, o, sectionState, camera) {
+                    else events,
+                    data.places,
+                    Modifier.fillMaxWidth().height(320.dp),
+                    stops =
+                        if (replay)
+                            stops.filter {
+                                it.startedAt <= (previewPoints.lastOrNull()?.recordedAt ?: 0L)
+                            }
+                        else stops,
+                    onStopPick = { selectedStop = it.id },
+                    camera = camera,
+                    display = style.value,
+                    onPointPick = { pointSelection = it },
+                    onRouteStats = { routeStats = it },
+                    highlightedTime = pointSelection?.point?.recordedAt,
+                    highlightedRange = sectionState.range(pointSelection),
+                )
+                RouteStyleControls(style.value, routeStats) {
+                    style.set(it)
                     pointSelection = null
+                    sectionState.reset()
+                }
+                pointSelection?.let { value ->
+                    RouteSectionInspector(analysis, value, o, sectionState, camera) {
+                        pointSelection = null
+                    }
+                }
+                RouteSectionHighlights(analysis, sectionState, camera)
+
+                RouteQualityCard(points, o, data.now)
+                Text(tr("attribution"), style = MaterialTheme.typography.labelSmall)
+                if (data.settings.offlineAttribution.isNotEmpty())
+                    Text(
+                        data.settings.offlineAttribution,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                Text(tr("map_controls"), style = MaterialTheme.typography.labelSmall)
+                if (o.endedAt != null && points.size > 1) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            replay,
+                            {
+                                replay = it
+                                cursor = if (it) 0 else points.lastIndex
+                            },
+                        )
+                        Text(tr("route_replay"))
+                    }
+                    if (replay) {
+                        Slider(
+                            cursor.toFloat(),
+                            { cursor = it.toInt() },
+                            valueRange = 0f..points.lastIndex.toFloat(),
+                        )
+                        previewPoints.lastOrNull()?.let { point ->
+                            Text(
+                                stamp(point.recordedAt, seconds = true) +
+                                    " · " +
+                                    num(point.speed * 3.6) +
+                                    " " +
+                                    tr("km_hour")
+                            )
+                        }
+                    }
+                }
+                ExportDocument(
+                    vm,
+                    "export_gpx",
+                    "rihla-route-${o.id}.gpx",
+                    "application/gpx+xml",
+                    enabled = points.isNotEmpty(),
+                ) {
+                    routeGpx(points)
+                }
+                TripEditPanel(
+                    vm,
+                    data,
+                    o,
+                    if (replay && cursor in 1 until points.lastIndex) points[cursor].recordedAt
+                    else null,
+                )
+                if (points.isNotEmpty()) {
+                    MetricGrid(
+                        listOf(
+                            "recorded_points" to num(points.size.toDouble(), 0),
+                            "gps_accuracy" to
+                                (num(points.map { it.accuracy }.average()) +
+                                    " " +
+                                    tr("meters_unit")),
+                        )
+                    )
                 }
             }
-            RouteSectionHighlights(analysis, sectionState, camera)
-
-            RouteQualityCard(points, o, data.now)
-            Text(tr("attribution"), style = MaterialTheme.typography.labelSmall)
-            if (data.settings.offlineAttribution.isNotEmpty())
-                Text(data.settings.offlineAttribution, style = MaterialTheme.typography.labelSmall)
-            Text(tr("map_controls"), style = MaterialTheme.typography.labelSmall)
-            if (o.endedAt != null && points.size > 1) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        replay,
-                        {
-                            replay = it
-                            cursor = if (it) 0 else points.lastIndex
-                        },
-                    )
-                    Text(tr("route_replay"))
-                }
-                if (replay) {
-                    Slider(
-                        cursor.toFloat(),
-                        { cursor = it.toInt() },
-                        valueRange = 0f..points.lastIndex.toFloat(),
-                    )
-                    previewPoints.lastOrNull()?.let { point ->
-                        Text(
-                            stamp(point.recordedAt, seconds = true) +
-                                " · " +
-                                num(point.speed * 3.6) +
-                                " " +
-                                tr("km_hour")
+        if (tab == 1) {
+            item {
+                Metric("started", stamp(o.startedAt))
+                Metric("ended", o.endedAt?.let { stamp(it) } ?: tr("active"))
+                Metric("tracking_status", tr(o.state.phase))
+                Metric("distance", num(o.state.meters / 1000) + " " + tr("km"))
+                Metric(
+                    "total_time",
+                    duration((o.endedAt ?: data.now) - o.startedAt),
+                )
+                Metric("driving_time", duration(o.state.drivingMs))
+                Metric(
+                    "stopped_time",
+                    duration(
+                        o.state.stoppedMs +
+                            if (o.state.stopStart > 0) data.now - o.state.stopStart else 0
+                    ),
+                )
+                Metric(
+                    "university_time",
+                    duration(
+                        o.state.universityMs +
+                            if (o.state.visitConfirmed)
+                                (o.state.universityExit.takeIf { it > 0 } ?: data.now) -
+                                    o.state.universityArrival
+                            else 0
+                    ),
+                )
+                Metric(
+                    "total_spending",
+                    num(
+                        data.expenses.filter { it.outingId == o.id }.sumOf { it.amountHalala } /
+                            100.0,
+                        2,
+                    ) + " " + tr("sar"),
+                )
+                if (o.state.gapMs > 0) Text(tr("gap_notice"))
+                EstimatedCostCard(o, data)
+            }
+            item {
+                Heading("classification")
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    listOf("HOME_TO_UNIVERSITY", "UNIVERSITY_TO_HOME", "OTHER").forEach { key ->
+                        FilterChip(
+                            selected = o.classification == key,
+                            onClick = { vm.classify(o.id, key) },
+                            label = { Text(tr(key)) },
                         )
                     }
                 }
             }
-            ExportDocument(
-                vm,
-                "export_gpx",
-                "rihla-route-${o.id}.gpx",
-                "application/gpx+xml",
-                enabled = points.isNotEmpty(),
-            ) {
-                routeGpx(points)
-            }
-            TripEditPanel(
-                vm,
-                data,
-                o,
-                if (replay && cursor in 1 until points.lastIndex) points[cursor].recordedAt
-                else null,
-            )
-            if (points.isNotEmpty()) {
-                MetricGrid(
-                    listOf(
-                        "recorded_points" to num(points.size.toDouble(), 0),
-                        "gps_accuracy" to
-                            (num(points.map { it.accuracy }.average()) + " " + tr("meters_unit")),
+        }
+        if (tab == 2) {
+            if (stops.isEmpty() && events.none { it.type == "VISIT" })
+                item {
+                    EmptyState(
+                        stringResource(R.string.atlas_trip_no_stops),
+                        stringResource(R.string.atlas_trip_stops_hint),
                     )
+                }
+            items(stops, key = { "stop-${it.id}" }) { stop ->
+                Card(Modifier.fillMaxWidth().clickable { selectedStop = stop.id }) {
+                    Column(Modifier.padding(12.dp)) {
+                        Metric(
+                            "stop",
+                            stamp(stop.startedAt) + " · " + duration(stop.durationMs(data.now)),
+                        )
+                        Text(tr("tap_stop_details"))
+                    }
+                }
+            }
+            items(events.filter { it.type == "VISIT" }) { e ->
+                Metric(
+                    if (e.type == "VISIT") "visit" else "stop",
+                    stamp(e.startedAt) + " · " + duration(e.endedAt - e.startedAt),
                 )
             }
-        }
-        item {
-            Metric("started", stamp(o.startedAt))
-            Metric("ended", o.endedAt?.let { stamp(it) } ?: tr("active"))
-            Metric("tracking_status", tr(o.state.phase))
-            Metric("distance", num(o.state.meters / 1000) + " " + tr("km"))
-            Metric(
-                "total_time",
-                duration((o.endedAt ?: data.now) - o.startedAt),
-            )
-            Metric("driving_time", duration(o.state.drivingMs))
-            Metric(
-                "stopped_time",
-                duration(
-                    o.state.stoppedMs +
-                        if (o.state.stopStart > 0) data.now - o.state.stopStart else 0
-                ),
-            )
-            Metric(
-                "university_time",
-                duration(
-                    o.state.universityMs +
-                        if (o.state.visitConfirmed)
-                            (o.state.universityExit.takeIf { it > 0 } ?: data.now) -
-                                o.state.universityArrival
-                        else 0
-                ),
-            )
-            Metric(
-                "total_spending",
-                num(
-                    data.expenses.filter { it.outingId == o.id }.sumOf { it.amountHalala } / 100.0,
-                    2,
-                ) + " " + tr("sar"),
-            )
-            if (o.state.gapMs > 0) Text(tr("gap_notice"))
-            EstimatedCostCard(o, data)
-        }
-        item {
-            Heading("classification")
-            Row(Modifier.horizontalScroll(rememberScrollState())) {
-                listOf("HOME_TO_UNIVERSITY", "UNIVERSITY_TO_HOME", "OTHER").forEach { key ->
-                    FilterChip(
-                        selected = o.classification == key,
-                        onClick = { vm.classify(o.id, key) },
-                        label = { Text(tr(key)) },
-                    )
-                }
-            }
-        }
-        items(stops, key = { "stop-${it.id}" }) { stop ->
-            Card(Modifier.fillMaxWidth().clickable { selectedStop = stop.id }) {
-                Column(Modifier.padding(12.dp)) {
-                    Metric(
-                        "stop",
-                        stamp(stop.startedAt) + " · " + duration(stop.durationMs(data.now)),
-                    )
-                    Text(tr("tap_stop_details"))
-                }
-            }
-        }
-        items(events.filter { it.type == "VISIT" }) { e ->
-            Metric(
-                if (e.type == "VISIT") "visit" else "stop",
-                stamp(e.startedAt) + " · " + duration(e.endedAt - e.startedAt),
-            )
         }
         item {
             Action("add_expense", click = onExpense)

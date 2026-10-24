@@ -74,8 +74,21 @@ class ReviewUiTest {
         compose.onNodeWithText("إعداد اسم المحوّل والأذونات").performScrollTo().performClick()
         compose.onNodeWithText("للمراجعة").performScrollTo().performClick()
         compose.onNodeWithText("اعتماد هذه الصيغة لاسم الوالد").performScrollTo().performClick()
-        compose.waitUntil(20000) { second in app.transfers.aliases }
-        compose.onNodeWithText("حفظ الاسم وتفعيل المتابعة").performScrollTo().performClick()
+        compose.waitUntil(20000) {
+            // Drain the paused UI looper as well as observing asynchronous preference writes.
+            compose.onRoot().fetchSemanticsNode()
+            second in app.transfers.aliases
+        }
+        compose.onNodeWithText("حفظ الاسم وتفعيل المتابعة").performScrollTo()
+        // Preferences can be written before action() clears busy on Main. A disabled click
+        // is ignored; wait for the real UI completion before exercising the next save.
+        compose.waitUntil(20000) {
+            compose
+                .onAllNodes(hasText("حفظ الاسم وتفعيل المتابعة") and isEnabled())
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        compose.onNodeWithText("حفظ الاسم وتفعيل المتابعة").performClick()
         compose.waitUntil(20000) {
             compose
                 .onAllNodesWithText(

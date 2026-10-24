@@ -54,7 +54,7 @@ class AudioUiTest {
                 compose.onAllNodesWithText("الصوتيات").fetchSemanticsNodes().isNotEmpty()
             }
             compose.onNodeWithText("الصوتيات").performClick()
-            compose.onNodeWithText("مكتبتك الصوتية").assertIsDisplayed()
+            compose.onNodeWithText("مساحتك للاستماع").assertIsDisplayed()
             compose.onNodeWithText("أوضاع الصوت الجاهزة").assertDoesNotExist()
             compose.onNodeWithContentDescription("إضافة صوتيات").performClick()
             compose.onNodeWithText("إضافة ملفات").assertIsDisplayed()

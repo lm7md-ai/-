@@ -5,9 +5,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.location.*
 import kotlinx.coroutines.*
+import sa.rihla.R
 import sa.rihla.data.*
 import sa.rihla.feature.calendar.*
 import sa.rihla.feature.dashboard.*
@@ -32,7 +34,18 @@ fun Onboarding(vm: JourneyViewModel, data: ScreenData) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Hero(tr("brand_caption"), tr("welcome"), tr("hero_subtitle"), "quick_start") {
+        AtlasMark(Modifier.size(42.dp))
+        Text(
+            stringResource(R.string.atlas_setup_step, num((stage + 1).toDouble(), 0)),
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Text(tr("welcome"), style = MaterialTheme.typography.headlineLarge)
+        Hero(
+            tr("brand_caption"),
+            stringResource(R.string.atlas_onboarding_title),
+            stringResource(R.string.atlas_onboarding_hint),
+            "quick_start",
+        ) {
             vm.onboard()
         }
         when (stage) {

@@ -6,6 +6,7 @@ import android.graphics.*
 import android.view.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.withTranslation
 import java.io.File
@@ -1114,7 +1115,8 @@ fun RouteMap(
         .collectAsState(initial = sa.rihla.data.Preferences())
     AndroidView(
         factory = { RouteMapView(it).also { view -> camera?.view = view } },
-        modifier = modifier,
+        // Keep the native canvas inside its Compose viewport, including in scrolling details.
+        modifier = modifier.clipToBounds(),
         update = { v ->
             val changed =
                 v.points != points ||
