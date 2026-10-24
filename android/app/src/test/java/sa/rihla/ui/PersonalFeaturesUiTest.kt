@@ -40,7 +40,8 @@ class PersonalFeaturesUiTest {
             compose.onAllNodesWithText("المزيد").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText("المزيد").performClick()
-        compose.onNodeWithText(label).performScrollTo().performClick()
+        compose.onNodeWithText("ابحث عن أداة أو إعداد").performTextInput(label)
+        compose.onNode(hasText(label) and !hasSetTextAction()).performScrollTo().performClick()
     }
 
     private fun capture(name: String) {

@@ -15,10 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import sa.rihla.R
 
 @Composable
 fun AudioPlayerScreen(vm: AudioViewModel = viewModel()) {
@@ -69,14 +71,10 @@ private fun AudioNowPlaying(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                "قيد الاستماع",
+                stringResource(R.string.atlas_now_playing),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
-            if (track != null)
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    AudioCover(track, 240)
-                }
             Row(
                 Modifier.fillMaxWidth().padding(top = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -103,6 +101,25 @@ private fun AudioNowPlaying(
                             tint = MaterialTheme.colorScheme.primary,
                         )
                     }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    if (track != null) AudioCover(track, 228)
+                    Text(
+                        stringResource(R.string.atlas_local_audio),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             if (state.muted || state.mediaVolume == 0)
@@ -162,7 +179,7 @@ private fun AudioNowPlaying(
                     FilledIconButton(
                         onClick = vm::toggle,
                         enabled = connected,
-                        modifier = Modifier.size(72.dp),
+                        modifier = Modifier.size(80.dp),
                     ) {
                         Icon(
                             if (state.playing) Icons.Default.Pause else Icons.Default.PlayArrow,
