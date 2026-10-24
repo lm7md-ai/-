@@ -300,7 +300,7 @@ class ExperienceTest {
     @Test
     fun selectingARoutePointShowsItsInspectorBeforeGeneralMapTools() {
         val id = vm.state.value.outings.first().id
-        val now = System.currentTimeMillis()
+        val now = vm.state.value.outings.first().startedAt
         val points =
             (0..1).map { index ->
                 RoutePoint(
@@ -330,7 +330,7 @@ class ExperienceTest {
                     )
                 )
         }
-        compose.onNodeWithText("تفاصيل المقطع بين النقطتين").assertIsDisplayed()
+        compose.onNodeWithText("الجزء بين التوقفات").assertIsDisplayed()
         compose
             .onNodeWithContentDescription(app.getString(R.string.atlas_close_options))
             .performClick()

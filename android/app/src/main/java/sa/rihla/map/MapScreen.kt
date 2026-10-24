@@ -62,11 +62,15 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
     var name by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MapPlace>>(emptyList()) }
     var failed by remember { mutableStateOf(false) }
-    var stop by remember { mutableStateOf<StopDetails?>(null) }
+    var selectedStop by remember(selectedTrip) { mutableStateOf<Long?>(null) }
     var tools by rememberSaveable { mutableStateOf(false) }
     var toolTab by rememberSaveable { mutableIntStateOf(0) }
     var follow by rememberSaveable { mutableStateOf(false) }
     val analysis = rememberRouteAnalysis(points, stops)
+    val legs =
+        remember(analysis, trip) {
+            if (analysis != null && trip != null) StopRouteSections(analysis, trip) else null
+        }
     LaunchedEffect(selectedTrip, measure) {
         pointSelection = null
         sectionState.reset()
@@ -106,7 +110,7 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                     Modifier.fillMaxSize(),
                     chosen,
                     stops = stops,
-                    onStopPick = if (measure) null else { value -> stop = value },
+                    onStopPick = if (measure) null else { value -> selectedStop = value.id },
                     camera = camera,
                     layers = layers,
                     measurement = marks,
@@ -115,12 +119,13 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                         if (measure) null
                         else
                             { value ->
+                                sectionState.stopRange = null
                                 pointSelection = value
                                 toolTab = 0
                             },
                     onRouteStats = { routeStats = it },
                     highlightedTime = pointSelection?.point?.recordedAt,
-                    highlightedRange = sectionState.range(pointSelection),
+                    highlightedRange = sectionState.range(pointSelection, legs),
                     pickStopsWithSelection = true,
                     centerSelection = false,
                     onPick = { lat, lon ->
@@ -241,6 +246,11 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                             Text(stringResource(R.string.atlas_map_trip))
                         }
                     }
+                    if (trip != null)
+                        Text(
+                            stringResource(R.string.map_leg_tap_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                 }
             }
         }
@@ -478,21 +488,25 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                 }
             }
         }
-    stop?.let { value ->
-        AlertDialog(
-            onDismissRequest = { stop = null },
-            properties =
-                androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
-            title = { Text("تفاصيل التوقف") },
-            text = {
-                Column {
-                    Text("البداية: " + stamp(value.startedAt))
-                    Text("المدة: " + duration(value.durationMs(data.now)))
-                    Text(value.endedAt?.let { "النهاية: " + stamp(it) } ?: "التوقف جارٍ")
-                    Text("الموقع: ${value.latitude}, ${value.longitude}")
-                }
-            },
-            confirmButton = { TextButton(onClick = { stop = null }) { Text("إغلاق") } },
-        )
-    }
+    stops
+        .firstOrNull { it.id == selectedStop }
+        ?.let { value ->
+            if (trip != null)
+                StopRouteDialog(
+                    value,
+                    stops,
+                    analysis,
+                    trip,
+                    data.now,
+                    onHighlight = { range ->
+                        sectionState.reset()
+                        sectionState.stopRange = range
+                        pointSelection = null
+                        tools = false
+                        camera.section(range)
+                        selectedStop = null
+                    },
+                    onDismiss = { selectedStop = null },
+                )
+        }
 }

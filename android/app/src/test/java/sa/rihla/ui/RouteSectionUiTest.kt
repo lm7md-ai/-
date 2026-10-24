@@ -93,7 +93,13 @@ class RouteSectionUiTest {
                 }
             }
         }
-        compose.onNodeWithText("تفاصيل المقطع بين النقطتين").assertIsDisplayed()
+        compose.onNodeWithText("الجزء بين التوقفات").assertIsDisplayed()
+        compose.onNodeWithText("المدة بين الطرفين").assertExists()
+        compose.onNodeWithText("فحص نقطتَي GPS فقط").performScrollTo().performClick()
+        compose.onNodeWithText("تفاصيل المقطع بين النقطتين").performScrollTo().assertIsDisplayed()
+        compose.runOnIdle { assertTrue(state.gpsOnly) }
+        compose.onNodeWithText("العودة للجزء بين التوقفات").performScrollTo().performClick()
+        compose.runOnIdle { assertFalse(state.gpsOnly) }
         File("build/outputs/ui-previews/route-section-6.2.png")
             .apply { parentFile!!.mkdirs() }
             .outputStream()

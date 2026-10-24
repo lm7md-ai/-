@@ -9,8 +9,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.*
+import sa.rihla.R
 import sa.rihla.core.*
 import sa.rihla.data.*
 import sa.rihla.ui.*
@@ -20,17 +22,28 @@ class SectionSelectionState {
     var anchor by mutableStateOf<Int?>(null)
     var end by mutableStateOf<Int?>(null)
     var comparison by mutableStateOf<RouteSection?>(null)
+    var gpsOnly by mutableStateOf(false)
+    var stopRange by mutableStateOf<IntRange?>(null)
 
     fun reset() {
         anchor = null
         end = null
+        gpsOnly = false
+        stopRange = null
     }
 
-    fun range(value: RoutePointSelection?): IntRange? {
+    fun range(value: RoutePointSelection?, legs: StopRouteSections? = null): IntRange? {
+        stopRange?.let {
+            return it
+        }
         value ?: return null
         val a = anchor
         val b = end ?: value.index
         if (a != null) return minOf(a, b)..maxOf(a, b)
+        if (!gpsOnly)
+            legs?.at(value)?.range?.let {
+                return it
+            }
         return value.segmentEnd?.let { (it - 1)..it } ?: (value.index..value.index)
     }
 }
@@ -47,7 +60,7 @@ fun rememberRouteAnalysis(points: List<RoutePoint>, stops: List<StopDetails>): R
                 }
         }
     // Never display the previous trip's summary while its replacement is preparing.
-    return result?.takeIf { it.points === points }
+    return result?.takeIf { it.points === points && it.stops === stops }
 }
 
 fun sectionShareText(section: RouteSection): String = buildString {
@@ -80,7 +93,13 @@ fun RouteSectionInspector(
 ) {
     val context = LocalContext.current
     var rawDetails by remember { mutableStateOf(false) }
-    val range = state.range(value)
+    var sampleDetails by remember { mutableStateOf(false) }
+    val legs =
+        remember(analysis, trip) {
+            if (analysis != null && trip != null) StopRouteSections(analysis, trip) else null
+        }
+    val leg = if (state.anchor == null && !state.gpsOnly) legs?.at(value) else null
+    val range = state.range(value, legs)
     val section = remember(analysis, range) { range?.let { analysis?.summary(it.first, it.last) } }
     if (section == null) {
         LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -93,7 +112,9 @@ fun RouteSectionInspector(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    if (state.anchor == null && section.points == 2) "تفاصيل المقطع بين النقطتين"
+                    if (leg != null) stringResource(R.string.map_leg_title)
+                    else if (state.anchor == null && section.points == 2)
+                        "تفاصيل المقطع بين النقطتين"
                     else "تفاصيل الجزء المحدد",
                     Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
@@ -107,14 +128,34 @@ fun RouteSectionInspector(
                     Icon(Icons.Default.Close, "إغلاق تفاصيل المقطع")
                 }
             }
-            Text(
-                "من النقطة ${section.from+1} إلى ${section.to+1} · ${section.points} نقطة",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                "البداية: ${stamp(section.start.recordedAt,true)}\nالنهاية: ${stamp(section.end.recordedAt,true)}"
-            )
-            SectionMetrics(section)
+            if (leg == null || sampleDetails) {
+                Text(
+                    "من النقطة ${section.from+1} إلى ${section.to+1} · ${section.points} نقطة",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "البداية: ${stamp(section.start.recordedAt,true)}\nالنهاية: ${stamp(section.end.recordedAt,true)}"
+                )
+            }
+            if (leg != null) {
+                StopRouteMetrics(leg)
+                TextButton(onClick = { sampleDetails = !sampleDetails }) {
+                    Text(stringResource(R.string.map_leg_gps_details))
+                }
+                if (sampleDetails) SectionMetrics(section)
+            } else SectionMetrics(section)
+            TextButton(
+                onClick = {
+                    state.reset()
+                    state.gpsOnly = leg != null
+                }
+            ) {
+                Text(
+                    stringResource(
+                        if (leg != null) R.string.map_leg_gps_only else R.string.map_leg_auto
+                    )
+                )
+            }
             section.fuel(trip)?.let { fuel ->
                 val liters =
                     if (fuel.minLiters == fuel.maxLiters) num(fuel.minLiters, 3)

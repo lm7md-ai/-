@@ -457,7 +457,7 @@ class RouteMapView(c: Context) : View(c) {
         y: Float,
         requireMode: Boolean = true,
     ): RoutePointSelection? {
-        if ((requireMode && !display.inspect) || !layers.route || zoom < 10 || onPointPick == null)
+        if ((requireMode && !display.inspect) || !layers.route || zoom < 7 || onPointPick == null)
             return null
         val ready = prepared ?: return null
         val raw = preparedRaw

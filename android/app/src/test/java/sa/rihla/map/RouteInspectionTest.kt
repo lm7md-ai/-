@@ -115,6 +115,12 @@ class RouteInspectionTest {
         }
         tap()
         assertEquals(1, selected!!.segmentEnd)
+        // Long journeys fit below zoom 10; their visible route must still be tappable.
+        map.changeZoom(-5)
+        selected = null
+        tap()
+        assertNotNull(selected)
+        map.changeZoom(5)
         selected = null
         var stop = false
         map.stops = listOf(sa.rihla.core.StopDetails(1, 1000, 6000, 21.5, 39.2005))

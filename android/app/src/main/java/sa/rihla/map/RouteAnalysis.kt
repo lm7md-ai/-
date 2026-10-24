@@ -53,7 +53,7 @@ data class RouteSection(
 
 class RouteAnalysis(
     val points: List<RoutePoint>,
-    stops: List<StopDetails>,
+    val stops: List<StopDetails>,
     check: () -> Unit = {},
 ) {
     private val n = points.size

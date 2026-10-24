@@ -12,6 +12,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.*
+import androidx.core.view.doOnLayout
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.location.*
 import java.time.*
@@ -57,6 +58,13 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
             else points
         }
     val analysis = rememberRouteAnalysis(previewPoints, stops)
+    val legs = remember(analysis, o) { analysis?.let { StopRouteSections(it, o) } }
+    LaunchedEffect(tab, pointSelection?.index, sectionState.stopRange) {
+        if (tab == 0 && (sectionState.anchor != null || sectionState.stopRange != null))
+            sectionState.range(pointSelection, legs)?.let { range ->
+                camera.view?.doOnLayout { camera.section(range) }
+            }
+    }
     LaunchedEffect(replay, cursor) {
         pointSelection = null
         sectionState.reset()
@@ -139,10 +147,13 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
                     onStopPick = { selectedStop = it.id },
                     camera = camera,
                     display = style.value,
-                    onPointPick = { pointSelection = it },
+                    onPointPick = {
+                        sectionState.stopRange = null
+                        pointSelection = it
+                    },
                     onRouteStats = { routeStats = it },
                     highlightedTime = pointSelection?.point?.recordedAt,
-                    highlightedRange = sectionState.range(pointSelection),
+                    highlightedRange = sectionState.range(pointSelection, legs),
                 )
                 RouteStyleControls(style.value, routeStats) {
                     style.set(it)
@@ -343,47 +354,43 @@ fun OutingDetail(vm: JourneyViewModel, data: ScreenData, o: Outing, onExpense: (
     stops
         .firstOrNull { it.id == selectedStop }
         ?.let { stop ->
-            AlertDialog(
-                onDismissRequest = { selectedStop = null },
-                title = { Text(tr("stop_details")) },
-                text = {
-                    Column(
-                        Modifier.verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Metric("arrival_time", stamp(stop.startedAt, seconds = true))
-                        Metric(
-                            "departure_time",
-                            stop.endedAt?.let { stamp(it, seconds = true) } ?: tr("still_stopped"),
-                        )
-                        Metric("stopped_time", duration(stop.durationMs(data.now)))
-                        Metric("latitude", num(stop.latitude, 6))
-                        Metric("longitude", num(stop.longitude, 6))
-                        Metric("classification", tr(o.classification))
-                        val expenses =
-                            data.expenses.filter {
-                                it.outingId == o.id &&
-                                    it.createdAt >= stop.startedAt &&
-                                    it.createdAt < (stop.endedAt ?: data.now + 1)
-                            }
-                        Metric(
-                            "stop_spending",
-                            num(expenses.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
-                        )
-                        expenses.forEach {
-                            Metric(
-                                it.category.lowercase(),
-                                stamp(it.createdAt) +
-                                    " · " +
-                                    num(it.amountHalala / 100.0, 2) +
-                                    " " +
-                                    tr("sar"),
-                            )
-                        }
-                    }
+            StopRouteDialog(
+                stop,
+                stops,
+                analysis,
+                o,
+                data.now,
+                onHighlight = { range ->
+                    sectionState.reset()
+                    sectionState.stopRange = range
+                    pointSelection = null
+                    camera.section(range)
+                    tab = 0
+                    selectedStop = null
                 },
-                confirmButton = {
-                    TextButton(onClick = { selectedStop = null }) { Text(tr("done")) }
+                onDismiss = { selectedStop = null },
+                extraDetails = {
+                    Metric("classification", tr(o.classification))
+                    val expenses =
+                        data.expenses.filter {
+                            it.outingId == o.id &&
+                                it.createdAt >= stop.startedAt &&
+                                it.createdAt < (stop.endedAt ?: data.now + 1)
+                        }
+                    Metric(
+                        "stop_spending",
+                        num(expenses.sumOf { it.amountHalala } / 100.0, 2) + " " + tr("sar"),
+                    )
+                    expenses.forEach {
+                        Metric(
+                            it.category.lowercase(),
+                            stamp(it.createdAt) +
+                                " · " +
+                                num(it.amountHalala / 100.0, 2) +
+                                " " +
+                                tr("sar"),
+                        )
+                    }
                 },
             )
         }
