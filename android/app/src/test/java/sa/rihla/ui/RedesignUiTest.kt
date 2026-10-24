@@ -48,8 +48,7 @@ class RedesignUiTest {
         compose.onNodeWithContentDescription("تصغير −").performClick()
         compose.onNodeWithText("الطبقات والقياس").performClick()
         compose.onNodeWithText("قياس المسافات").performScrollTo().performClick()
-        compose.onNodeWithText("قياس المسافات").assertIsSelected()
-        compose.onNodeWithContentDescription("إغلاق التفاصيل والأدوات").performClick()
+        compose.onNodeWithText("إنهاء القياس").assertIsDisplayed().performClick()
         compose.onNodeWithContentDescription("السعودية").performClick()
         compose.onNodeWithText("مدينة أو حي أو مكان").assertIsDisplayed()
         val activity =

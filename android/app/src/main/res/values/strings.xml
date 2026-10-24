@@ -370,4 +370,19 @@
   <string name="map_stop_fix_failed">تعذر تحديد موقع حديث. تحقق من إذن الموقع وتشغيله ثم حاول مجددًا.</string>
   <string name="map_leg_fit">إظهار الجزء كاملًا على الخريطة</string>
   <string name="map_leg_close">إغلاق تفاصيل التوقف</string>
+  <string name="map_quick_follow">متابعة آخر نقطة</string>
+  <string name="map_quick_stops">التوقفات (%1$d)</string>
+  <string name="map_quick_location">موقعي الآن</string>
+  <string name="map_quick_active">مشوار جارٍ · حسب آخر تسجيل</string>
+  <string name="map_quick_history">مشوار سابق · عرض التسجيل المحفوظ</string>
+  <string name="map_expanded">توسيع مساحة الخريطة</string>
+  <string name="map_exit_expanded">إظهار لوحة المشوار</string>
+  <string name="map_quick_measure">قياس مباشر</string>
+  <string name="map_open_active">المشوار الجاري</string>
+  <string name="map_latest_fix">آخر نقطة مسجّلة: %1$s</string>
+  <string name="map_measure_total">القياس المباشر: %1$s كم</string>
+  <string name="map_measure_hint">اضغط نقاطًا على الخريطة. القياس يصلها بخطوط مستقيمة، ولا يمثل طول الطريق.</string>
+  <string name="map_measure_undo">تراجع عن نقطة</string>
+  <string name="map_measure_clear">مسح القياس</string>
+  <string name="map_measure_done">إنهاء القياس</string>
 </resources>

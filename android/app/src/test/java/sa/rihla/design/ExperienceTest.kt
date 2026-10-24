@@ -202,12 +202,12 @@ class ExperienceTest {
         open("map")
         compose.onNodeWithText(app.getString(R.string.atlas_map_layers)).performClick()
         compose.onNodeWithText("قياس المسافات").performScrollTo().performClick()
-        compose.onNodeWithText("قياس المسافات").assertIsSelected()
         compose
-            .onNodeWithContentDescription(app.getString(R.string.atlas_close_options))
+            .onNodeWithText(app.getString(R.string.map_measure_done))
+            .assertIsDisplayed()
             .performClick()
         compose.onNodeWithText(app.getString(R.string.atlas_map_layers)).performClick()
-        compose.onNodeWithText("قياس المسافات").performScrollTo().assertIsSelected()
+        compose.onNodeWithText("قياس المسافات").performScrollTo().assertIsNotSelected()
         compose
             .onNodeWithContentDescription(app.getString(R.string.atlas_close_options))
             .performClick()
@@ -295,6 +295,80 @@ class ExperienceTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun expandedMapAndMeasurementKeepTheTripAndExposeUndoAndClear() {
+        open("map")
+        compose.waitUntil(20000) { mapView()?.height?.let { it > 0 } == true }
+        capture("map-tools-overview")
+        var initialHeight = 0
+        compose.runOnIdle { initialHeight = mapView()!!.height }
+        compose.onNodeWithContentDescription(app.getString(R.string.map_expanded)).performClick()
+        compose.waitUntil(20000) { mapView()!!.height > initialHeight }
+        compose
+            .onNodeWithContentDescription(app.getString(R.string.map_exit_expanded))
+            .performClick()
+        compose.onNodeWithText(app.getString(R.string.map_quick_measure)).performClick()
+        compose.waitForIdle()
+        compose.runOnIdle {
+            mapView()!!.onPick!!.invoke(21.0, 39.0)
+            mapView()!!.onPick!!.invoke(21.0, 39.01)
+        }
+        compose
+            .onNodeWithText(app.getString(R.string.map_measure_undo))
+            .assertIsEnabled()
+            .performClick()
+        compose.onNodeWithText(app.getString(R.string.map_measure_clear)).performClick()
+        compose.onNodeWithText(app.getString(R.string.map_measure_undo)).assertIsNotEnabled()
+        compose.onNodeWithText(app.getString(R.string.map_measure_done)).performClick()
+        compose.onNodeWithText(app.getString(R.string.map_measure_hint)).assertDoesNotExist()
+        Assert.assertEquals(1, vm.state.value.outings.size)
+    }
+
+    @Test
+    fun quickStopListOpensStopDetailsAndReturnsToAnUnobscuredHighlightedMap() {
+        val trip = vm.state.value.outings.first()
+        runBlocking {
+            (0..6).forEach { index ->
+                app.repository.dao.point(
+                    RoutePoint(
+                        outingId = trip.id,
+                        latitude = 21.0,
+                        longitude = 39.0 + index * .001,
+                        accuracy = 5.0,
+                        speed = 8.0,
+                        altitude = 0.0,
+                        bearing = 90.0,
+                        recordedAt = trip.startedAt + index * 10000,
+                        distanceDelta = 100.0,
+                    )
+                )
+            }
+            app.repository.dao.event(
+                JourneyEvent(
+                    outingId = trip.id,
+                    type = "STOP",
+                    startedAt = trip.startedAt + 20000,
+                    endedAt = trip.startedAt + 30000,
+                    latitude = 21.0,
+                    longitude = 39.002,
+                    confirmed = true,
+                )
+            )
+        }
+        open("map")
+        compose.waitUntil(20000) { mapView()?.stops?.size == 1 && mapView()?.points?.size == 7 }
+        compose.onNodeWithText(app.getString(R.string.map_quick_stops, 1)).performClick()
+        compose.onNodeWithText(app.getString(R.string.map_leg_stop, 1)).performClick()
+        compose
+            .onNodeWithText(app.getString(R.string.map_stop_before))
+            .performScrollTo()
+            .performClick()
+        compose.onNodeWithText(app.getString(R.string.map_leg_fit)).performScrollTo().performClick()
+        compose.onNodeWithText(app.getString(R.string.map_leg_close)).assertDoesNotExist()
+        compose.runOnIdle { Assert.assertEquals(0..2, mapView()!!.highlightedRange) }
+        compose.onNodeWithText(app.getString(R.string.atlas_route_tools)).assertDoesNotExist()
     }
 
     @Test

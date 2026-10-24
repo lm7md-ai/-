@@ -1,6 +1,7 @@
 package sa.rihla.map
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -66,6 +67,14 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
     var tools by rememberSaveable { mutableStateOf(false) }
     var toolTab by rememberSaveable { mutableIntStateOf(0) }
     var follow by rememberSaveable { mutableStateOf(false) }
+    var stopList by remember { mutableStateOf(false) }
+    var locating by remember { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = expanded) { expanded = false }
+    LaunchedEffect(selectedTrip) {
+        follow = false
+        stopList = false
+    }
     val analysis = rememberRouteAnalysis(points, stops)
     val legs =
         remember(analysis, trip) {
@@ -75,22 +84,21 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
         pointSelection = null
         sectionState.reset()
     }
+    LaunchedEffect(selectedTrip, points.firstOrNull()?.outingId) {
+        if (points.isNotEmpty() && points.first().outingId == selectedTrip) camera.fit()
+    }
     LaunchedEffect(follow, points.lastOrNull()?.recordedAt) {
         if (follow) points.lastOrNull()?.let { camera.center(it.latitude, it.longitude) }
     }
     LaunchedEffect(query) {
         delay(300)
         failed = false
-        results =
+        val result =
             if (query.trim().length >= 2)
-                withContext(Dispatchers.IO) {
-                    runCatching { SaudiMap.search(context, query) }
-                        .getOrElse {
-                            failed = true
-                            emptyList()
-                        }
-                }
-            else emptyList()
+                withContext(Dispatchers.IO) { runCatching { SaudiMap.search(context, query) } }
+            else Result.success(emptyList())
+        failed = result.isFailure
+        results = result.getOrDefault(emptyList())
     }
     LaunchedEffect(points) {
         pointSelection?.let { selected ->
@@ -101,160 +109,347 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
         }
     }
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
-                RouteMap(
-                    points,
-                    events,
-                    data.places,
-                    Modifier.fillMaxSize(),
-                    chosen,
-                    stops = stops,
-                    onStopPick = if (measure) null else { value -> selectedStop = value.id },
-                    camera = camera,
-                    layers = layers,
-                    measurement = marks,
-                    display = style.value.copy(inspect = style.value.inspect && !measure),
-                    onPointPick =
-                        if (measure) null
-                        else
-                            { value ->
-                                sectionState.stopRange = null
-                                pointSelection = value
-                                toolTab = 0
-                            },
-                    onRouteStats = { routeStats = it },
-                    highlightedTime = pointSelection?.point?.recordedAt,
-                    highlightedRange = sectionState.range(pointSelection, legs),
-                    pickStopsWithSelection = true,
-                    centerSelection = false,
-                    onPick = { lat, lon ->
-                        chosen = lat to lon
-                        if (measure) marks = marks + (lat to lon)
-                    },
-                )
-
-                Column(
-                    Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    OutlinedTextField(
-                        query,
-                        { query = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp),
-                        colors =
-                            OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            ),
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        placeholder = { Text(stringResource(R.string.atlas_map_search)) },
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
+                    RouteMap(
+                        points,
+                        events,
+                        data.places,
+                        Modifier.fillMaxSize(),
+                        chosen,
+                        stops = stops,
+                        onStopPick = if (measure) null else { value -> selectedStop = value.id },
+                        camera = camera,
+                        layers = layers,
+                        measurement = marks,
+                        display = style.value.copy(inspect = style.value.inspect && !measure),
+                        onPointPick =
+                            if (measure) null
+                            else
+                                { value ->
+                                    sectionState.stopRange = null
+                                    pointSelection = value
+                                    toolTab = 0
+                                },
+                        onRouteStats = { routeStats = it },
+                        highlightedTime = pointSelection?.point?.recordedAt,
+                        highlightedRange = sectionState.range(pointSelection, legs),
+                        pickStopsWithSelection = true,
+                        centerSelection = false,
+                        onPick = { lat, lon ->
+                            chosen = lat to lon
+                            if (measure) marks = marks + (lat to lon)
+                        },
                     )
-                    if (failed)
-                        Text(
-                            "تعذر فتح بيانات الخريطة. حاول مجددًا.",
-                            color = MaterialTheme.colorScheme.error,
+
+                    Column(
+                        Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        OutlinedTextField(
+                            query,
+                            { query = it },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            colors =
+                                OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                            leadingIcon = { Icon(Icons.Default.Search, null) },
+                            placeholder = { Text(stringResource(R.string.atlas_map_search)) },
                         )
-                    if (results.isNotEmpty())
-                        Surface(shape = RoundedCornerShape(12.dp), shadowElevation = 4.dp) {
-                            Column {
-                                results.take(5).forEach { place ->
-                                    TextButton(
-                                        onClick = {
-                                            chosen = place.latitude to place.longitude
-                                            camera.navigate(place.latitude, place.longitude)
-                                            query = ""
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    ) {
-                                        Text(place.name)
+                        if (failed)
+                            Text(
+                                "تعذر فتح بيانات الخريطة. حاول مجددًا.",
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        if (results.isNotEmpty())
+                            Surface(shape = RoundedCornerShape(12.dp), shadowElevation = 4.dp) {
+                                Column {
+                                    results.take(5).forEach { place ->
+                                        TextButton(
+                                            onClick = {
+                                                chosen = place.latitude to place.longitude
+                                                camera.navigate(place.latitude, place.longitude)
+                                                query = ""
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Text(place.name)
+                                        }
                                     }
                                 }
                             }
-                        }
-                }
-                Column(
-                    Modifier.align(Alignment.CenterEnd).padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    FilledTonalIconButton(onClick = { camera.zoom(1) }) {
-                        Icon(Icons.Default.Add, "تكبير +")
                     }
-                    FilledTonalIconButton(onClick = { camera.zoom(-1) }) {
-                        Icon(Icons.Default.Remove, "تصغير −")
-                    }
-                    FilledTonalIconButton(onClick = { camera.fit() }) {
-                        Icon(Icons.Default.CenterFocusStrong, "احتواء المسار")
-                    }
-                }
-            }
-            Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
-                Column(
-                    Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                trip?.let {
-                                    data.details
-                                        .find { d -> d.outingId == it.id }
-                                        ?.title
-                                        ?.takeIf { t -> t.isNotBlank() } ?: stamp(it.startedAt)
-                                } ?: stringResource(R.string.atlas_map_country),
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                if (trip == null) stringResource(R.string.atlas_map_hint)
-                                else
-                                    num(trip.state.meters / 1000) +
-                                        " " +
-                                        tr("km") +
-                                        " · " +
-                                        duration((trip.endedAt ?: data.now) - trip.startedAt),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Column(
+                        Modifier.align(Alignment.CenterEnd).padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        FilledTonalIconButton(onClick = { expanded = !expanded }) {
+                            Icon(
+                                if (expanded) Icons.Default.FullscreenExit
+                                else Icons.Default.Fullscreen,
+                                stringResource(
+                                    if (expanded) R.string.map_exit_expanded
+                                    else R.string.map_expanded
+                                ),
                             )
                         }
-                        IconButton(onClick = { camera.country() }) {
-                            Icon(Icons.Default.Public, stringResource(R.string.atlas_map_country))
+                        FilledTonalIconButton(onClick = { camera.zoom(1) }) {
+                            Icon(Icons.Default.Add, "تكبير +")
+                        }
+                        FilledTonalIconButton(onClick = { camera.zoom(-1) }) {
+                            Icon(Icons.Default.Remove, "تصغير −")
+                        }
+                        FilledTonalIconButton(
+                            onClick = {
+                                follow = false
+                                camera.fit()
+                            }
+                        ) {
+                            Icon(Icons.Default.CenterFocusStrong, "احتواء المسار")
                         }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
-                            onClick = {
-                                tools = true
-                                toolTab = 0
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Icon(Icons.Default.Layers, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.atlas_map_layers))
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                tools = true
-                                toolTab = 1
-                            },
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(stringResource(R.string.atlas_map_trip))
-                        }
-                    }
-                    if (trip != null)
-                        Text(
-                            stringResource(R.string.map_leg_tap_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
                 }
+                if (!expanded && !measure)
+                    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        trip?.let {
+                                            data.details
+                                                .find { d -> d.outingId == it.id }
+                                                ?.title
+                                                ?.takeIf { t -> t.isNotBlank() }
+                                                ?: stamp(it.startedAt)
+                                        } ?: stringResource(R.string.atlas_map_country),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow =
+                                            androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        if (trip == null) stringResource(R.string.atlas_map_hint)
+                                        else
+                                            num(trip.state.meters / 1000) +
+                                                " " +
+                                                tr("km") +
+                                                " · " +
+                                                duration(
+                                                    (trip.endedAt ?: data.now) - trip.startedAt
+                                                ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                IconButton(onClick = { camera.country() }) {
+                                    Icon(
+                                        Icons.Default.Public,
+                                        stringResource(R.string.atlas_map_country),
+                                    )
+                                }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilledTonalButton(
+                                    onClick = {
+                                        tools = true
+                                        toolTab = 0
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Icon(Icons.Default.Layers, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(stringResource(R.string.atlas_map_layers))
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        tools = true
+                                        toolTab = 1
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(stringResource(R.string.atlas_map_trip))
+                                }
+                            }
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                AssistChip(
+                                    onClick = {
+                                        measure = !measure
+                                        follow = false
+                                    },
+                                    label = { Text(stringResource(R.string.map_quick_measure)) },
+                                )
+                                if (data.active != null && selectedTrip != data.active?.id)
+                                    AssistChip(
+                                        onClick = {
+                                            selectedTrip = data.active?.id
+                                            camera.fit()
+                                        },
+                                        label = { Text(stringResource(R.string.map_open_active)) },
+                                    )
+                                FilterChip(
+                                    selected = follow,
+                                    enabled = points.isNotEmpty(),
+                                    onClick = { follow = !follow },
+                                    label = { Text(stringResource(R.string.map_quick_follow)) },
+                                )
+                                AssistChip(
+                                    enabled = stops.isNotEmpty(),
+                                    onClick = { stopList = true },
+                                    label = {
+                                        Text(stringResource(R.string.map_quick_stops, stops.size))
+                                    },
+                                )
+                                AssistChip(
+                                    enabled = !locating,
+                                    onClick = {
+                                        scope.launch {
+                                            locating = true
+                                            try {
+                                                val fix = LocationPicker.current(context)
+                                                if (fix == null) vm.error.value = "location_failed"
+                                                else {
+                                                    follow = false
+                                                    chosen = fix.lat to fix.lon
+                                                    camera.navigate(fix.lat, fix.lon)
+                                                }
+                                            } finally {
+                                                locating = false
+                                            }
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                if (locating) R.string.map_stop_locating
+                                                else R.string.map_quick_location
+                                            )
+                                        )
+                                    },
+                                )
+                            }
+                            if (trip != null)
+                                Text(
+                                    stringResource(
+                                        if (trip.endedAt == null) R.string.map_quick_active
+                                        else R.string.map_quick_history
+                                    ),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            points.lastOrNull()?.let { point ->
+                                Text(
+                                    stringResource(
+                                        R.string.map_latest_fix,
+                                        stamp(point.recordedAt, true),
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            if (trip != null)
+                                Text(
+                                    stringResource(R.string.map_leg_tap_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                        }
+                    }
             }
         }
+        if (measure)
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                Surface(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    tonalElevation = 6.dp,
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            stringResource(
+                                R.string.map_measure_total,
+                                num(
+                                    marks.zipWithNext().sumOf { (a, b) ->
+                                        distance(a.first, a.second, b.first, b.second)
+                                    } / 1000,
+                                    3,
+                                ),
+                            )
+                        )
+                        Text(
+                            stringResource(R.string.map_measure_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row {
+                            TextButton(
+                                enabled = marks.isNotEmpty(),
+                                onClick = { marks = marks.dropLast(1) },
+                            ) {
+                                Text(stringResource(R.string.map_measure_undo))
+                            }
+                            TextButton(
+                                enabled = marks.isNotEmpty(),
+                                onClick = { marks = emptyList() },
+                            ) {
+                                Text(stringResource(R.string.map_measure_clear))
+                            }
+                            TextButton(onClick = { measure = false }) {
+                                Text(stringResource(R.string.map_measure_done))
+                            }
+                        }
+                    }
+                }
+            }
     }
+    if (stopList)
+        AlertDialog(
+            onDismissRequest = { stopList = false },
+            title = { Text(stringResource(R.string.map_quick_stops, stops.size)) },
+            text = {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(stops.size) { index ->
+                        val value = stops[index]
+                        TextButton(
+                            onClick = {
+                                stopList = false
+                                follow = false
+                                camera.navigate(value.latitude, value.longitude)
+                                selectedStop = value.id
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text(stringResource(R.string.map_leg_stop, index + 1))
+                                Text(
+                                    stamp(value.startedAt, true),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                Text(
+                                    duration(value.durationMs(data.now)),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { stopList = false }) {
+                    Text(stringResource(R.string.map_leg_close))
+                }
+            },
+        )
     if (tools || pointSelection != null)
         ModalBottomSheet(
             onDismissRequest = {
@@ -349,7 +544,12 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                         Row {
                             FilterChip(
                                 measure,
-                                { measure = !measure },
+                                {
+                                    measure = !measure
+                                    tools = false
+                                    pointSelection = null
+                                    follow = false
+                                },
                                 label = { Text("قياس المسافات") },
                             )
                             if (marks.isNotEmpty())
