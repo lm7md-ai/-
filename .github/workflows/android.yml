@@ -27,16 +27,16 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
       - name: Install pinned Android SDK
         run: sdkmanager 'platforms;android-37.2' 'build-tools;37.0.0' 'platform-tools'
       - name: Unit tests, both editions
         run: ./gradlew :app:testClassicDebugUnitTest :app:testNextDebugUnitTest --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8'
       - name: Release lint, both editions
-        if: ${{ !cancelled() }}
         run: ./gradlew :app:lintClassicRelease :app:lintNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8'
       - name: Build both editions
-        if: ${{ !cancelled() }}
         run: ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8'
       - name: Test and lint reports
         if: always()
