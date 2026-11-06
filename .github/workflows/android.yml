@@ -33,17 +33,38 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Install pinned Android SDK
         run: sdkmanager 'platforms;android-37.2' 'build-tools;37.0.0' 'platform-tools'
-      - name: Generate Room schemas via KSP & inspect identityHash
+      - name: Configure signing keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.RIHLA_SIGNING_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.RIHLA_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RIHLA_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.RIHLA_KEY_PASSWORD }}
+        run: |
+          mkdir -p ~/.android
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > /tmp/rihla-owner.keystore
+            echo "RIHLA_SIGNING_KEYSTORE=/tmp/rihla-owner.keystore" >> "$GITHUB_ENV"
+            [ -n "$STORE_PASS" ] && echo "RIHLA_STORE_PASSWORD=$STORE_PASS" >> "$GITHUB_ENV"
+            [ -n "$KEY_ALIAS" ] && echo "RIHLA_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            [ -n "$KEY_PASS" ] && echo "RIHLA_KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
+            echo "SIGNING_MODE=owner_secret" >> "$GITHUB_ENV"
+          else
+            if [ ! -f ~/.android/debug.keystore ]; then
+              keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            fi
+            echo "SIGNING_MODE=ci_ephemeral_keystore" >> "$GITHUB_ENV"
+          fi
+      - name: Generate Room schemas via KSP & run schema/map/tool checks
         run: |
           ./gradlew :app:kspClassicDebugKotlin --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
           python3 - <<'PY'
           import json
           j8 = json.load(open("app/schemas/sa.rihla.data.JourneyDatabase/8.json"))["database"]["identityHash"]
           a3 = json.load(open("app/schemas/sa.rihla.audio.AudioDatabase/3.json"))["database"]["identityHash"]
-          msg = f"JourneyDatabase_v8={j8} | AudioDatabase_v3={a3}"
-          print(f"::notice title=SCHEMA_HASHES::{msg}")
+          print(f"::notice title=SCHEMA_HASHES::JourneyDatabase_v8={j8} | AudioDatabase_v3={a3}")
           PY
           python3 tools/verify_schema.py
+          python3 tools/verify_country_map.py
           python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Unit tests, both editions
         run: |
@@ -73,49 +94,85 @@ jobs:
             exit $rc
           fi
       - name: Release lint, both editions
-        if: always()
         run: |
-          set +e
-          ./gradlew :app:lintClassicRelease :app:lintNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' > /tmp/lint.log 2>&1
-          rc=$?
-          cat /tmp/lint.log
-          if [ $rc -ne 0 ]; then
-            python3 - <<'PY'
-          import glob
-          lines = open("/tmp/lint.log", errors="replace").read().splitlines()
-          tail = "\n".join(lines[-80:])
-          for p in sorted(glob.glob("app/build/reports/lint-results-*.txt")):
-              txt = open(p, errors="replace").read()
-              if "Error:" in txt:
-                  tail += "\n--- " + p + " ---\n" + txt[:4000]
-          enc = tail[-7500:].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-          print(f"::error title=LINT_DIAGNOSTICS::{enc}")
-          PY
-            exit $rc
-          fi
-      - name: Build both editions (Debug & Release)
-        if: always()
+          ./gradlew :app:lintClassicRelease :app:lintNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+      - name: Build APKs (Debug & Release, both editions) & verify binary contract
         run: |
-          set +e
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          fi
-          df -h
-          ./gradlew :app:assembleClassicDebug --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' --stacktrace > /tmp/build.log 2>&1 && \
-          ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' --stacktrace >> /tmp/build.log 2>&1
-          rc=$?
-          cat /tmp/build.log
-          if [ $rc -ne 0 ]; then
-            python3 - <<'PY'
-          lines = open("/tmp/build.log", errors="replace").read().splitlines()
-          enc = "\n".join(lines[-80:])[-7500:].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-          print(f"::error title=BUILD_DIAGNOSTICS::{enc}")
+          ./gradlew :app:assembleClassicDebug --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+          ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+          mkdir -p dist-apks
+          cp app/build/outputs/apk/classic/release/app-classic-release.apk dist-apks/app-v7.0.apk
+          cp app/build/outputs/apk/next/release/app-next-release.apk dist-apks/app-v7.0-independent.apk
+          cp app/build/outputs/apk/classic/debug/app-classic-debug.apk dist-apks/app-v7.0-debug.apk
+          (cd dist-apks && sha256sum app-v7.0.apk app-v7.0-independent.apk > SHA256SUMS-v7.0)
+          BT="$ANDROID_HOME/build-tools/37.0.0"
+          python3 - <<'PY'
+          import glob, hashlib, os, subprocess, xml.etree.ElementTree as ET
+          bt = os.environ["ANDROID_HOME"] + "/build-tools/37.0.0"
+          def count_tests(flavor):
+              total = fails = errs = skipped = suites = 0
+              for p in glob.glob(f"app/build/test-results/test{flavor}DebugUnitTest/*.xml"):
+                  suites += 1
+                  r = ET.parse(p).getroot()
+                  total += int(r.attrib.get("tests", 0))
+                  fails += int(r.attrib.get("failures", 0))
+                  errs += int(r.attrib.get("errors", 0))
+                  skipped += int(r.attrib.get("skipped", 0))
+              return suites, total, fails, errs, skipped
+
+          c_suites, c_total, c_f, c_e, c_s = count_tests("Classic")
+          n_suites, n_total, n_f, n_e, n_s = count_tests("Next")
+
+          def count_lint(flavor):
+              p = f"app/build/reports/lint-results-{flavor}Release.xml"
+              if not os.path.exists(p): return (-1, -1)
+              r = ET.parse(p).getroot()
+              issues = r.findall("issue")
+              e = sum(1 for i in issues if i.attrib.get("severity") in ("Error", "Fatal"))
+              w = sum(1 for i in issues if i.attrib.get("severity") == "Warning")
+              return e, w
+
+          cl_e, cl_w = count_lint("classic")
+          nl_e, nl_w = count_lint("next")
+
+          lines = [
+              f"SIGNING_MODE={os.environ.get('SIGNING_MODE', 'unknown')}",
+              f"CLASSIC_TESTS: suites={c_suites}, passed={c_total}, failed={c_f}, errors={c_e}, skipped={c_s}",
+              f"NEXT_TESTS: suites={n_suites}, passed={n_total}, failed={n_f}, errors={n_e}, skipped={n_s}",
+              f"CLASSIC_LINT: errors={cl_e}, warnings={cl_w}",
+              f"NEXT_LINT: errors={nl_e}, warnings={nl_w}",
+          ]
+
+          for name in ("app-v7.0.apk", "app-v7.0-independent.apk", "app-v7.0-debug.apk"):
+              path = f"dist-apks/{name}"
+              sz = os.path.getsize(path)
+              sha = hashlib.sha256(open(path, "rb").read()).hexdigest()
+              badging = subprocess.check_output([f"{bt}/aapt2", "dump", "badging", path], text=True)
+              pkg_line = next((l for l in badging.splitlines() if l.startswith("package:")), "")
+              dbg = "application-debuggable" in badging.splitlines()
+              if "debug" not in name and dbg:
+                  raise SystemExit(f"Release APK {name} must NOT be debuggable!")
+              align_ok = subprocess.call([f"{bt}/zipalign", "-c", "-P", "16", "4", path]) == 0
+              cert_out = subprocess.check_output([f"{bt}/apksigner", "verify", "--print-certs", path], text=True)
+              cert_sha = next((l.strip() for l in cert_out.splitlines() if "SHA-256 digest:" in l), "")
+              lines.append(f"APK {name}: size={sz} bytes ({sz/1048576:.2f} MiB) | sha256={sha} | {pkg_line} | debuggable={dbg} | zipalign_16k={align_ok} | {cert_sha}")
+
+          report = "\n".join(lines)
+          print(report)
+          enc = report.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+          print(f"::notice title=FULL_BUILD_REPORT::{enc}")
           PY
-            exit $rc
-          fi
-          ls -lh app/build/outputs/apk/classic/release/app-classic-release.apk app/build/outputs/apk/next/release/app-next-release.apk
-      - name: Test, lint, schema and APK artifacts
+      - name: Upload built Mashwari v7.0 APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mashwari-v7.0-apks
+          retention-days: 90
+          path: |
+            android/dist-apks/app-v7.0.apk
+            android/dist-apks/app-v7.0-independent.apk
+            android/dist-apks/app-v7.0-debug.apk
+            android/dist-apks/SHA256SUMS-v7.0
+      - name: Upload test, lint and Room schema reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -126,4 +183,3 @@ jobs:
             android/app/build/reports/tests/**
             android/app/build/test-results/**
             android/app/build/reports/lint-results-*
-            android/app/build/outputs/apk/classic/release/app-classic-release.apk
