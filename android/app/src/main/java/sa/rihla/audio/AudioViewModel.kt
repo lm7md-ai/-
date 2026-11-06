@@ -177,7 +177,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         selectAudioScene(prefs,AudioScene.NATURAL)
         prefs.edit().putBoolean("silence",false).putLong("sleep_at",0).putBoolean("sleep_end",false).putBoolean("recover",true).apply()
     }
-    override fun onCleared() { MediaController.releaseFuture(future); super.onCleared() }
+    override fun onCleared() { future?.let(MediaController::releaseFuture); super.onCleared() }
     companion object {
         fun item(track: AudioTrack): MediaItem = MediaItem.Builder().setMediaId(track.id).setUri(track.uri)
             .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist).setAlbumTitle(track.album)
