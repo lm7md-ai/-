@@ -484,6 +484,10 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun stationaryDeepSleep(enabled: Boolean) {
+        work { app.settings.stationaryDeepSleep(enabled) }
+    }
+
     fun clear() {
         work {
             app.settings.smsImport(false)
