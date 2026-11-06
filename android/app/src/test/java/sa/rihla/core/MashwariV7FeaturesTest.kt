@@ -316,7 +316,7 @@ class MashwariV7FeaturesTest {
             SpeedAdaptiveAudio.reset()
             val proc = SpeedAdaptiveAudioProcessor()
             proc.configure(androidx.media3.common.audio.AudioProcessor.AudioFormat(44100, 2, androidx.media3.common.C.ENCODING_PCM_16BIT))
-            proc.flush()
+            proc.flush(androidx.media3.common.audio.AudioProcessor.StreamMetadata.DEFAULT)
             val samples = ShortArray(2048) { idx -> (kotlin.math.sin(idx * 0.34) * 8000).toInt().toShort() }
             val inputBuf =
                 ByteBuffer.allocateDirect(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN).apply {
@@ -350,7 +350,7 @@ class MashwariV7FeaturesTest {
             assertEquals(2, queuePlan.tracks.size)
 
             // 3. AutoStopBookmarkManager saves -10s bookmark and debounces within 90s
-            AudioLive.state.value = AudioPlayback(id = "q1", title = t1.title, playing = true, position = 120_000L, duration = t1.duration)
+            AudioLive.state.value = AudioPlayback(id = "q1", title = t1.title, playing = true, position = 120_000L, duration = t1.durationMs)
             val mark1 = AutoStopBookmarkManager.onStopOrArrival(app, "توقف إشارة", 5_000_000L)
             assertNotNull(mark1)
             assertEquals(110_000L, mark1!!.positionMs)

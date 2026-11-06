@@ -283,14 +283,10 @@ object DailyBriefingBuilder {
             }
 
             val tracks = app.audio.dao.tracks().first()
-            val playbacks = app.audio.dao.playbacks().associateBy { it.id }
             val unfinished =
-                tracks.firstOrNull { tr ->
-                    val pb = playbacks[tr.id] ?: return@firstOrNull false
-                    audioResume(pb.position, tr.duration) > 0L
-                }
+                tracks.firstOrNull { tr -> audioResume(tr.positionMs, tr.durationMs) > 0L }
             if (unfinished != null) {
-                val posMin = ((playbacks[unfinished.id]?.position ?: 0L) / 60_000L).coerceAtLeast(1L)
+                val posMin = (unfinished.positionMs / 60_000L).coerceAtLeast(1L)
                 parts += "لديك محاضرة غير مكتملة: ${unfinished.title.take(45)} عند الدقيقة $posMin."
             }
 

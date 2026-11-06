@@ -66,7 +66,7 @@ jobs:
                           xml_fails.append(f"{tc.attrib.get('classname')}.{tc.attrib.get('name')}: {txt}")
               except Exception as ex:
                   xml_fails.append(f"XML parse {p}: {ex}")
-          report = "\n".join((errs[:60] + ["--- XML FAILURES ---"] + xml_fails[:25]))[-7500:]
+          report = "\n".join((errs[:80] + ["--- XML FAILURES ---"] + xml_fails[:30]))[:9500]
           enc = report.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
           print(f"::error title=UNIT_TEST_DIAGNOSTICS::{enc}")
           PY

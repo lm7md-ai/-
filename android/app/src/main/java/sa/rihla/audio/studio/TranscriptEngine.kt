@@ -31,6 +31,43 @@ object TranscriptEngine {
     const val BOOKMARK_WINDOW_MS = 30_000L
     private const val FULL_SEGMENT_MS = 30_000L
 
+    fun formatTimestamp(ms: Long): String = audioTime(ms.coerceAtLeast(0L))
+
+    suspend fun indexBookmarkContexts(
+        context: Context,
+        repo: AudioRepository,
+        trackId: String,
+        onProgress: (Int) -> Unit = {},
+    ): Int {
+        val track = repo.dao.track(trackId) ?: error("المقطع الصوتي غير موجود")
+        return indexBookmarkContexts(context, repo.database, track, onProgress).size
+    }
+
+    suspend fun indexFullLecture(
+        context: Context,
+        repo: AudioRepository,
+        trackId: String,
+        customNotesOrKeywords: String = "",
+        onProgress: (Int) -> Unit = {},
+    ): Int {
+        val track = repo.dao.track(trackId) ?: error("المقطع الصوتي غير موجود")
+        return indexFullTrackOffline(context, repo.database, track, customNotesOrKeywords, onProgress).size
+    }
+
+    suspend fun importExternalTranscript(
+        repo: AudioRepository,
+        trackId: String,
+        rawText: String,
+    ): Int =
+        withContext(Dispatchers.IO) {
+            val track = repo.dao.track(trackId) ?: error("المقطع الصوتي غير موجود")
+            val parsed = parseTimestampedText(track.id, rawText, track.durationMs, isBookmarkContext = false)
+            require(parsed.isNotEmpty()) { "لم يُعثر على فقرات نصية صالحة" }
+            repo.dao.clearTranscriptsForTrack(track.id, bookmarkOnly = false)
+            repo.dao.insertTranscripts(parsed)
+            parsed.size
+        }
+
     fun parseTimestampedText(
         trackId: String,
         rawText: String,

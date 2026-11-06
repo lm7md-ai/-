@@ -100,6 +100,8 @@ object SpeedAdaptiveAudio {
             )
         }
     }
+
+    fun reset() = clearOuting()
 }
 
 /**

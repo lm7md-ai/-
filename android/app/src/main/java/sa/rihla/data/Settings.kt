@@ -181,6 +181,39 @@ class Settings(private val context: Context) {
         context.store.edit { it[booleanPreferencesKey("stationary_deep_sleep")] = enabled }
     }
 
+    suspend fun update(transform: (Preferences) -> Preferences) {
+        val next = transform(flow.first())
+        context.store.edit {
+            it[stringPreferencesKey("theme")] = next.theme
+            it[booleanPreferencesKey("auto")] = next.auto
+            it[booleanPreferencesKey("onboarded")] = next.onboarded
+            it[stringPreferencesKey("attribution")] = next.offlineAttribution
+            it[booleanPreferencesKey("online_maps")] = next.onlineMaps
+            it[stringPreferencesKey("fuel_grade")] = next.fuelGrade
+            it[longPreferencesKey("fuel_price")] = next.fuelPriceHalala
+            it[stringPreferencesKey("engine")] = next.engine
+            it[longPreferencesKey("custom_consumption")] = next.customConsumptionMl
+            it[booleanPreferencesKey("use_measured")] = next.useMeasured
+            it[booleanPreferencesKey("sms_import")] = next.smsImport
+            it[longPreferencesKey("sms_import_since")] = next.smsImportSince
+            it[longPreferencesKey("monthly_budget")] = next.monthlyBudgetHalala
+            it[stringPreferencesKey("bluetooth_address")] = next.bluetoothAddress
+            it[booleanPreferencesKey("precise_tracking")] = next.preciseTracking
+            it[longPreferencesKey("fuel_budget")] = next.fuelBudget
+            it[longPreferencesKey("food_budget")] = next.foodBudget
+            it[longPreferencesKey("other_budget")] = next.otherBudget
+            it[booleanPreferencesKey("turn_detail")] = next.turnDetails
+            it[booleanPreferencesKey("zero_confirm_voice")] = next.zeroConfirmationVoice
+            it[booleanPreferencesKey("speed_adaptive_audio")] = next.speedAdaptiveAudio
+            it[booleanPreferencesKey("auto_stop_bookmark")] = next.autoStopBookmark
+            it[booleanPreferencesKey("auto_open_cockpit_bt")] = next.autoOpenCockpitOnBluetooth
+            it[booleanPreferencesKey("auto_morning_briefing")] = next.autoMorningBriefing
+            it[booleanPreferencesKey("auto_daily_backup")] = next.autoDailyBackup
+            it[stringPreferencesKey("unified_backup_folder")] = next.unifiedBackupFolderUri
+            it[booleanPreferencesKey("stationary_deep_sleep")] = next.stationaryDeepSleep
+        }
+    }
+
     suspend fun exportJson(): String {
         val p = flow.first()
         return JSONObject()
