@@ -1,3 +1,24 @@
+# Verification — version 7.0, 2026-11-06
+
+[Complete Arabic v7.0 feature & engineering report](docs/REPORT_7_0.md) · [v7.0 upgrade guide](docs/VERSION_7_0.md).
+
+- **Final full suite (`Android verification` run `#42267002310` on `arena/8f15c94a-repo`)**:
+  - `classic` (`sa.rihla`): **43 test suites, 197 Android unit & Robolectric Compose UI tests passed** (`0` failures, `0` errors, `0` skipped).
+  - `next` (`sa.rihla.next`): **43 test suites, 197 Android unit & Robolectric Compose UI tests passed** (`0` failures, `0` errors, `0` skipped).
+  - **Total Android tests executed**: **394 passed, 0 failed**.
+  - **Python schema, offline map & release tool checks**: `verify_schema.py` (**11/11 SQLite schema & migration checks passed** through `JourneyDatabase` v8 and `AudioDatabase` v3), `verify_country_map.py` (passed, SHA-256 `fc47bcdafc88c41b9223666099fd327cf5386ceba5b9837695a831fbc659e7dd`), `verify_offline_map.py` (passed, 20,321 PNG tiles, SHA-256 `4b74d0df4675c58b9791c14f383815890f789a67b78dcdf2efb4b10917c430f9`), and `unittest` (`13/13` tool tests passed).
+- **Room KSP schema verification**:
+  - `JourneyDatabase` migrated cleanly across all historical versions `1 → 2 → 3 → 4 → 5 → 6 → 7 → 8` (`identityHash = bdffa49cb0719423a8b4579d8bcf65c7`), adding `university_schedule`, `campus_parking_pins`, geo-merchant coordinates, and receipt/warranty columns without altering historical rows.
+  - `AudioDatabase` migrated cleanly `1 → 2 → 3` (`identityHash = f4fb751927c30a23253ca19d83d51197`), adding `audio_transcripts` with `ForeignKey.CASCADE` on `audio_tracks`.
+- **Release Lint**:
+  - `lintClassicRelease` and `lintNextRelease` both passed with **0 errors** and 56 warnings each.
+- **Built APK verification (`mashwari-v7.0-apks`, Artifact ID `13529045141`)**:
+  - `app-v7.0.apk` (`sa.rihla`, `versionCode = 70`, `versionName = "7.0"`, `minSdk = 26`, `compileSdk = 37`): **104,538,127 bytes (99.70 MiB < 100 MiB)**, non-debuggable (`debuggable=False`), 16 KiB page / 4-byte ZIP aligned (`zipalign -c -P 16 4` passed), SHA-256 `25f24588bc9637bb8041daf5e2b05b7579641e389486bf3fdf10e956c0865ed4`.
+  - `app-v7.0-independent.apk` (`sa.rihla.next`, `versionCode = 70`, `versionName = "7.0"`, `minSdk = 26`, `compileSdk = 37`): **104,538,135 bytes (99.70 MiB < 100 MiB)**, non-debuggable (`debuggable=False`), 16 KiB page / 4-byte ZIP aligned (`zipalign -c -P 16 4` passed), SHA-256 `66efe62a7f5a8c7cd4ab354af4ae1fab22b05b4376f08bd656d162558398dcd7`.
+  - Signing note: Because the owner's private signing keystore (`c82d020159412f6dac6f0675f1b826f7335730bbe9b647224644f94937da8b34`) is not committed to Git or GitHub Secrets, CI built with an ephemeral keystore (`SIGNING_MODE=ci_ephemeral_keystore`). Before installing in-place over an existing `sa.rihla` `1.3–6.4` installation, either re-sign `app-v7.0.apk` locally with `apksigner sign --ks <owner-keystore>` + `tools/verify_release.py` or provide `RIHLA_SIGNING_KEYSTORE_BASE64` in GitHub Secrets and re-run the workflow. Never uninstall an existing installation to bypass a certificate mismatch.
+- **Device & simulation boundaries**:
+  - No physical RedMagic 11 Pro handset, live Lancer 2016 Bluetooth head unit, or real Al-Rajhi SMS inbox was connected in the cloud verification runner. Real-world GPS multipath inside enclosed parking, OEM background battery policies, Android `SpeechRecognizer` / `TextToSpeech` voice pack availability, and on-device 1.6 GB Qwen model inference require on-phone verification.
+
 # Verification — version 6.4, 2026-10-23
 
 [Audit scope, concrete fixes and device limitations](docs/AUDIT_6_4.md).
