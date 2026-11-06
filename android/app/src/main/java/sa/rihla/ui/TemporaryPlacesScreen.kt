@@ -1,9 +1,11 @@
 package sa.rihla.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -79,84 +81,85 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
             }
         loading = false
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            ElevatedCard(androidx.compose.ui.Modifier.fillMaxWidth()) {
-                Column(
-                    androidx.compose.ui.Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("🎓 جدول محاضرات جامعة أم القرى", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        "يحسب مشواري وقت الانطلاق المثالي قبل كل محاضرة بناءً على متوسط زمن مشاويرك الفعلي إلى العابدية + 10 دقائق هامش أمان.",
-                        style = MaterialTheme.typography.bodySmall,
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("🎓 جدول محاضرات جامعة أم القرى", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "يحسب مشواري وقت الانطلاق المثالي قبل كل محاضرة بناءً على متوسط زمن مشاويرك الفعلي إلى العابدية + 10 دقائق هامش أمان.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (1..5).forEach { dayNum ->
+                        FilterChip(
+                            selected = selectedUquDay == dayNum,
+                            onClick = { selectedUquDay = dayNum },
+                            label = { Text(uquDayArabicName(dayNum)) },
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = courseTitle,
+                    onValueChange = { courseTitle = it.take(100) },
+                    label = { Text("اسم المقرر / المحاضرة") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = buildingGate,
+                    onValueChange = { buildingGate = it.take(80) },
+                    label = { Text("الكلية أو البوابة (مثال: الحاسب · بوابة ٣)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = startHourMin,
+                        onValueChange = { startHourMin = it.take(5) },
+                        label = { Text("البداية HH:MM") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        (1..5).forEach { dayNum ->
-                            FilterChip(
-                                selected = selectedUquDay == dayNum,
-                                onClick = { selectedUquDay = dayNum },
-                                label = { Text(uquDayArabicName(dayNum)) },
-                            )
+                    OutlinedTextField(
+                        value = endHourMin,
+                        onValueChange = { endHourMin = it.take(5) },
+                        label = { Text("النهاية HH:MM") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Button(
+                    onClick = {
+                        val st = parseHhMm(startHourMin)
+                        val en = parseHhMm(endHourMin)
+                        if (st != null && en != null && vm.addScheduleEntry(selectedUquDay, courseTitle, buildingGate, st, en)) {
+                            courseTitle = ""
+                            buildingGate = ""
+                        } else {
+                            vm.error.value = "operation_failed"
                         }
-                    }
-                    OutlinedTextField(
-                        value = courseTitle,
-                        onValueChange = { courseTitle = it.take(100) },
-                        label = { Text("اسم المقرر / المحاضرة") },
-                        singleLine = true,
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = buildingGate,
-                        onValueChange = { buildingGate = it.take(80) },
-                        label = { Text("الكلية أو البوابة (مثال: الحاسب · بوابة ٣)") },
-                        singleLine = true,
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = startHourMin,
-                            onValueChange = { startHourMin = it.take(5) },
-                            label = { Text("البداية HH:MM") },
-                            singleLine = true,
-                            modifier = androidx.compose.ui.Modifier.weight(1f),
-                        )
-                        OutlinedTextField(
-                            value = endHourMin,
-                            onValueChange = { endHourMin = it.take(5) },
-                            label = { Text("النهاية HH:MM") },
-                            singleLine = true,
-                            modifier = androidx.compose.ui.Modifier.weight(1f),
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            val st = parseHhMm(startHourMin)
-                            val en = parseHhMm(endHourMin)
-                            if (st != null && en != null && vm.addScheduleEntry(selectedUquDay, courseTitle, buildingGate, st, en)) {
-                                courseTitle = ""
-                                buildingGate = ""
-                            } else {
-                                vm.error.value = "operation_failed"
-                            }
-                        },
-                        enabled = courseTitle.trim().isNotBlank(),
-                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
-                    ) {
-                        Text("إضافة المحاضرة للجدول")
-                    }
+                    },
+                    enabled = courseTitle.trim().isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("إضافة المحاضرة للجدول")
                 }
             }
         }
         data.schedule.forEach { entry ->
-            item(key = "uqu_sched_${entry.id}") {
-                OutlinedCard(androidx.compose.ui.Modifier.fillMaxWidth()) {
+            key("uqu_sched_${entry.id}") {
+                OutlinedCard(Modifier.fillMaxWidth()) {
                     Row(
-                        androidx.compose.ui.Modifier.padding(12.dp),
+                        Modifier.padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Column(androidx.compose.ui.Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f)) {
                             Text(
                                 "${uquDayArabicName(entry.dayOfWeek)} · ${entry.courseTitle}",
                                 style = MaterialTheme.typography.titleMedium,
@@ -178,44 +181,42 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
                 }
             }
         }
-        item {
-            HorizontalDivider()
-            Text("المنزل والاستراحة المؤقتة", style = MaterialTheme.typography.titleLarge)
-            Text(
-                "محطة داخل المشوار؛ لا تنهي الرحلة ولا تستبدل المنزل الدائم. إحصائية الذهاب منها إلى الجامعة تظهر بصورة مستقلة دون تعديل الرحلة.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            OutlinedTextField(
-                name,
-                { if (it.length <= 60) name = it },
-                label = { Text("اسم المكان") },
-                singleLine = true,
-            )
-            Row {
-                FilterChip(home, { home = true }, label = { Text("منزل مؤقت") })
-                FilterChip(!home, { home = false }, label = { Text("استراحة مؤقتة") })
-            }
-            OutlinedTextField(
-                hours,
-                { hours = it },
-                label = { Text("مدة التفعيل بالساعات: 1–720") },
-                singleLine = true,
-            )
-            Button(
-                onClick = {
-                    val now = System.currentTimeMillis()
-                    dialog = temporaryPlaceType(home, now, now + hours.toLong() * 3600000, name)
-                },
-                enabled = name.isNotBlank() && (hours.toLongOrNull() ?: 0L) in 1L..720L,
-            ) {
-                Text("تحديد المكان على الخريطة")
-            }
+        HorizontalDivider()
+        Text("المنزل والاستراحة المؤقتة", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "محطة داخل المشوار؛ لا تنهي الرحلة ولا تستبدل المنزل الدائم. إحصائية الذهاب منها إلى الجامعة تظهر بصورة مستقلة دون تعديل الرحلة.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedTextField(
+            name,
+            { if (it.length <= 60) name = it },
+            label = { Text("اسم المكان") },
+            singleLine = true,
+        )
+        Row {
+            FilterChip(home, { home = true }, label = { Text("منزل مؤقت") })
+            FilterChip(!home, { home = false }, label = { Text("استراحة مؤقتة") })
+        }
+        OutlinedTextField(
+            hours,
+            { hours = it },
+            label = { Text("مدة التفعيل بالساعات: 1–720") },
+            singleLine = true,
+        )
+        Button(
+            onClick = {
+                val now = System.currentTimeMillis()
+                dialog = temporaryPlaceType(home, now, now + hours.toLong() * 3600000, name)
+            },
+            enabled = name.isNotBlank() && (hours.toLongOrNull() ?: 0L) in 1L..720L,
+        ) {
+            Text("تحديد المكان على الخريطة")
         }
         temporary.forEach { place ->
-            item(key = place.type) {
+            key(place.type) {
                 val info = temporaryPlaceInfo(place.type)!!
                 Card {
-                    Column(androidx.compose.ui.Modifier.padding(16.dp)) {
+                    Column(Modifier.padding(16.dp)) {
                         Text(
                             placeDisplayName(place.type),
                             style = MaterialTheme.typography.titleMedium,
@@ -231,21 +232,19 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
                 }
             }
         }
-        item {
-            Text("من المكان المؤقت إلى الجامعة", style = MaterialTheme.typography.titleLarge)
-            Text(
-                "آخر 100 مشوار. يلزم توقف مؤكد أو بقاء مسجل لدقيقتين، ثم وصول جامعة مؤكد. البداية آخر نقطة داخل المكان؛ قد يختلف وقت المغادرة الفعلي بين عينتين.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            if (loading) LinearProgressIndicator()
-            else if (summaries.isEmpty())
-                Text("لا توجد رحلات مؤهلة بعد. تأكد من ضبط نطاق الجامعة وتسجيل المغادرة والوصول.")
-        }
+        Text("من المكان المؤقت إلى الجامعة", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "آخر 100 مشوار. يلزم توقف مؤكد أو بقاء مسجل لدقيقتين، ثم وصول جامعة مؤكد. البداية آخر نقطة داخل المكان؛ قد يختلف وقت المغادرة الفعلي بين عينتين.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (loading) LinearProgressIndicator()
+        else if (summaries.isEmpty())
+            Text("لا توجد رحلات مؤهلة بعد. تأكد من ضبط نطاق الجامعة وتسجيل المغادرة والوصول.")
         summaries.forEach { (trip, leg, section) ->
-            item(key = "${trip.id}-${leg.arrival}") {
+            key("${trip.id}-${leg.arrival}") {
                 Card {
                     Column(
-                        androidx.compose.ui.Modifier.padding(16.dp),
+                        Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
@@ -270,6 +269,7 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
                 }
             }
         }
+        Spacer(Modifier.height(16.dp))
     }
     dialog?.let { type -> PlaceDialog(vm, data, type) { dialog = null } }
 }

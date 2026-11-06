@@ -61,7 +61,7 @@ class MashwariV7FeaturesTest {
             assertNull(db.dao().active())
             val finished = db.dao().outings().single()
             assertTrue(finished.automaticEnd)
-            assertEquals("COMPLETED", finished.state.phase)
+            assertEquals("ENDED", finished.state.phase)
         } finally {
             settings.clear()
             db.close()
@@ -341,8 +341,8 @@ class MashwariV7FeaturesTest {
             SpeedAdaptiveAudio.reset()
 
             // 2. SmartTripQueueBuilder builds queue matching 25-min commute & resumes unfinished lecture
-            val t1 = AudioTrack("q1", "u1", "محاضرة الشبكات", "د. خالد", "UQU", 20 * 60_000L, positionMs = 5 * 60_000L)
-            val t2 = AudioTrack("q2", "u2", "ملخص أمن المعلومات", "د. سعد", "UQU", 10 * 60_000L)
+            val t1 = AudioTrack("q1", "content://test/q1", "محاضرة الشبكات", "د. خالد", "UQU", 20 * 60_000L, positionMs = 5 * 60_000L)
+            val t2 = AudioTrack("q2", "content://test/q2", "ملخص أمن المعلومات", "د. سعد", "UQU", 10 * 60_000L)
             app.audio.add(t1)
             app.audio.add(t2)
             val queuePlan = SmartTripQueueBuilder.buildQueue(listOf(t1, t2), 25 * 60_000L)!!

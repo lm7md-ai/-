@@ -219,7 +219,7 @@ class SmsImportTest {
                 assertFalse(
                     importer.import(
                         "sms",
-                        "شراء بمبلغ 35.00 SAR لدى ALBAIK EXPRESS",
+                        "شراء\nبمبلغ: 35.00 SAR\nلدى: ALBAIK EXPRESS",
                         12_120_000L,
                     )
                 )
