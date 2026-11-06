@@ -2,6 +2,7 @@ package sa.rihla.ui
 
 import android.content.Intent
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -12,12 +13,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import kotlinx.coroutines.*
 import sa.rihla.data.LocalBackup
+import sa.rihla.data.RestoreMode
+import sa.rihla.data.UnifiedBackupManager
 import sa.rihla.sms.PurchaseNotificationService
 import sa.rihla.tracking.TrackingService
 
@@ -70,9 +74,65 @@ fun ExportDocument(
 fun DataTools(vm: JourneyViewModel, data: ScreenData) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var pending by remember { mutableStateOf<Pair<String, sa.rihla.data.BackupPreview>?>(null) }
+    var pendingJson by remember { mutableStateOf<Pair<String, sa.rihla.data.BackupPreview>?>(null) }
+    var pendingZipUri by remember { mutableStateOf<Uri?>(null) }
+    var restoreMode by remember { mutableStateOf(RestoreMode.SMART_MERGE) }
+    var statusMessage by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var snapshotRefresh by remember { mutableIntStateOf(0) }
     val backup = remember { LocalBackup(vm.app.database) }
+    val unified = remember { UnifiedBackupManager(vm.app) }
+    val localSnapshots = remember(snapshotRefresh) { unified.listLocalAutoBackups() }
+
+    val zipExport =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("application/zip")
+        ) { uri ->
+            if (uri != null) {
+                scope.launch {
+                    busy = true
+                    try {
+                        val summary =
+                            withContext(Dispatchers.IO) {
+                                context.contentResolver.openOutputStream(uri, "wt")!!.use { out ->
+                                    unified.exportToStream(out)
+                                }
+                            }
+                        statusMessage =
+                            "✓ صُدّرت النسخة الموحدة (${summary.outings} مشوار · ${summary.expenses} مصروف · ${summary.audioTracks} مقطع · ${summary.transfers} حوالة · ${summary.receipts} فاتورة)"
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        vm.error.value = "operation_failed"
+                    } finally {
+                        busy = false
+                    }
+                }
+            }
+        }
+
+    val zipImport =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) pendingZipUri = uri
+        }
+
+    val safFolderPicker =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri != null) {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                }
+                scope.launch {
+                    vm.app.settings.update { it.copy(unifiedBackupFolderUri = uri.toString()) }
+                    statusMessage = "✓ رُبط مجلد النسخ الاحتياطي التلقائي بنجاح"
+                }
+            }
+        }
+
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null)
@@ -96,7 +156,7 @@ fun DataTools(vm: JourneyViewModel, data: ScreenData) {
                                 val text = bytes.toString(Charsets.UTF_8)
                                 text to LocalBackup.preview(text)
                             }
-                        pending = payload
+                        pendingJson = payload
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
@@ -106,6 +166,103 @@ fun DataTools(vm: JourneyViewModel, data: ScreenData) {
                     }
                 }
         }
+
+    // v7.0 Unified Single-Archive Backup & Smart Merge Restore Card
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("📦 النسخة الاحتياطية الموحدة الشاملة (v7.0 ZIP)", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "ملف واحد (.zip) يضم كل مشاويرك، مصاريفك، الفواتير المصورة، مكتبة المحاضرات وعلاماتها ونصوصها، حوالات الوالد، وإعداداتك ومساعدك الشخصي.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Button(
+                onClick = {
+                    zipExport.launch(
+                        "mashwari-unified-${LocalDate.now(sa.rihla.core.SaudiZone)}.zip"
+                    )
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Archive, null)
+                Spacer(Modifier.width(8.dp))
+                Text("تصدير النسخة الموحدة الشاملة (.zip)")
+            }
+            OutlinedButton(
+                onClick = {
+                    zipImport.launch(
+                        arrayOf("application/zip", "application/octet-stream", "*/*")
+                    )
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.Restore, null)
+                Spacer(Modifier.width(8.dp))
+                Text("استعادة أو دمج نسخة موحدة (.zip)")
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("نسخ تلقائي يومي لآخر 7 نسخ")
+                    Text(
+                        "يُحفظ تلقائيًا عند فتح التطبيق أو الوصول للمنزل مع حذف الأقدم من 7 نسخ.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = data.settings.autoDailyBackup,
+                    onCheckedChange = { enabled ->
+                        scope.launch {
+                            vm.app.settings.update { it.copy(autoDailyBackup = enabled) }
+                        }
+                    },
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { safFolderPicker.launch(null) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        if (data.settings.unifiedBackupFolderUri.isBlank()) "ربط مجلد خارجي"
+                        else "تغيير المجلد الخارجي ✓"
+                    )
+                }
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            try {
+                                val f = unified.createManualSnapshotFile()
+                                snapshotRefresh++
+                                statusMessage = "✓ حُفظت لقطة فورية: ${f.name}"
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("حفظ لقطة الآن")
+                }
+            }
+            if (localSnapshots.isNotEmpty()) {
+                Text(
+                    "النسخ التلقائية المحفوظة محليًا (${localSnapshots.size}/7): آخرها ${localSnapshots.first().name}",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            if (statusMessage.isNotBlank()) {
+                Text(statusMessage, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+
     Panel("backup_tools", Icons.Default.FolderOpen) {
         Text(tr("backup_explanation"))
         ExportDocument(
@@ -141,15 +298,24 @@ fun DataTools(vm: JourneyViewModel, data: ScreenData) {
             Text(tr("legacy_transfer_help"))
         }
     }
-    pending?.let { (text, preview) ->
+
+    pendingZipUri?.let { uri ->
         AlertDialog(
-            onDismissRequest = { if (!busy) pending = null },
-            title = { Text(tr("restore_backup")) },
+            onDismissRequest = { if (!busy) pendingZipUri = null },
+            title = { Text("استعادة النسخة الموحدة (.zip)") },
             text = {
-                Column {
-                    Text(num(preview.outings.toDouble(), 0) + " " + tr("outings_count"))
-                    Text(num(preview.expenses.toDouble(), 0) + " " + tr("expenses"))
-                    Text(tr("restore_empty_only"))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("اختر أسلوب الاستعادة:")
+                    FilterChip(
+                        selected = restoreMode == RestoreMode.SMART_MERGE,
+                        onClick = { restoreMode = RestoreMode.SMART_MERGE },
+                        label = { Text("دمج ذكي بدون مسح بياناتي الحالية (موصى به)") },
+                    )
+                    FilterChip(
+                        selected = restoreMode == RestoreMode.FULL_OVERWRITE,
+                        onClick = { restoreMode = RestoreMode.FULL_OVERWRITE },
+                        label = { Text("استبدال كامل لجميع السجلات") },
+                    )
                 }
             },
             confirmButton = {
@@ -159,19 +325,75 @@ fun DataTools(vm: JourneyViewModel, data: ScreenData) {
                         scope.launch {
                             busy = true
                             try {
-                                withContext(Dispatchers.IO) { backup.restore(text) }
+                                val summary =
+                                    withContext(Dispatchers.IO) {
+                                        context.contentResolver.openInputStream(uri)!!.use { inp ->
+                                            unified.restoreFromStream(inp, restoreMode)
+                                        }
+                                    }
+                                vm.app.settings.onboard()
+                                sa.rihla.tracking.HomeGeofences.restore(vm.app)
+                                pendingZipUri = null
+                                statusMessage =
+                                    "✓ تمت الاستعادة (${summary.outings} مشوار · ${summary.expenses} مصروف · ${summary.audioTracks} مقطع)"
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                vm.error.value = "backup_invalid"
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                ) {
+                    Text("بدء الاستعادة")
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !busy, onClick = { pendingZipUri = null }) {
+                    Text(tr("cancel"))
+                }
+            },
+        )
+    }
+
+    pendingJson?.let { (text, preview) ->
+        AlertDialog(
+            onDismissRequest = { if (!busy) pendingJson = null },
+            title = { Text(tr("restore_backup")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(num(preview.outings.toDouble(), 0) + " " + tr("outings_count"))
+                    Text(num(preview.expenses.toDouble(), 0) + " " + tr("expenses"))
+                    FilterChip(
+                        selected = restoreMode == RestoreMode.SMART_MERGE,
+                        onClick = { restoreMode = RestoreMode.SMART_MERGE },
+                        label = { Text("دمج ذكي مع البيانات الحالية") },
+                    )
+                    FilterChip(
+                        selected = restoreMode == RestoreMode.FULL_OVERWRITE,
+                        onClick = { restoreMode = RestoreMode.FULL_OVERWRITE },
+                        label = { Text("استبدال كامل للسجل") },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            try {
+                                withContext(Dispatchers.IO) { backup.restore(text, restoreMode) }
                                 vm.app.settings.smsImport(false)
                                 vm.app.settings.onboard()
                                 sa.rihla.tracking.HomeGeofences.restore(vm.app)
-                                pending = null
+                                pendingJson = null
                                 vm.error.value = "backup_restored"
                             } catch (cancelled: CancellationException) {
                                 throw cancelled
-                            } catch (error: Exception) {
-                                vm.error.value =
-                                    if (error.message?.contains("BACKUP_NOT_EMPTY") == true)
-                                        "restore_empty_only"
-                                    else "backup_invalid"
+                            } catch (_: Exception) {
+                                vm.error.value = "backup_invalid"
                             } finally {
                                 busy = false
                             }
@@ -182,7 +404,9 @@ fun DataTools(vm: JourneyViewModel, data: ScreenData) {
                 }
             },
             dismissButton = {
-                TextButton(enabled = !busy, onClick = { pending = null }) { Text(tr("cancel")) }
+                TextButton(enabled = !busy, onClick = { pendingJson = null }) {
+                    Text(tr("cancel"))
+                }
             },
         )
     }
@@ -227,7 +451,14 @@ fun DeviceReadiness(data: ScreenData) {
         Metric("background_battery", tr(if (battery) "unrestricted" else "system_managed"))
         Metric(
             "sms_access",
-            tr(if (PurchaseNotificationService.allowed(context) || sa.rihla.sms.PurchaseSmsReceiver.allowed(context)) "allowed" else "denied"),
+            tr(
+                if (
+                    PurchaseNotificationService.allowed(context) ||
+                        sa.rihla.sms.PurchaseSmsReceiver.allowed(context)
+                )
+                    "allowed"
+                else "denied"
+            ),
         )
         Text(tr("redmagic_help"), style = MaterialTheme.typography.bodySmall)
         OutlinedButton(

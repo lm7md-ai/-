@@ -238,6 +238,9 @@ data class MapLayers(
     val places: Boolean = true,
     val speed: Boolean = false,
     val accuracy: Boolean = true,
+    val bottlenecks: Boolean = false,
+    val merchants: Boolean = true,
+    val parking: Boolean = true,
 )
 
 class MapCamera {

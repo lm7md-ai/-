@@ -79,8 +79,23 @@ fun MetricsList(m: Metrics) {
 
 @Composable
 fun StatisticsScreen(data: ScreenData, vm: JourneyViewModel? = null, onTrip: (Long) -> Unit = {}) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val app = context.applicationContext as sa.rihla.RihlaApp
     var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     var period by remember { mutableStateOf(Period.MONTH) }
+    var uniCost by remember { mutableStateOf<UniversityDayCostSummary?>(null) }
+    LaunchedEffect(data.outings.size, data.expenses.size, data.settings.fuelPriceHalala) {
+        uniCost =
+            withContext(Dispatchers.IO) {
+                UniversityFinanceCalculator.computeUniversityDayCosts(
+                    outings = data.outings,
+                    events = app.repository.dao.allEvents(),
+                    expenses = data.expenses,
+                    defaultProfile = ConsumptionProfile(5500, 7800, "REFERENCE"),
+                    defaultFuelPriceHalala = data.settings.fuelPriceHalala,
+                )
+            }
+    }
     val m = metrics(data, periodBounds(period))
     val previous = metrics(data, periodBounds(period, previous = true))
     LazyColumn(
@@ -112,6 +127,40 @@ fun StatisticsScreen(data: ScreenData, vm: JourneyViewModel? = null, onTrip: (Lo
                             "driving_time" to duration(m.drivingMs),
                         )
                     )
+                    uniCost?.let { uc ->
+                        ElevatedCard(Modifier.fillMaxWidth()) {
+                            Column(
+                                Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Text(
+                                    "🎓 متوسط تكلفة يوم الجامعة (العابدية)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                if (uc.universityDaysCount == 0) {
+                                    Text(
+                                        "تُحسب تلقائيًا عند تسجيل زيارات جامعة أم القرى (وقود المشوار + مصاريف القهوة والطعام).",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                } else {
+                                    Text(
+                                        "${num(uc.averageUniversityDayHalala / 100.0, 2)} ر.س / يوم دوام",
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text(
+                                        "وقود تقديري: ${num(uc.averageFuelPerUniDayHalala / 100.0, 2)} ر.س · مشتريات وقهوة: ${num(uc.averagePersonalPerUniDayHalala / 100.0, 2)} ر.س",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                    Text(
+                                        "إجمالي هذا الشهر (${uc.currentMonthUniDays} يوم دوام): ${num(uc.currentMonthUniTotalHalala / 100.0, 2)} ر.س · مقارنة بيوم إجازة: ${num(uc.averageOffDayHalala / 100.0, 2)} ر.س",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
                     Heading("seven_day_spending")
                     SpendingChart(data.expenses, day(data.now))
                     Panel(

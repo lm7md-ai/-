@@ -55,6 +55,36 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
     var results by remember { mutableStateOf<List<MapPlace>>(emptyList()) }
     var failed by remember { mutableStateOf(false) }
     var stop by remember { mutableStateOf<StopDetails?>(null) }
+    var selectedBottleneck by remember { mutableStateOf<BottleneckCell?>(null) }
+    var selectedMerchant by remember { mutableStateOf<GeoMerchantPin?>(null) }
+    var bottlenecks by remember { mutableStateOf<List<BottleneckCell>>(emptyList()) }
+    var parkingNoteDraft by remember(data.activeParking?.id) {
+        mutableStateOf(data.activeParking?.note.orEmpty())
+    }
+    var userWalkFix by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    val merchantPins =
+        remember(data.expenses, data.rules) {
+            BottleneckAnalyzer.aggregateGeoMerchants(data.expenses, data.rules)
+        }
+    LaunchedEffect(layers.bottlenecks, data.outings.size) {
+        if (layers.bottlenecks) {
+            bottlenecks =
+                withContext(Dispatchers.IO) {
+                    val recent = data.outings.sortedByDescending { it.startedAt }.take(30)
+                    val ids = recent.map { it.id }
+                    val pts =
+                        if (ids.isEmpty()) emptyMap()
+                        else vm.repo.dao.pointsForOutings(ids).groupBy { it.outingId }
+                    val evs = vm.repo.dao.allEvents().groupBy { it.outingId }
+                    BottleneckAnalyzer.computeBottlenecks(
+                        outings = recent,
+                        pointsByOuting = pts,
+                        eventsByOuting = evs,
+                        places = data.places,
+                    )
+                }
+        }
+    }
     var tools by rememberSaveable { mutableStateOf(false) }
     var follow by rememberSaveable { mutableStateOf(false) }
     val analysis = rememberRouteAnalysis(points, stops)
@@ -135,6 +165,11 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                 onRouteStats = { routeStats = it },
                 highlightedTime = pointSelection?.point?.recordedAt,
                 highlightedRange = sectionState.range(pointSelection),
+                bottlenecks = bottlenecks,
+                merchantPins = merchantPins,
+                parkingPin = data.activeParking,
+                onBottleneckPick = { selectedBottleneck = it },
+                onMerchantPick = { selectedMerchant = it },
                 pickStopsWithSelection = true,
                 centerSelection = false,
                 onPick = { lat, lon ->
@@ -190,6 +225,130 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
                     { layers = layers.copy(accuracy = !layers.accuracy) },
                     label = { Text("دائرة الدقة") },
                 )
+                FilterChip(
+                    layers.bottlenecks,
+                    { layers = layers.copy(bottlenecks = !layers.bottlenecks) },
+                    label = { Text("بؤر الاختناق 🔥") },
+                )
+                FilterChip(
+                    layers.merchants,
+                    { layers = layers.copy(merchants = !layers.merchants) },
+                    label = { Text("مشترياتي 🏪") },
+                )
+                FilterChip(
+                    layers.parking,
+                    { layers = layers.copy(parking = !layers.parking) },
+                    label = { Text("موقف السيارة 🅿️") },
+                )
+            }
+            // v7.0: Campus Parking Pin & Live Walking Compass Card
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val pin = data.activeParking
+                    if (pin != null) {
+                        val refFrom =
+                            userWalkFix
+                                ?: chosen
+                                ?: points.lastOrNull()?.let { it.latitude to it.longitude }
+                        val distMeters =
+                            refFrom?.let {
+                                distance(it.first, it.second, pin.latitude, pin.longitude)
+                            }
+                        val dirLabel =
+                            refFrom?.let {
+                                arabicCompassDirection(
+                                    it.first,
+                                    it.second,
+                                    pin.latitude,
+                                    pin.longitude,
+                                )
+                            }
+                        Text(
+                            "🅿️ أين وقفت سيارتي؟ · محفوظ ${stamp(pin.savedAt)}",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (distMeters != null && dirLabel != null) {
+                            Text(
+                                "البعد التقديري مشيًا: ${num(distMeters, 0)} م · الاتجاه: $dirLabel",
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        OutlinedTextField(
+                            value = parkingNoteDraft,
+                            onValueChange = { parkingNoteDraft = it.take(100) },
+                            singleLine = true,
+                            label = { Text("ملاحظة الموقف (مثال: بوابة ٣ - صف ب)") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(Modifier.horizontalScroll(rememberScrollState())) {
+                            TextButton(
+                                onClick = { camera.navigate(pin.latitude, pin.longitude) }
+                            ) {
+                                Text("توسيط على السيارة")
+                            }
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        LocationPicker.current(context)?.let {
+                                            userWalkFix = it.lat to it.lon
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("تحديث بعدي الآن")
+                            }
+                            TextButton(
+                                onClick = { vm.updateParkingNote(pin.id, parkingNoteDraft) }
+                            ) {
+                                Text("حفظ الملاحظة")
+                            }
+                            TextButton(onClick = { vm.clearActiveParking() }) {
+                                Text("وصلت للسيارة ✓")
+                            }
+                        }
+                    } else {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                "🅿️ يُحفظ موقف الجامعة تلقائيًا عند الوصول، أو يدويًا هنا",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        val target =
+                                            chosen
+                                                ?: LocationPicker.current(context)?.let {
+                                                    it.lat to it.lon
+                                                }
+                                                ?: points.lastOrNull()?.let {
+                                                    it.latitude to it.longitude
+                                                }
+                                        if (target != null) {
+                                            vm.saveParkingPin(
+                                                target.first,
+                                                target.second,
+                                                10.0,
+                                                "موقف اللانسر المحفوظ",
+                                            )
+                                            camera.navigate(target.first, target.second)
+                                        } else {
+                                            vm.error.value = "location_failed"
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("احفظ موقفي الآن")
+                            }
+                        }
+                    }
+                }
             }
             Row {
                 FilterChip(measure, { measure = !measure }, label = { Text("قياس المسافات") })
@@ -341,5 +500,65 @@ fun MapScreen(vm: JourneyViewModel, data: ScreenData) {
             },
             confirmButton = { TextButton(onClick = { stop = null }) { Text("إغلاق") } },
         )
+    }
+    selectedBottleneck?.let { cell ->
+        AlertDialog(
+            onDismissRequest = { selectedBottleneck = null },
+            title = { Text("🔥 بؤرة اختناق متكررة") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("تكررت الزحمة هنا في: ${num(cell.outingCount.toDouble(), 0)} مشوار")
+                    Text("متوسط السرعة أثناء الاختناق: ${num(cell.avgSlowSpeedKmh, 1)} كم/س")
+                    Text("متوسط التأخير التقديري: +${num(cell.avgDelaySeconds.toDouble(), 0)} ثانية")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedBottleneck = null }) { Text("إغلاق") }
+            },
+        )
+    }
+    selectedMerchant?.let { pin ->
+        AlertDialog(
+            onDismissRequest = { selectedMerchant = null },
+            title = { Text("🏪 ${pin.displayName}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("عدد العمليات المسجلة هنا: ${num(pin.visitCount.toDouble(), 0)}")
+                    Text("إجمالي الصرف: ${num(pin.totalHalala / 100.0, 2)} ر.س")
+                    if (pin.placeLabel.isNotBlank()) Text("النطاق: ${pin.placeLabel}")
+                    Text("آخر زيارة: ${stamp(pin.lastVisitedAt)}")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedMerchant = null }) { Text("إغلاق") }
+            },
+        )
+    }
+}
+
+private fun arabicCompassDirection(
+    fromLat: Double,
+    fromLon: Double,
+    toLat: Double,
+    toLon: Double,
+): String {
+    val dLat = Math.toRadians(toLat - fromLat)
+    val dLon = Math.toRadians(toLon - fromLon)
+    val y = kotlin.math.sin(dLon) * kotlin.math.cos(Math.toRadians(toLat))
+    val x =
+        kotlin.math.cos(Math.toRadians(fromLat)) * kotlin.math.sin(Math.toRadians(toLat)) -
+            kotlin.math.sin(Math.toRadians(fromLat)) *
+                kotlin.math.cos(Math.toRadians(toLat)) *
+                kotlin.math.cos(dLon)
+    val deg = (Math.toDegrees(kotlin.math.atan2(y, x)) + 360.0) % 360.0
+    return when {
+        deg < 22.5 || deg >= 337.5 -> "شمال ↑"
+        deg < 67.5 -> "شمال شرق ↗"
+        deg < 112.5 -> "شرق →"
+        deg < 157.5 -> "جنوب شرق ↘"
+        deg < 202.5 -> "جنوب ↓"
+        deg < 247.5 -> "جنوب غرب ↙"
+        deg < 292.5 -> "غرب ←"
+        else -> "شمال غرب ↖"
     }
 }

@@ -19,22 +19,32 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun AudioPlayerScreen(vm: AudioViewModel = viewModel()) {
     val catalog by vm.catalog.collectAsStateWithLifecycle()
     val state by AudioLive.state.collectAsStateWithLifecycle()
     val connected by vm.connected.collectAsStateWithLifecycle()
+    val msg by vm.message.collectAsStateWithLifecycle()
     if (state.id.isBlank()) {
-        sa.rihla.ui.EmptyState(
-            "اختر ما تستمع إليه",
-            "افتح المكتبة ثم اختر مقطعًا لبدء التشغيل.",
-            Icons.Default.Headphones,
-        )
-        TextButton(
-            onClick = { sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("audio") }
-        ) {
-            Text("فتح المكتبة")
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            sa.rihla.ui.EmptyState(
+                "اختر ما تستمع إليه",
+                "افتح المكتبة ثم اختر مقطعًا لبدء التشغيل، أو شغّل قائمة ذكية على قد مشوارك.",
+                Icons.Default.Headphones,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { vm.playSmartTripQueue() }) {
+                    Text("🎧 قائمة على قد مشواري")
+                }
+                OutlinedButton(
+                    onClick = { sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("audio") }
+                ) {
+                    Text("فتح المكتبة")
+                }
+            }
+            msg?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         }
     } else
         Column(
@@ -252,8 +262,39 @@ private fun AudioNowPlaying(
                             key(state.soundRevision) { AudioEffectsPanel(vm, state.sound) }
                     }
                 }
-            if (tools)
+            if (tools) {
+                val scope = rememberCoroutineScope()
+                val appPrefs by vm.app.settings.flow.collectAsStateWithLifecycle(sa.rihla.data.Preferences())
+                val boostFactor = SpeedAdaptiveAudio.presenceBoostFactor
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { vm.playSmartTripQueue() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("🎧 قائمة على قد مشواري")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("تعزيز وضوح المحاضرات مع سرعة اللانسر")
+                            Text(
+                                if (boostFactor > 0.01f)
+                                    "نشط الآن على الخط (+${(boostFactor * 100).toInt()}٪ وضوح حضور الكلام)"
+                                else
+                                    "يرفع وضوح ترددات الكلام (1.8–3.0 kHz) تدريجيًا فوق 60 كم/س ويعود طبيعيًا عند الوقوف",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = appPrefs.speedAdaptiveAudio,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    vm.app.settings.update { it.copy(speedAdaptiveAudio = enabled) }
+                                    if (!enabled) SpeedAdaptiveAudio.reset()
+                                }
+                            },
+                        )
+                    }
                     if (state.sleepAt > 0)
                         Text(
                             "يتوقف بعد نحو ${((state.sleepAt-System.currentTimeMillis())/60000).coerceAtLeast(0)} دقيقة"
@@ -305,16 +346,26 @@ private fun AudioNowPlaying(
                         TextButton(onClick = vm::recoverSound) { Text("استعادة التشغيل المباشر") }
                     }
                 }
-            if (marks)
-                Column(Modifier.fillMaxWidth()) {
-                    TextButton(onClick = vm::bookmark) {
-                        Icon(Icons.Default.BookmarkAdd, null)
-                        Text("حفظ موضع +")
+            }
+            if (marks) {
+                val trackTranscripts by
+                    remember(state.id) { vm.repo.dao.transcriptsForTrackFlow(state.id) }
+                        .collectAsStateWithLifecycle(emptyList())
+                var trSearch by rememberSaveable(state.id) { mutableStateOf("") }
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = vm::bookmark) {
+                            Icon(Icons.Default.BookmarkAdd, null)
+                            Text("حفظ موضع +")
+                        }
+                        TextButton(onClick = { vm.instantCockpitBookmark() }) {
+                            Text("علامة -10ث")
+                        }
                     }
                     val bookmarks = catalog.bookmarks.filter { it.trackId == state.id }
                     if (bookmarks.isEmpty())
                         Text(
-                            "احفظ موضعًا للعودة إليه لاحقًا.",
+                            "احفظ موضعًا للعودة إليه لاحقًا (وتُحفظ علامة تلقائية قبل الإيقاف بـ 10 ثوانٍ عند التوقف).",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     bookmarks.forEach { mark ->
@@ -330,7 +381,33 @@ private fun AudioNowPlaying(
                             }
                         }
                     }
+                    if (trackTranscripts.isNotEmpty()) {
+                        HorizontalDivider()
+                        Text("فقرات النص المفهرسة (${trackTranscripts.size})", style = MaterialTheme.typography.titleSmall)
+                        OutlinedTextField(
+                            value = trSearch,
+                            onValueChange = { trSearch = it },
+                            label = { Text("بحث داخل نص المحاضرة الحالية") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        trackTranscripts
+                            .filter { trSearch.isBlank() || it.text.contains(trSearch, ignoreCase = true) }
+                            .take(25)
+                            .forEach { seg ->
+                                TextButton(
+                                    onClick = { if (track != null) playAt(track, seg.startMs) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Text(
+                                        "[${sa.rihla.audio.studio.TranscriptEngine.formatTimestamp(seg.startMs)}] ${seg.text}",
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                    }
                 }
+            }
             if (queue)
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 320.dp)) {
                     items(state.queue.size) { index ->

@@ -1,37 +1,50 @@
 package sa.rihla.feature.calendar
 
-import android.content.*
-import androidx.compose.foundation.*
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.*
-import com.google.android.gms.location.*
 import java.time.*
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import sa.rihla.RihlaApp
 import sa.rihla.core.*
-import sa.rihla.data.*
-import sa.rihla.feature.calendar.*
-import sa.rihla.feature.dashboard.*
-import sa.rihla.feature.expenses.*
-import sa.rihla.feature.history.*
-import sa.rihla.feature.onboarding.*
-import sa.rihla.feature.settings.*
-import sa.rihla.feature.statistics.*
-import sa.rihla.feature.tripdetail.*
-import sa.rihla.feature.vehicle.*
-import sa.rihla.tracking.*
 import sa.rihla.ui.*
 
 @Composable
 fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
+    val context = LocalContext.current
+    val app = context.applicationContext as RihlaApp
     var month by remember { mutableStateOf(YearMonth.now(SaudiZone)) }
     var selected by remember { mutableStateOf(LocalDate.now(SaudiZone)) }
+    var storyNodes by remember { mutableStateOf<List<DailyStoryNode>>(emptyList()) }
+
+    LaunchedEffect(selected, data.outings.size, data.expenses.size) {
+        storyNodes =
+            withContext(Dispatchers.IO) {
+                DailyStoryBuilder.buildForDate(
+                    date = selected,
+                    outings = data.outings,
+                    events = app.repository.dao.allEvents(),
+                    expenses = data.expenses,
+                    rules = data.rules,
+                    parkingPins = app.repository.dao.parkingRecords(),
+                    tracks = app.audio.dao.tracks().first(),
+                    bookmarks = app.audio.dao.bookmarks().first(),
+                    transfers = app.transfers.rows(),
+                    aliases = app.transfers.aliases,
+                    defaultProfile = ConsumptionProfile(5500, 7800, "REFERENCE"),
+                    defaultFuelPriceHalala = data.settings.fuelPriceHalala,
+                )
+            }
+    }
+
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -74,11 +87,12 @@ fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
                         ) {
                             if (d in 1..month.lengthOfMonth()) {
                                 val date = month.atDay(d)
-                                val driven =
+                                val hasActivity =
                                     data.outings.any {
                                         date >= day(it.startedAt) &&
                                             date <= day(it.endedAt ?: data.now)
-                                    }
+                                    } ||
+                                        data.expenses.any { day(it.createdAt) == date }
                                 TextButton(
                                     onClick = { selected = date },
                                     colors =
@@ -93,7 +107,7 @@ fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
                                                 else MaterialTheme.colorScheme.onSurface,
                                         ),
                                 ) {
-                                    Text(num(d.toDouble(), 0) + if (driven) " •" else "")
+                                    Text(num(d.toDouble(), 0) + if (hasActivity) " •" else "")
                                 }
                             }
                         }
@@ -105,7 +119,41 @@ fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
         val end = selected.plusDays(1).atStartOfDay(SaudiZone).toInstant().toEpochMilli()
         val m = metrics(data, start to end)
         item {
-            Text(selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Arabic)))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    selected.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Arabic)),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                if (storyNodes.isNotEmpty()) {
+                    TextButton(
+                        onClick = {
+                            val summaryText =
+                                buildString {
+                                    append("📖 قصة يومي — ${selected}:\n")
+                                    storyNodes.forEach { n ->
+                                        append("• [${n.formattedTime}] ${n.title}")
+                                        if (n.badgeText.isNotBlank()) append(" (${n.badgeText})")
+                                        append(" — ${n.subtitle}\n")
+                                    }
+                                }
+                            context.startActivity(
+                                Intent.createChooser(
+                                    Intent(Intent.ACTION_SEND)
+                                        .setType("text/plain")
+                                        .putExtra(Intent.EXTRA_TEXT, summaryText),
+                                    "مشاركة قصة اليوم",
+                                )
+                            )
+                        }
+                    ) {
+                        Text("مشاركة قصة اليوم")
+                    }
+                }
+            }
             MetricGrid(
                 listOf(
                     "outings_count" to num(m.outings.toDouble(), 0),
@@ -114,10 +162,54 @@ fun CalendarScreen(data: ScreenData, onOpen: (Long) -> Unit) {
                     "total_spending" to (num(m.total / 100.0, 2) + " " + tr("sar")),
                 )
             )
-            Text(tr("stats_policy"), style = MaterialTheme.typography.labelSmall)
+            Text("📖 قصة اليوم (الخط الزمني الموحد)", style = MaterialTheme.typography.titleMedium)
+            if (storyNodes.isEmpty()) {
+                Text(
+                    "لا توجد أحداث مسجلة في هذا اليوم بعد.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
-        items(data.outings.filter { it.startedAt < end && (it.endedAt ?: data.now) >= start }) { o
-            ->
+        items(
+            storyNodes,
+            key = { "${it.timestampMs}_${it.type}_${it.title.hashCode()}" },
+        ) { node ->
+            OutlinedCard(
+                onClick = {
+                    node.outingId?.let(onOpen)
+                        ?: if (node.trackId != null) {
+                            sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("audio")
+                        } else Unit
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "${node.formattedTime} · ${node.title}",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            node.subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (node.badgeText.isNotBlank()) {
+                        Text(
+                            node.badgeText,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+        items(data.outings.filter { it.startedAt < end && (it.endedAt ?: data.now) >= start }) { o ->
             OutingCard(o, data.now) { onOpen(o.id) }
         }
     }

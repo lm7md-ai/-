@@ -6,7 +6,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import sa.rihla.core.*
 
-data class RecordOutcome(val accepted: Boolean, val ended: Boolean)
+data class RecordOutcome(
+    val accepted: Boolean,
+    val ended: Boolean,
+    val enteredUniversity: Boolean = false,
+    val confirmedStop: Boolean = false,
+    val stopLat: Double? = null,
+    val stopLon: Double? = null,
+)
 
 class JourneyRepository(private val db: JourneyDatabase, private val settings: Settings) {
     val dao = db.dao()
@@ -116,33 +123,54 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
         db.withTransaction {
             val o = dao.active() ?: return@withTransaction RecordOutcome(false, false)
             val places = dao.places()
+            val homeArea = area(places.find { it.type == "HOME" })
+            val uniArea = area(places.find { it.type == "UNIVERSITY" })
             val result =
                 engine.accept(
                     o.state,
                     f,
-                    area(places.find { it.type == "HOME" }),
-                    area(places.find { it.type == "UNIVERSITY" }),
+                    homeArea,
+                    uniArea,
                     allowHomeEnd = !insideActiveTemporaryPlace(places, f),
                 )
             if (!result.accepted) return@withTransaction RecordOutcome(false, false)
-            dao.point(
-                RoutePoint(
-                    outingId = o.id,
-                    latitude = f.lat,
-                    longitude = f.lon,
-                    accuracy = f.accuracy,
-                    speed = f.speed,
-                    altitude = f.altitude,
-                    bearing = f.bearing,
-                    recordedAt = f.time,
-                    distanceDelta = result.state.meters - o.state.meters,
-                    uncertainGap = result.state.gapMs > o.state.gapMs,
-                    breakBefore =
-                        o.state.lastTime > 0 &&
-                            (f.discontinuous || f.time - o.state.lastTime > 90_000),
+            // Only persist physical route points when accuracy <= 60m so noisy indoor home fixes never distort routes.
+            if (f.accuracy <= 60.0) {
+                dao.point(
+                    RoutePoint(
+                        outingId = o.id,
+                        latitude = f.lat,
+                        longitude = f.lon,
+                        accuracy = f.accuracy,
+                        speed = f.speed,
+                        altitude = f.altitude,
+                        bearing = f.bearing,
+                        recordedAt = f.time,
+                        distanceDelta = result.state.meters - o.state.meters,
+                        uncertainGap = result.state.gapMs > o.state.gapMs,
+                        breakBefore =
+                            o.state.lastTime > 0 &&
+                                (f.discontinuous || f.time - o.state.lastTime > 90_000),
+                    )
                 )
-            )
+            }
             result.events.forEach { store(o.id, it) }
+            val newlyConfirmedUniversity = !o.state.visitConfirmed && result.state.visitConfirmed
+            val newlyConfirmedStop = o.state.stopStart == 0L && result.state.stopStart > 0L
+            if ((newlyConfirmedUniversity || newlyConfirmedStop) && uniArea != null) {
+                val pinLat = if (result.state.stopStart > 0) result.state.stillLat else f.lat
+                val pinLon = if (result.state.stopStart > 0) result.state.stillLon else f.lon
+                if (uniArea.distanceOutsideBoundaryMeters(pinLat, pinLon) <= 250.0) {
+                    saveCampusParkingInternal(
+                        lat = pinLat,
+                        lon = pinLon,
+                        accuracy = f.accuracy,
+                        savedAt = f.time,
+                        outingId = o.id,
+                        note = "",
+                    )
+                }
+            }
             var updated =
                 o.copy(
                     state = result.state,
@@ -153,8 +181,94 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                 )
             if (result.autoEnd) updated = finish(updated, f.time, true)
             dao.update(updated)
-            RecordOutcome(true, result.autoEnd)
+            RecordOutcome(
+                accepted = true,
+                ended = result.autoEnd,
+                enteredUniversity = newlyConfirmedUniversity,
+                confirmedStop = newlyConfirmedStop,
+                stopLat = if (newlyConfirmedStop) result.state.stillLat else null,
+                stopLon = if (newlyConfirmedStop) result.state.stillLon else null,
+            )
         }
+    }
+
+    suspend fun evaluateWatchdogAutoEnd(now: Long, bluetoothDisconnectAt: Long = 0L): Boolean =
+        lock.withLock {
+            db.withTransaction {
+                val active = dao.active() ?: return@withTransaction false
+                val places = dao.places()
+                val home = area(places.find { it.type == "HOME" })
+                val lastFix =
+                    active.state.lastLat?.let { lat ->
+                        active.state.lastLon?.let { lon ->
+                            Fix(lat, lon, now, active.state.lastAccuracy.coerceAtLeast(5.0))
+                        }
+                    }
+                if (lastFix != null && insideActiveTemporaryPlace(places, lastFix)) {
+                    return@withTransaction false
+                }
+                if (!engine.shouldWatchdogAutoEnd(active.state, now, home, bluetoothDisconnectAt)) {
+                    return@withTransaction false
+                }
+                dao.update(finish(active, now, automatic = true))
+                true
+            }
+        }
+
+    suspend fun saveCampusParkingIfNearUniversity(
+        lat: Double,
+        lon: Double,
+        accuracy: Double,
+        savedAt: Long = System.currentTimeMillis(),
+        outingId: Long? = null,
+        note: String = "",
+        forceEvenOutsideUniversity: Boolean = false,
+    ): CampusParkingPin? = lock.withLock {
+        db.withTransaction {
+            val uni = area(dao.places().find { it.type == "UNIVERSITY" })
+            if (!forceEvenOutsideUniversity && (uni == null || uni.distanceOutsideBoundaryMeters(lat, lon) > 250.0)) {
+                return@withTransaction null
+            }
+            saveCampusParkingInternal(
+                lat = lat,
+                lon = lon,
+                accuracy = accuracy,
+                savedAt = savedAt,
+                outingId = outingId ?: dao.active()?.id,
+                note = note,
+            )
+        }
+    }
+
+    private suspend fun saveCampusParkingInternal(
+        lat: Double,
+        lon: Double,
+        accuracy: Double,
+        savedAt: Long,
+        outingId: Long?,
+        note: String,
+    ): CampusParkingPin {
+        val current = dao.activeParking()
+        if (
+            current != null &&
+                savedAt - current.savedAt in 0..180_000L &&
+                distance(current.latitude, current.longitude, lat, lon) < 35.0
+        ) {
+            return current
+        }
+        dao.deactivateAllParking()
+        val pin =
+            CampusParkingPin(
+                outingId = outingId,
+                latitude = lat,
+                longitude = lon,
+                accuracy = accuracy.coerceAtLeast(1.0),
+                savedAt = savedAt,
+                note = note.trim().take(120),
+                active = true,
+            )
+        val id = dao.insertParking(pin)
+        return pin.copy(id = id)
     }
 
     private suspend fun store(id: Long, e: Event) {
@@ -201,7 +315,13 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
         time: Long,
         outingId: Long?,
         odometerMeters: Double? = null,
-    ) = lock.withLock {
+        merchant: String = "",
+        latitude: Double? = null,
+        longitude: Double? = null,
+        placeLabel: String = "",
+        receiptImageUri: String? = null,
+        warrantyExpiryAt: Long? = null,
+    ): Long = lock.withLock {
         db.withTransaction {
             require(amount > 0)
             require(category in listOf("FUEL", "FOOD", "OTHER"))
@@ -222,6 +342,9 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                 )
                 require(records.none { it.createdAt == time })
             }
+            val active = dao.active()
+            val resolvedLat = latitude ?: active?.state?.lastLat
+            val resolvedLon = longitude ?: active?.state?.lastLon
             val previousFill = dao.lastFuelTime(time)
             val id =
                 dao.expense(
@@ -230,6 +353,13 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                         category = category,
                         amountHalala = amount,
                         createdAt = time,
+                        source = "MANUAL",
+                        merchant = merchant.trim().take(120),
+                        latitude = resolvedLat,
+                        longitude = resolvedLon,
+                        placeLabel = placeLabel.trim().take(40),
+                        receiptImageUri = receiptImageUri,
+                        warrantyExpiryAt = warrantyExpiryAt,
                     )
                 )
             if (category == "FUEL") {
@@ -247,6 +377,27 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
                     )
                 )
             }
+            id
+        }
+    }
+
+    suspend fun deleteExpenseById(id: Long): Pair<Expense, FuelFillUp?>? = lock.withLock {
+        db.withTransaction {
+            val exp = dao.expenseById(id) ?: return@withTransaction null
+            val fuel = dao.fuelForExpense(id)
+            dao.deleteExpense(id)
+            if (fuel != null) dao.invalidateFuel()
+            exp to fuel
+        }
+    }
+
+    suspend fun restoreDeletedExpense(expense: Expense, fuel: FuelFillUp?): Long = lock.withLock {
+        db.withTransaction {
+            val newId = dao.expense(expense.copy(id = 0))
+            if (fuel != null) {
+                dao.fuel(fuel.copy(id = 0, expenseId = newId))
+            }
+            newId
         }
     }
 
@@ -265,6 +416,8 @@ class JourneyRepository(private val db: JourneyDatabase, private val settings: S
             dao.clearPlaces()
             dao.clearRules()
             dao.clearRecurring()
+            dao.clearSchedule()
+            dao.clearAllParking()
         }
     }
 

@@ -40,7 +40,10 @@ example
 
 # generated native folders
 /ios
-/android
+
+# Python bytecode
+**/__pycache__/
+*.pyc
 
 # بيانات سيرفر المحتوى (تعديلات لوحة التحكم)
 server/data/

@@ -21,6 +21,8 @@ data class ScreenData(
     val details: List<TripDetails> = emptyList(),
     val rules: List<MerchantRule> = emptyList(),
     val recurring: List<RecurringExpense> = emptyList(),
+    val schedule: List<UniversityScheduleEntry> = emptyList(),
+    val activeParking: CampusParkingPin? = null,
 ) {
     val active
         get() = outings.firstOrNull { it.endedAt == null }
@@ -129,6 +131,8 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
             .combine(repo.dao.detailsFlow()) { d, details -> d.copy(details = details) }
             .combine(repo.dao.rulesFlow()) { d, rules -> d.copy(rules = rules) }
             .combine(repo.dao.recurringFlow()) { d, recurring -> d.copy(recurring = recurring) }
+            .combine(repo.dao.scheduleFlow()) { d, schedule -> d.copy(schedule = schedule) }
+            .combine(repo.dao.activeParkingFlow()) { d, parking -> d.copy(activeParking = parking) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ScreenData())
     val error = MutableStateFlow<String?>(null)
 
@@ -333,6 +337,91 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
         work { app.settings.onboard() }
     }
 
+    fun addScheduleEntry(
+        dayOfWeek: Int,
+        courseTitle: String,
+        buildingOrGate: String,
+        startMinuteOfDay: Int,
+        endMinuteOfDay: Int,
+        reminderMinutesBefore: Int = 30,
+    ): Boolean {
+        val cleanTitle = courseTitle.trim()
+        if (
+            dayOfWeek !in 1..7 ||
+                cleanTitle.length !in 1..100 ||
+                startMinuteOfDay !in 0..1439 ||
+                endMinuteOfDay !in (startMinuteOfDay + 5)..1440
+        )
+            return false
+        work {
+            repo.dao.upsertSchedule(
+                UniversityScheduleEntry(
+                    dayOfWeek = dayOfWeek,
+                    courseTitle = cleanTitle,
+                    buildingOrGate = buildingOrGate.trim().take(80),
+                    startMinuteOfDay = startMinuteOfDay,
+                    endMinuteOfDay = endMinuteOfDay,
+                    reminderMinutesBefore = reminderMinutesBefore.coerceIn(5, 180),
+                    enabled = true,
+                )
+            )
+        }
+        return true
+    }
+
+    fun toggleScheduleEntry(id: Long, enabled: Boolean) {
+        work { repo.dao.toggleSchedule(id, enabled) }
+    }
+
+    fun deleteScheduleEntry(id: Long) {
+        work { repo.dao.deleteSchedule(id) }
+    }
+
+    fun saveParkingPin(
+        lat: Double,
+        lon: Double,
+        accuracy: Double = 10.0,
+        note: String = "",
+    ) {
+        work {
+            repo.dao.deactivateAllParking()
+            repo.dao.insertParking(
+                CampusParkingPin(
+                    outingId = repo.dao.active()?.id,
+                    latitude = lat,
+                    longitude = lon,
+                    accuracy = accuracy,
+                    savedAt = System.currentTimeMillis(),
+                    note = note.trim().take(100),
+                    active = true,
+                )
+            )
+        }
+    }
+
+    fun updateParkingNote(id: Long, note: String) {
+        work { repo.dao.updateParkingNote(id, note.trim().take(100)) }
+    }
+
+    fun clearActiveParking() {
+        work { repo.dao.deactivateAllParking() }
+    }
+
+    fun deleteAnyExpense(id: Long) {
+        work {
+            val deleted = repo.deleteExpenseById(id)
+            if (deleted != null) {
+                sa.rihla.assistant.VoiceUndoBus.push(
+                    sa.rihla.assistant.VoiceUndoAction.RestoreDeletedExpense(
+                        expense = deleted.first,
+                        fuel = deleted.second,
+                        label = "تراجع عن حذف ${deleted.first.merchant.ifBlank { deleted.first.category }}",
+                    )
+                )
+            }
+        }
+    }
+
     fun expense(
         category: String,
         amount: String,
@@ -342,6 +431,9 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
         time: Long,
         outing: Long?,
         odometer: String = "",
+        merchant: String = "",
+        receiptImageUri: String? = null,
+        warrantyExpiryAt: Long? = null,
     ): Boolean {
         try {
             var a = decimalUnits(amount, 2)
@@ -371,7 +463,21 @@ class JourneyViewModel(application: Application) : AndroidViewModel(application)
             val reading =
                 if (category != "FUEL" || odometer.isBlank()) null
                 else decimalUnits(odometer, 3)?.toDouble() ?: return false
-            work { repo.addExpense(category, paid, l, p, full, time, outing, reading) }
+            work {
+                repo.addExpense(
+                    category = category,
+                    amount = paid,
+                    liters = l,
+                    price = p,
+                    full = full,
+                    time = time,
+                    outingId = outing,
+                    odometerMeters = reading,
+                    merchant = merchant,
+                    receiptImageUri = receiptImageUri,
+                    warrantyExpiryAt = warrantyExpiryAt,
+                )
+            }
             return true
         } catch (_: ArithmeticException) {
             return false

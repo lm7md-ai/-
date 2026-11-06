@@ -18,6 +18,11 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
     var home by remember { mutableStateOf(true) }
     var hours by remember { mutableStateOf("24") }
     var dialog by remember { mutableStateOf<String?>(null) }
+    var selectedUquDay by remember { mutableIntStateOf(1) }
+    var courseTitle by remember { mutableStateOf("") }
+    var buildingGate by remember { mutableStateOf("") }
+    var startHourMin by remember { mutableStateOf("08:00") }
+    var endHourMin by remember { mutableStateOf("09:50") }
     var summaries by remember {
         mutableStateOf<List<Triple<Outing, TemporaryCommute, sa.rihla.map.RouteSection>>>(
             emptyList()
@@ -76,6 +81,105 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
+            ElevatedCard(androidx.compose.ui.Modifier.fillMaxWidth()) {
+                Column(
+                    androidx.compose.ui.Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("🎓 جدول محاضرات جامعة أم القرى", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "يحسب مشواري وقت الانطلاق المثالي قبل كل محاضرة بناءً على متوسط زمن مشاويرك الفعلي إلى العابدية + 10 دقائق هامش أمان.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (1..5).forEach { dayNum ->
+                            FilterChip(
+                                selected = selectedUquDay == dayNum,
+                                onClick = { selectedUquDay = dayNum },
+                                label = { Text(uquDayArabicName(dayNum)) },
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = courseTitle,
+                        onValueChange = { courseTitle = it.take(100) },
+                        label = { Text("اسم المقرر / المحاضرة") },
+                        singleLine = true,
+                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = buildingGate,
+                        onValueChange = { buildingGate = it.take(80) },
+                        label = { Text("الكلية أو البوابة (مثال: الحاسب · بوابة ٣)") },
+                        singleLine = true,
+                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = startHourMin,
+                            onValueChange = { startHourMin = it.take(5) },
+                            label = { Text("البداية HH:MM") },
+                            singleLine = true,
+                            modifier = androidx.compose.ui.Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = endHourMin,
+                            onValueChange = { endHourMin = it.take(5) },
+                            label = { Text("النهاية HH:MM") },
+                            singleLine = true,
+                            modifier = androidx.compose.ui.Modifier.weight(1f),
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            val st = parseHhMm(startHourMin)
+                            val en = parseHhMm(endHourMin)
+                            if (st != null && en != null && vm.addScheduleEntry(selectedUquDay, courseTitle, buildingGate, st, en)) {
+                                courseTitle = ""
+                                buildingGate = ""
+                            } else {
+                                vm.error.value = "operation_failed"
+                            }
+                        },
+                        enabled = courseTitle.trim().isNotBlank(),
+                        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
+                    ) {
+                        Text("إضافة المحاضرة للجدول")
+                    }
+                }
+            }
+        }
+        data.schedule.forEach { entry ->
+            item(key = "uqu_sched_${entry.id}") {
+                OutlinedCard(androidx.compose.ui.Modifier.fillMaxWidth()) {
+                    Row(
+                        androidx.compose.ui.Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(androidx.compose.ui.Modifier.weight(1f)) {
+                            Text(
+                                "${uquDayArabicName(entry.dayOfWeek)} · ${entry.courseTitle}",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "${formatMinuteOfDayArabic(entry.startMinuteOfDay)} — ${formatMinuteOfDayArabic(entry.endMinuteOfDay)}" +
+                                    if (entry.buildingOrGate.isNotBlank()) " · ${entry.buildingOrGate}" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Switch(
+                            checked = entry.enabled,
+                            onCheckedChange = { vm.toggleScheduleEntry(entry.id, it) },
+                        )
+                        TextButton(onClick = { vm.deleteScheduleEntry(entry.id) }) {
+                            Text("حذف")
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            HorizontalDivider()
             Text("المنزل والاستراحة المؤقتة", style = MaterialTheme.typography.titleLarge)
             Text(
                 "محطة داخل المشوار؛ لا تنهي الرحلة ولا تستبدل المنزل الدائم. إحصائية الذهاب منها إلى الجامعة تظهر بصورة مستقلة دون تعديل الرحلة.",
@@ -168,4 +272,13 @@ fun TemporaryPlacesScreen(vm: JourneyViewModel, data: ScreenData, onTrip: (Long)
         }
     }
     dialog?.let { type -> PlaceDialog(vm, data, type) { dialog = null } }
+}
+
+private fun parseHhMm(raw: String): Int? {
+    val parts = raw.trim().split(':')
+    if (parts.size != 2) return null
+    val h = parts[0].toIntOrNull() ?: return null
+    val m = parts[1].toIntOrNull() ?: return null
+    if (h !in 0..23 || m !in 0..59) return null
+    return h * 60 + m
 }

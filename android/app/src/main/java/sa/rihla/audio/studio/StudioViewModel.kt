@@ -72,6 +72,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val plan = MutableStateFlow<List<FilingSuggestion>>(emptyList())
     val message = MutableStateFlow("")
     val editing = MutableStateFlow(false)
+    val transcriptProgress = MutableStateFlow<Int?>(null)
+    val transcriptQuery = MutableStateFlow("")
     val folders =
         app.audio.dao
             .folders()
@@ -80,6 +82,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         app.audio.dao
             .filings()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val allTranscripts =
+        app.audio.dao
+            .allTranscriptsFlow()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val filteredTranscripts: StateFlow<List<AudioTranscript>> =
+        combine(allTranscripts, transcriptQuery) { rows, q ->
+            val clean = q.trim()
+            if (clean.isBlank()) rows.take(150)
+            else rows.filter { it.text.contains(clean, ignoreCase = true) }.take(200)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         work { plan.value = withContext(Dispatchers.IO) { StudioPlans.load(app) } }
@@ -148,5 +161,46 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         require(app.audio.dao.track(id) != null)
         app.audio.dao.tuning(AudioTuning(id, scene.key))
         message.value = "حُفظ ملف الاستماع لهذا المقطع؛ يطبق عند تشغيله مجددًا"
+    }
+
+    fun indexBookmarkContexts(trackId: String) = work {
+        check(transcriptProgress.value == null)
+        transcriptProgress.value = 10
+        try {
+            val count = TranscriptEngine.indexBookmarkContexts(app, app.audio, trackId)
+            message.value = "تمت فهرسة $count مقطع سياقي (±30 ثانية حول العلامات المرجعية)"
+        } finally {
+            transcriptProgress.value = null
+        }
+    }
+
+    fun indexFullLecture(trackId: String) = work {
+        check(transcriptProgress.value == null)
+        transcriptProgress.value = 5
+        try {
+            val count =
+                TranscriptEngine.indexFullLecture(app, app.audio, trackId) { p ->
+                    transcriptProgress.value = p
+                }
+            message.value = "اكتملت فهرسة المحاضرة كاملة ($count فقرة زمنية قابلة للبحث)"
+        } finally {
+            transcriptProgress.value = null
+        }
+    }
+
+    fun importTranscriptUri(trackId: String, uri: Uri) = work {
+        val raw =
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use {
+                    it.readText()
+                } ?: error("تعذر قراءة ملف النص")
+            }
+        val count = TranscriptEngine.importExternalTranscript(app.audio, trackId, raw)
+        message.value = "تم استيراد وفهرسة $count فقرة نصية للمحاضرة"
+    }
+
+    fun clearTrackTranscripts(trackId: String) = work {
+        withContext(Dispatchers.IO) { app.audio.dao.clearTranscriptsForTrack(trackId) }
+        message.value = "مُسحت فهرسة النص لهذا المقطع"
     }
 }

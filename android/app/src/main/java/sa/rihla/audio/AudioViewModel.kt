@@ -71,7 +71,7 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
         }
         message.value = "أُعيد ربط الملف مع الاحتفاظ بالمفضلة والقوائم والمواضع"
     }
-    fun restore(uri: Uri) {
+    fun restore(uri: Uri, mode: sa.rihla.data.RestoreMode = sa.rihla.data.RestoreMode.SMART_MERGE) {
         if (busy.value) return
         busy.value = true
         work {
@@ -82,10 +82,36 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
                         while (true) { val n = input.read(buffer); if (n < 0) break; require(output.size()+n <= AudioBackup.maxBytes); output.write(buffer,0,n) }
                         output.toString(Charsets.UTF_8.name())
                     }
-                    AudioBackup(app.audioDatabase).restore(text)
+                    AudioBackup(app.audioDatabase).restore(text, mode)
                 }
-                message.value = "استُعيد $count مقطعًا. الملفات ليست داخل النسخة؛ أعد ربطها إن تغير موقعها أو إذن الوصول."
+                message.value = "استُعيد $count مقطعًا (${if (mode == sa.rihla.data.RestoreMode.SMART_MERGE) "دمج ذكي" else "استبدال كامل"})."
             } finally { busy.value = false }
+        }
+    }
+    fun playSmartTripQueue(overrideMinutes: Int? = null, onBuilt: (SmartTripQueuePlan?) -> Unit = {}) = work {
+        val allTracks = catalog.value.tracks.ifEmpty { withContext(Dispatchers.IO) { repo.dao.trackRecords() } }
+        val outings = withContext(Dispatchers.IO) { app.repository.dao.outings() }
+        val schedule = withContext(Dispatchers.IO) { app.repository.dao.scheduleRecords() }
+        val targetMs = SmartTripQueueBuilder.estimateUpcomingTripDurationMs(outings, schedule, overrideMinutes)
+        val plan = SmartTripQueueBuilder.buildQueue(allTracks, targetMs)
+        if (plan == null) {
+            message.value = "أضف محاضرات أو صوتيات إلى المكتبة أولًا لبناء قائمة على قد مشوارك"
+            onBuilt(null)
+            return@work
+        }
+        play(plan.tracks.first(), plan.tracks, at = plan.startPositionMs)
+        message.value = "🎧 ${plan.descriptionArabic}"
+        onBuilt(plan)
+    }
+    fun instantCockpitBookmark(customLabel: String? = null) {
+        val state = AudioLive.state.value
+        if (state.id.isNotBlank()) {
+            val rewound = (state.position - 10_000L).coerceAtLeast(0L)
+            val label = customLabel ?: "📍 علامة أثناء القيادة (${audioTime(rewound)})"
+            work {
+                repo.dao.bookmark(AudioBookmark(trackId = state.id, positionMs = rewound, label = label))
+                message.value = "حُفظت علامة مرجعية عند ${audioTime(rewound)}"
+            }
         }
     }
     fun export(uri: Uri) {

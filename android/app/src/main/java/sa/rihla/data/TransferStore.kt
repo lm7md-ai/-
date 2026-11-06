@@ -229,7 +229,14 @@ class TransferStore(context: Context) :
             .toString()
 
     @Synchronized
-    fun restore(text: String): Int {
+    fun clearAll() {
+        writableDatabase.delete("incoming", null, null)
+        prefs.edit().clear().apply()
+        changed()
+    }
+
+    @Synchronized
+    fun restore(text: String, overwrite: Boolean = false): Int {
         require(text.toByteArray().size <= 32 * 1024 * 1024)
         val json = JSONObject(text)
         require(json.getString("format") == "RIHLA_INCOMING_V1")
@@ -238,12 +245,16 @@ class TransferStore(context: Context) :
                 (0 until a.length()).map { a.getString(it) }.toSet()
             }
         val time = wholeLong(json, "cutoff")
+        val items = json.getJSONArray("items")
+        if (time == 0L && names.isEmpty() && items.length() == 0) {
+            if (overwrite) clearAll()
+            return 0
+        }
         require(
             names.size <= 30 &&
                 names.all { it.length in 2..120 && it.any(Char::isLetter) } &&
                 time in 1..System.currentTimeMillis() + 120000
         )
-        val items = json.getJSONArray("items")
         require(items.length() <= 100000)
         val data =
             (0 until items.length()).map { index ->
@@ -277,6 +288,9 @@ class TransferStore(context: Context) :
         var added = 0
         db.beginTransaction()
         try {
+            if (overwrite) {
+                db.delete("incoming", null, null)
+            }
             data.forEach { row ->
                 if (
                     db.insertWithOnConflict(
@@ -318,7 +332,7 @@ class TransferStore(context: Context) :
         } finally {
             db.endTransaction()
         }
-        if (cutoff == 0L) configure(names, time, false)
+        if (overwrite || cutoff == 0L) configure(names, time, enabled)
         changed()
         return added
     }

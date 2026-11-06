@@ -4,6 +4,10 @@ import android.Manifest
 import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorManager
+import android.hardware.TriggerEvent
+import android.hardware.TriggerEventListener
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.*
@@ -18,7 +22,10 @@ import kotlinx.coroutines.sync.withLock
 import sa.rihla.MainActivity
 import sa.rihla.R
 import sa.rihla.RihlaApp
+import sa.rihla.audio.AutoStopBookmarkManager
+import sa.rihla.audio.SpeedAdaptiveAudio
 import sa.rihla.core.*
+import sa.rihla.data.UnifiedBackupManager
 
 class TrackingService : Service() {
     private val scope =
@@ -37,10 +44,13 @@ class TrackingService : Service() {
 
     private val client by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private val native by lazy { getSystemService(LocationManager::class.java) }
+    private val sensorManager by lazy { getSystemService(SensorManager::class.java) }
     private val listener = LocationListener { l -> receive(l, "GPS") }
     @Volatile private var lastProviderFix = SystemClock.elapsedRealtime()
     @Volatile private var nativeActive = false
     @Volatile private var precise = false
+    @Volatile private var stationaryDeepSleepEnabled = true
+    @Volatile private var speedAdaptiveAudioEnabled = true
     private var pendingTimeout: Job? = null
     private val qualityGate = FixQualityGate()
     private var generation = 0L
@@ -49,31 +59,37 @@ class TrackingService : Service() {
     private var fusedRecoveryAt = 0L
     private var lastHeartbeat = 0L
     private var lastSpeed = 0.0
+    private var lastAccuracy = 15.0
     private val turnDetector = TurnDetailDetector()
     private var turnDetails = true
     private var turnBoostUntil = 0L
     private var boostUntil = 0L
-    private var gnssRegistered = false
-    private val gnss =
-        object : android.location.GnssStatus.Callback() {
-            override fun onSatelliteStatusChanged(status: android.location.GnssStatus) {
-                val used = (0 until status.satelliteCount).filter { status.usedInFix(it) }
-                val frequency = used.count {
-                    status.hasCarrierFrequencyHz(it) &&
-                        status.getCarrierFrequencyHz(it) in 1.16e9f..1.22e9f
-                }
-                LiveTrackingHealth.state.update {
-                    it.copy(
-                        satellites = status.satelliteCount,
-                        usedSatellites = used.size,
-                        averageCn0 =
-                            if (used.isEmpty()) 0.0
-                            else used.map { status.getCn0DbHz(it).toDouble() }.average(),
-                        dualFrequency = frequency,
-                    )
-                }
+    private var instantWakeUntil = 0L
+    @Volatile private var inDeepSleep = false
+    @Volatile private var bluetoothDisconnectWallMs = 0L
+    private var autoPendingStartedAt = 0L
+    private var motionArmed = false
+
+    private val significantMotionListener =
+        object : TriggerEventListener() {
+            override fun onTrigger(event: TriggerEvent?) {
+                motionArmed = false
+                wakeFromDeepSleep(this@TrackingService, "significant_motion")
             }
         }
+
+    private fun armSignificantMotionIfAvailable() {
+        if (motionArmed) return
+        val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION) ?: return
+        motionArmed = runCatching { sensorManager.requestTriggerSensor(significantMotionListener, sensor) }.getOrDefault(false)
+    }
+
+    private fun disarmSignificantMotion() {
+        if (!motionArmed) return
+        val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)
+        if (sensor != null) runCatching { sensorManager.cancelTriggerSensor(significantMotionListener, sensor) }
+        motionArmed = false
+    }
 
     private fun rejected(reason: String) {
         LiveTrackingHealth.state.update {
@@ -86,12 +102,13 @@ class TrackingService : Service() {
         val age = (SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000
         @Suppress("DEPRECATION")
         val mock = if (Build.VERSION.SDK_INT >= 31) l.isMock else l.isFromMockProvider
-        if (!usableLocation(age, l.accuracy.toDouble(), mock)) {
+        val allowIndoorHome = l.accuracy in 60.0f..160.0f && (!l.hasSpeed() || l.speed < 1.5f)
+        if (!usableLocation(age, l.accuracy.toDouble(), mock) && !(allowIndoorHome && !mock && age in 0..60_000)) {
             rejected(if (mock) "MOCK" else if (age !in 0..60_000) "STALE" else "ACCURACY")
             return
         }
         val fix = l.trackingFix(source)
-        val reason = qualityGate.inspect(fix)
+        val reason = qualityGate.inspect(fix, allowRelaxedIndoorAccuracy = allowIndoorHome)
         if (reason != null) {
             rejected(reason)
             return
@@ -113,6 +130,7 @@ class TrackingService : Service() {
                 updatedElapsed = SystemClock.elapsedRealtime(),
                 reason = "",
                 accepted = false,
+                liveSpeedKmh = if (fix.speed.isFinite() && fix.speed > 0.5) (fix.speed * 3.6).toFloat() else 0f,
             )
         }
         val accepted = if (qualityGate.reacquired) fix.copy(discontinuous = true) else fix
@@ -183,6 +201,8 @@ class TrackingService : Service() {
             stopSelf()
             return
         }
+
+        // Main fix processing loop
         scope.launch {
             for (f in queue) {
                 val ended = commandLock.withLock {
@@ -207,6 +227,7 @@ class TrackingService : Service() {
                             }
                             pendingFixes.clear()
                             autoPending = false
+                            autoPendingStartedAt = 0L
                             health(this@TrackingService, "running")
                         } else return@withLock false
                     }
@@ -223,13 +244,27 @@ class TrackingService : Service() {
                             acceptedCount = it.acceptedCount + if (accepted) 1 else 0,
                             rejectedCount = it.rejectedCount + if (accepted) 0 else 1,
                             updatedElapsed = nowElapsed,
+                            liveSpeedKmh = if (accepted && f.speed > 0.5) (f.speed * 3.6).toFloat() else 0f,
                         )
                     }
+                    if (outcome.enteredUniversity) {
+                        scope.launch { AutoStopBookmarkManager.onStopOrArrival(app, "وصول للجامعة", f.time) }
+                    } else if (outcome.confirmedStop) {
+                        scope.launch { AutoStopBookmarkManager.onStopOrArrival(app, "توقف بالسيارة", f.time) }
+                    }
                     if (outcome.ended) {
+                        SpeedAdaptiveAudio.clearOuting()
+                        scope.launch {
+                            AutoStopBookmarkManager.onStopOrArrival(app, "وصول للبيت", f.time)
+                            runCatching { UnifiedBackupManager(app).runAutoBackupIfDue(forceOnHomeArrival = true) }
+                        }
                         stopSelf()
                         return@withLock true
                     }
                     val state = app.repository.dao.active()?.state ?: return@withLock false
+                    if (state.phase == "TRACKING_DRIVING" && bluetoothDisconnectWallMs > 0L) {
+                        bluetoothDisconnectWallMs = 0L
+                    }
                     if (nowElapsed - lastHeartbeat >= 15000) {
                         health(
                             this@TrackingService,
@@ -242,23 +277,50 @@ class TrackingService : Service() {
                             turnBoostUntil = nowElapsed + 15_000
                         if (f.speed >= 4 && f.accuracy > 25) boostUntil = nowElapsed + 30_000
                         lastSpeed = f.speed
+                        lastAccuracy = f.accuracy
+                        SpeedAdaptiveAudio.updateSpeed(
+                            speedMetersPerSec = if (state.stopStart > 0) 0.0 else f.speed,
+                            outingActive = true,
+                            enabled = speedAdaptiveAudioEnabled,
+                        )
                     }
+                    val engineRef = TrackingEngine()
+                    val wantDeepSleep =
+                        stationaryDeepSleepEnabled &&
+                            nowElapsed >= instantWakeUntil &&
+                            nowElapsed >= boostUntil &&
+                            engineRef.shouldEnterStationaryDeepSleep(state, f.time)
                     val shouldSlow =
                         state.stopStart > 0 &&
                             nowElapsed >= boostUntil &&
-                            nowElapsed >= turnBoostUntil
-                    if (
-                        shouldSlow != slow ||
-                            registeredInterval !=
-                                adaptiveTrackingInterval(
-                                    shouldSlow,
-                                    precise,
-                                    lastSpeed,
-                                    nowElapsed < boostUntil,
-                                    turnDetails && nowElapsed < turnBoostUntil,
-                                )
-                    ) {
+                            nowElapsed >= turnBoostUntil &&
+                            nowElapsed >= instantWakeUntil
+                    val nextInterval =
+                        adaptiveTrackingInterval(
+                            stopped = shouldSlow,
+                            precise = precise,
+                            speed = lastSpeed,
+                            boost = nowElapsed < boostUntil,
+                            turn = turnDetails && nowElapsed < turnBoostUntil,
+                            straightRoad = turnDetails && turnDetector.isStraightRoad,
+                            accuracy = lastAccuracy,
+                            deepSleep = wantDeepSleep,
+                            instantWakeup = nowElapsed < instantWakeUntil,
+                        )
+                    if (wantDeepSleep != inDeepSleep || shouldSlow != slow || registeredInterval != nextInterval) {
                         slow = shouldSlow
+                        if (wantDeepSleep && !inDeepSleep) {
+                            val sleepLat = if (state.stopStart > 0 && state.stillLat != 0.0) state.stillLat else (state.lastLat ?: f.lat)
+                            val sleepLon = if (state.stopStart > 0 && state.stillLon != 0.0) state.stillLon else (state.lastLon ?: f.lon)
+                            HomeGeofences.registerStationaryWake(this@TrackingService, sleepLat, sleepLon)
+                            armSignificantMotionIfAvailable()
+                            SpeedAdaptiveAudio.updateSpeed(0.0, true, speedAdaptiveAudioEnabled)
+                        } else if (!wantDeepSleep && inDeepSleep) {
+                            HomeGeofences.clearStationaryWake(this@TrackingService)
+                            disarmSignificantMotion()
+                        }
+                        inDeepSleep = wantDeepSleep
+                        LiveTrackingHealth.state.update { it.copy(deepSleep = inDeepSleep) }
                         withContext(Dispatchers.Main) { requestUpdates() }
                     }
                     false
@@ -266,11 +328,89 @@ class TrackingService : Service() {
                 if (ended) break
             }
         }
+
+        // Independent 30-second Watchdog Coroutine Ticker (never depends on LocationCallback)
+        scope.launch {
+            val engineRef = TrackingEngine()
+            while (isActive) {
+                delay(30_000L)
+                val stoppedService = commandLock.withLock {
+                    val nowWall = System.currentTimeMillis()
+                    val nowElapsed = SystemClock.elapsedRealtime()
+                    val active = app.repository.dao.active()
+
+                    // 1. Clean up stuck checking_driving candidate if no trip confirmed after 3 minutes
+                    if (active == null) {
+                        if (autoPending && autoPendingStartedAt > 0L && nowElapsed - autoPendingStartedAt >= 180_000L) {
+                            autoPending = false
+                            candidate.reset()
+                            pendingFixes.clear()
+                            stopSelf()
+                            return@withLock true
+                        }
+                        return@withLock false
+                    }
+
+                    // 2. Complete AT_HOME_PENDING_END or Bluetooth-disconnect near-home auto-end without needing new fixes
+                    if (app.repository.evaluateWatchdogAutoEnd(nowWall, bluetoothDisconnectWallMs)) {
+                        SpeedAdaptiveAudio.clearOuting()
+                        scope.launch {
+                            AutoStopBookmarkManager.onStopOrArrival(app, "وصول للبيت", nowWall)
+                            runCatching { UnifiedBackupManager(app).runAutoBackupIfDue(forceOnHomeArrival = true) }
+                        }
+                        stopSelf()
+                        return@withLock true
+                    }
+
+                    // 3. Enter Stationary Deep Sleep if parked > 5 min and GPS stopped sending fixes
+                    if (
+                        stationaryDeepSleepEnabled &&
+                            !inDeepSleep &&
+                            nowElapsed >= instantWakeUntil &&
+                            engineRef.shouldEnterStationaryDeepSleep(active.state, nowWall)
+                    ) {
+                        inDeepSleep = true
+                        slow = true
+                        val st = active.state
+                        val sleepLat = if (st.stopStart > 0 && st.stillLat != 0.0) st.stillLat else st.lastLat
+                        val sleepLon = if (st.stopStart > 0 && st.stillLon != 0.0) st.stillLon else st.lastLon
+                        if (sleepLat != null && sleepLon != null) {
+                            HomeGeofences.registerStationaryWake(this@TrackingService, sleepLat, sleepLon)
+                        }
+                        armSignificantMotionIfAvailable()
+                        LiveTrackingHealth.state.update { it.copy(deepSleep = true, liveSpeedKmh = 0f) }
+                        SpeedAdaptiveAudio.updateSpeed(0.0, true, speedAdaptiveAudioEnabled)
+                        withContext(Dispatchers.Main) { requestUpdates() }
+                        return@withLock false
+                    }
+
+                    // 4. Provider stall recovery (switch/rebind Fused -> GPS_PROVIDER when not in deep sleep)
+                    if (!inDeepSleep && registeredInterval != null) {
+                        val stallThreshold = if (slow) 90_000L else 30_000L
+                        if (!nativeActive && nowElapsed - lastProviderFix > stallThreshold) {
+                            withContext(Dispatchers.Main) {
+                                registeredInterval?.let { nativeUpdates(it) }
+                            }
+                        }
+                        if (nativeActive && !fusedRegistered && nowElapsed - lastFusedAttempt > 120_000L) {
+                            withContext(Dispatchers.Main) {
+                                registeredInterval?.let { requestFused(it, generation) }
+                            }
+                        }
+                    }
+                    false
+                }
+                if (stoppedService) break
+            }
+        }
+
+        // Fast 15-second provider fallback check while actively driving
         scope.launch {
             while (isActive) {
                 delay(15_000)
                 if (
-                    !nativeActive &&
+                    !inDeepSleep &&
+                        !nativeActive &&
                         registeredInterval != null &&
                         SystemClock.elapsedRealtime() - lastProviderFix >
                             (if (slow) 90_000 else 30_000)
@@ -278,25 +418,29 @@ class TrackingService : Service() {
                     withContext(Dispatchers.Main) {
                         registeredInterval?.let { nativeUpdates(it) }
                     }
-                if (
-                    nativeActive &&
-                        !fusedRegistered &&
-                        SystemClock.elapsedRealtime() - lastFusedAttempt > 120_000
-                )
-                    withContext(Dispatchers.Main) {
-                        registeredInterval?.let { requestFused(it, generation) }
-                    }
             }
         }
+
+        // Live settings sync
         scope.launch {
             app.settings.flow.collect { preferences ->
                 commandLock.withLock {
-                    if (
+                    val changed =
                         preferences.preciseTracking != precise ||
-                            preferences.turnDetails != turnDetails
-                    ) {
-                        precise = preferences.preciseTracking
-                        turnDetails = preferences.turnDetails
+                            preferences.turnDetails != turnDetails ||
+                            preferences.stationaryDeepSleep != stationaryDeepSleepEnabled
+                    precise = preferences.preciseTracking
+                    turnDetails = preferences.turnDetails
+                    stationaryDeepSleepEnabled = preferences.stationaryDeepSleep
+                    speedAdaptiveAudioEnabled = preferences.speedAdaptiveAudio
+                    SpeedAdaptiveAudio.setEnabled(preferences.speedAdaptiveAudio)
+                    if (!stationaryDeepSleepEnabled && inDeepSleep) {
+                        inDeepSleep = false
+                        HomeGeofences.clearStationaryWake(this@TrackingService)
+                        disarmSignificantMotion()
+                        LiveTrackingHealth.state.update { it.copy(deepSleep = false) }
+                    }
+                    if (changed) {
                         if (!turnDetails) {
                             turnBoostUntil = 0
                             turnDetector.reset()
@@ -316,10 +460,40 @@ class TrackingService : Service() {
             scope.launch {
                 commandLock.withLock {
                     app.repository.end()
+                    SpeedAdaptiveAudio.clearOuting()
                     stopSelf()
                 }
             }
             return START_NOT_STICKY
+        }
+        if (i?.action == "BT_DISCONNECTED") {
+            val ts = i.getLongExtra("disconnect_time", System.currentTimeMillis())
+            scope.launch {
+                commandLock.withLock {
+                    val active = app.repository.dao.active() ?: return@withLock
+                    bluetoothDisconnectWallMs = ts
+                    // If already dwelling at home for >= 60s when Lancer turns off, finish immediately!
+                    val home = app.repository.area(app.repository.dao.places().find { it.type == "HOME" })
+                    val st = active.state
+                    if (
+                        home != null &&
+                            st.lastLat != null &&
+                            st.lastLon != null &&
+                            (st.leftHome || st.meters >= 100.0) &&
+                            home.distanceOutsideBoundaryMeters(st.lastLat, st.lastLon) <= 60.0 &&
+                            st.homeSince > 0L &&
+                            ts - st.homeSince >= 60_000L
+                    ) {
+                        if (app.repository.evaluateWatchdogAutoEnd(ts + 60_000L, ts)) {
+                            SpeedAdaptiveAudio.clearOuting()
+                            AutoStopBookmarkManager.onStopOrArrival(app, "وصول للبيت", ts)
+                            runCatching { UnifiedBackupManager(app).runAutoBackupIfDue(forceOnHomeArrival = true) }
+                            stopSelf()
+                        }
+                    }
+                }
+            }
+            return START_STICKY
         }
         scope.launch {
             commandLock.withLock {
@@ -332,11 +506,15 @@ class TrackingService : Service() {
                     stopSelf()
                     return@withLock
                 }
-                // Repeated triggers must not discard the evidence already collected.
+                val isWakeupSignal =
+                    i?.getBooleanExtra("bluetooth_wakeup", false) == true ||
+                        i?.getBooleanExtra("geofence_exit_wakeup", false) == true
+                val isMotionResume = i?.getBooleanExtra("motion_resume", false) == true
                 if (
                     i?.getBooleanExtra("automatic", false) == true &&
                         autoPending &&
-                        registeredInterval != null
+                        registeredInterval != null &&
+                        !isWakeupSignal
                 )
                     return@withLock
                 autoPending =
@@ -345,19 +523,32 @@ class TrackingService : Service() {
                 if (autoPending) {
                     candidate.reset()
                     pendingFixes.clear()
+                    autoPendingStartedAt = SystemClock.elapsedRealtime()
                 }
                 health(this@TrackingService, if (autoPending) "checking_driving" else "running")
                 precise = preferences.preciseTracking
                 turnDetails = preferences.turnDetails
+                stationaryDeepSleepEnabled = preferences.stationaryDeepSleep
+                speedAdaptiveAudioEnabled = preferences.speedAdaptiveAudio
                 slow = app.repository.dao.active()?.state?.stopStart?.let { it > 0 } == true
-                if (i?.getBooleanExtra("motion_resume", false) == true) {
+                if (isWakeupSignal || isMotionResume) {
+                    val wasSleeping = inDeepSleep
+                    inDeepSleep = false
                     slow = false
-                    boostUntil = SystemClock.elapsedRealtime() + 30_000
+                    bluetoothDisconnectWallMs = 0L
+                    HomeGeofences.clearStationaryWake(this@TrackingService)
+                    disarmSignificantMotion()
+                    LiveTrackingHealth.state.update { it.copy(deepSleep = false) }
+                    if (isWakeupSignal || wasSleeping) {
+                        // 1s High-Accuracy instant wake-up burst on Lancer BT connect / geofence exit / deep sleep wake
+                        instantWakeUntil = SystemClock.elapsedRealtime() + 15_000L
+                    }
+                    boostUntil = SystemClock.elapsedRealtime() + 30_000L
                 }
                 pendingTimeout?.cancel()
                 if (autoPending)
                     pendingTimeout = scope.launch {
-                        delay(600_000)
+                        delay(300_000)
                         commandLock.withLock {
                             if (app.repository.dao.active() == null) stopSelf()
                         }
@@ -381,13 +572,18 @@ class TrackingService : Service() {
             stopSelf()
             return
         }
+        val nowElapsed = SystemClock.elapsedRealtime()
         val interval =
             adaptiveTrackingInterval(
-                slow,
-                precise,
-                lastSpeed,
-                SystemClock.elapsedRealtime() < boostUntil,
-                turnDetails && SystemClock.elapsedRealtime() < turnBoostUntil,
+                stopped = slow,
+                precise = precise,
+                speed = lastSpeed,
+                boost = nowElapsed < boostUntil,
+                turn = turnDetails && nowElapsed < turnBoostUntil,
+                straightRoad = turnDetails && turnDetector.isStraightRoad,
+                accuracy = lastAccuracy,
+                deepSleep = inDeepSleep,
+                instantWakeup = nowElapsed < instantWakeUntil,
             )
         if (registeredInterval == interval) return
         generation++
@@ -395,16 +591,15 @@ class TrackingService : Service() {
         client.removeLocationUpdates(callback)
         native.removeUpdates(listener)
         registeredInterval = interval
-        LiveTrackingHealth.state.update { it.copy(requestedInterval = interval) }
+        LiveTrackingHealth.state.update {
+            it.copy(requestedInterval = interval, deepSleep = inDeepSleep)
+        }
         nativeActive = false
         fusedRegistered = false
         fusedRecoveryAt = 0
-        lastProviderFix = SystemClock.elapsedRealtime()
-        if (!gnssRegistered)
-            runCatching {
-                gnssRegistered =
-                    native.registerGnssStatusCallback(gnss, Handler(Looper.getMainLooper()))
-            }
+        lastProviderFix = nowElapsed
+        // NOTE: GnssStatus.Callback is intentionally NOT registered in background TrackingService
+        // to eliminate continuous 1Hz CPU wakeups on RedMagic 11 Pro; it lives strictly in TrackingDiagnosticsScreen.
         requestFused(interval, current)
     }
 
@@ -412,13 +607,18 @@ class TrackingService : Service() {
     private fun requestFused(interval: Long, current: Long) {
         if (registeredInterval != interval || generation != current) return
         lastFusedAttempt = SystemClock.elapsedRealtime()
+        val priority =
+            if (inDeepSleep) Priority.PRIORITY_BALANCED_POWER_ACCURACY
+            else Priority.PRIORITY_HIGH_ACCURACY
+        val minInterval =
+            when {
+                inDeepSleep -> 60_000L
+                slow -> if (precise) 5000L else 15000L
+                else -> 1000L
+            }
         val request =
-            LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, interval)
-                .setMinUpdateIntervalMillis(
-                    if (slow) {
-                        if (precise) 5000L else 15000L
-                    } else 1000L
-                )
+            LocationRequest.Builder(priority, interval)
+                .setMinUpdateIntervalMillis(minInterval)
                 .setMaxUpdateDelayMillis(interval)
                 .setWaitForAccurateLocation(false)
                 .build()
@@ -433,13 +633,32 @@ class TrackingService : Service() {
                     .addOnFailureListener {
                         if (current == generation && registeredInterval == interval) {
                             fusedRegistered = false
-                            nativeUpdates(interval)
+                            if (!inDeepSleep) nativeUpdates(interval)
                         }
                     }
-            } else nativeUpdates(interval)
+            } else if (!inDeepSleep) {
+                nativeUpdates(interval)
+            } else {
+                nativePassiveUpdates(interval)
+            }
         } catch (_: SecurityException) {
             health(this, "permission")
             stopSelf()
+        }
+    }
+
+    @Suppress("MissingPermission")
+    private fun nativePassiveUpdates(interval: Long) {
+        if (registeredInterval != interval || nativeActive) return
+        nativeActive = true
+        runCatching {
+            native.requestLocationUpdates(
+                LocationManager.PASSIVE_PROVIDER,
+                interval,
+                50f,
+                listener,
+                Looper.getMainLooper(),
+            )
         }
     }
 
@@ -465,15 +684,19 @@ class TrackingService : Service() {
         generation++
         registeredInterval = null
         fusedRegistered = false
-        if (gnssRegistered) runCatching { native.unregisterGnssStatusCallback(gnss) }
-        gnssRegistered = false
+        inDeepSleep = false
+        HomeGeofences.clearStationaryWake(this)
+        disarmSignificantMotion()
+        SpeedAdaptiveAudio.clearOuting()
         val previousStatus = LiveTrackingHealth.state.value.service
         health(
             this,
             if (previousStatus in setOf("permission", "blocked", "error")) previousStatus
             else "stopped",
         )
-        LiveTrackingHealth.state.update { it.copy(requestedInterval = 0) }
+        LiveTrackingHealth.state.update {
+            it.copy(requestedInterval = 0, deepSleep = false, liveSpeedKmh = 0f)
+        }
         runCatching { native.removeUpdates(listener) }
         runCatching { client.removeLocationUpdates(callback) }
         queue.close()
@@ -492,12 +715,18 @@ class TrackingService : Service() {
                     c.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
                         PackageManager.PERMISSION_GRANTED)
 
-        fun launch(c: Context, automatic: Boolean = false, motionResume: Boolean = false): Boolean =
+        fun launch(
+            c: Context,
+            automatic: Boolean = false,
+            motionResume: Boolean = false,
+            bluetoothWakeup: Boolean = false,
+        ): Boolean =
             try {
                 c.startForegroundService(
                     Intent(c, TrackingService::class.java)
                         .putExtra("automatic", automatic)
                         .putExtra("motion_resume", motionResume)
+                        .putExtra("bluetooth_wakeup", bluetoothWakeup)
                 )
                 true
             } catch (_: IllegalStateException) {
@@ -507,6 +736,28 @@ class TrackingService : Service() {
                 health(c, "permission")
                 false
             }
+
+        fun wakeFromDeepSleep(c: Context, reason: String) {
+            if (!fineAllowed(c)) return
+            runCatching {
+                c.startForegroundService(
+                    Intent(c, TrackingService::class.java)
+                        .putExtra("motion_resume", true)
+                        .putExtra("geofence_exit_wakeup", reason == "geofence_exit" || reason == "significant_motion")
+                        .putExtra("bluetooth_wakeup", reason == "bluetooth_connected")
+                )
+            }
+        }
+
+        fun notifyBluetoothDisconnected(c: Context, timestampMs: Long = System.currentTimeMillis()) {
+            runCatching {
+                c.startService(
+                    Intent(c, TrackingService::class.java)
+                        .setAction("BT_DISCONNECTED")
+                        .putExtra("disconnect_time", timestampMs)
+                )
+            }
+        }
 
         private fun health(c: Context, status: String) {
             LiveTrackingHealth.state.update { it.copy(service = status) }

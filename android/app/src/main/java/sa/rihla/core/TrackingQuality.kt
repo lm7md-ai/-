@@ -18,14 +18,15 @@ class FixQualityGate {
         lastElapsed = 0
     }
 
-    fun inspect(f: Fix): String? {
+    fun inspect(f: Fix, allowRelaxedIndoorAccuracy: Boolean = false): String? {
         reacquired = false
+        val maxAcc = if (allowRelaxedIndoorAccuracy) 160.0 else 60.0
         if (
             !f.lat.isFinite() ||
                 !f.lon.isFinite() ||
                 f.lat !in -90.0..90.0 ||
                 f.lon !in -180.0..180.0 ||
-                f.accuracy !in .1..60.0 ||
+                f.accuracy !in .1..maxAcc ||
                 f.speed !in 0.0..65.0 ||
                 (f.speedAccuracy != null && (!f.speedAccuracy.isFinite() || f.speedAccuracy < 0)) ||
                 !f.altitude.isFinite() ||
@@ -40,11 +41,14 @@ class FixQualityGate {
             if (dt <= 0) return "ORDER"
             val step = distance(previous.lat, previous.lon, f.lat, f.lon)
             if (dt <= 90 && step / dt > 65) return "JUMP"
-            // When low reported speed contradicts a large displacement, require a second
-            // nearby fix before reacquiring; an isolated urban-canyon spike never moves the path.
             val trustedSlow =
                 f.hasSpeed && f.speed < 2.5 && (f.speedAccuracy == null || f.speedAccuracy <= 2)
-            if (dt <= 30 && trustedSlow && step > max(35.0, previous.accuracy + f.accuracy + 15)) {
+            if (
+                !allowRelaxedIndoorAccuracy &&
+                    dt <= 30 &&
+                    trustedSlow &&
+                    step > max(35.0, previous.accuracy + f.accuracy + 15)
+            ) {
                 val pending = candidate
                 candidate = f
                 if (
@@ -70,9 +74,18 @@ fun adaptiveTrackingInterval(
     speed: Double,
     boost: Boolean,
     turn: Boolean = false,
-): Long =
-    if (!stopped && (turn || (precise && (speed >= 18 || boost)))) 2000
-    else trackingInterval(stopped, precise)
+    straightRoad: Boolean = false,
+    accuracy: Double = 15.0,
+    deepSleep: Boolean = false,
+    instantWakeup: Boolean = false,
+): Long {
+    if (instantWakeup) return 1000L
+    if (deepSleep) return 300_000L
+    if (stopped) return trackingInterval(true, precise)
+    if (turn || (precise && (speed >= 18 || boost))) return 2000L
+    if (straightRoad && accuracy in 0.1..10.0 && !boost) return 4500L
+    return trackingInterval(false, precise)
+}
 
 data class RouteQuality(
     val points: Int,
@@ -115,10 +128,16 @@ class TurnDetailDetector {
     private var previous: Fix? = null
     private var heading: Double? = null
     private val changes = java.util.ArrayDeque<Pair<Long, Double>>()
+    var lastAbsHeadingDelta: Double = 0.0
+        private set
+
+    val isStraightRoad: Boolean
+        get() = heading != null && lastAbsHeadingDelta < 4.0
 
     fun reset() {
         previous = null
         heading = null
+        lastAbsHeadingDelta = 0.0
         changes.clear()
     }
 
@@ -158,7 +177,7 @@ class TurnDetailDetector {
         heading = course
         if (last == null) return false
         val delta = ((course - last + 540) % 360) - 180
-        // A reversal greater than 120 degrees is more likely unreliable heading than a car turn.
+        lastAbsHeadingDelta = abs(delta)
         if (abs(delta) > 120) {
             changes.clear()
             return false

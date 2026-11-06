@@ -13,6 +13,8 @@ import java.net.URL
 import kotlin.math.*
 import kotlinx.coroutines.*
 import sa.rihla.R
+import sa.rihla.core.BottleneckCell
+import sa.rihla.core.GeoMerchantPin
 import sa.rihla.core.StopDetails
 import sa.rihla.core.hitStop
 import sa.rihla.data.*
@@ -158,6 +160,11 @@ class RouteMapView(c: Context) : View(c) {
     var onPick: ((Double, Double) -> Unit)? = null
     var pickStopsWithSelection = false
     var layers = MapLayers()
+    var bottlenecks: List<BottleneckCell> = emptyList()
+    var merchantPins: List<GeoMerchantPin> = emptyList()
+    var parkingPin: CampusParkingPin? = null
+    var onBottleneckPick: ((BottleneckCell) -> Unit)? = null
+    var onMerchantPick: ((GeoMerchantPin) -> Unit)? = null
     var display = RouteDisplayOptions()
     var onPointPick: ((RoutePointSelection) -> Unit)? = null
     var onRouteStats: ((RouteDisplayStats) -> Unit)? = null
@@ -246,6 +253,47 @@ class RouteMapView(c: Context) : View(c) {
 
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                     val p = world(lat, lon)
+                    val tapThreshold = 26f * resources.displayMetrics.density
+                    if (layers.merchants && onMerchantPick != null && merchantPins.isNotEmpty()) {
+                        val hitM =
+                            merchantPins.minByOrNull { pin ->
+                                val m = world(pin.latitude, pin.longitude)
+                                hypot(
+                                    (m.first - p.first + width / 2).toFloat() - e.x,
+                                    (m.second - p.second + height / 2).toFloat() - e.y,
+                                )
+                            }?.takeIf { pin ->
+                                val m = world(pin.latitude, pin.longitude)
+                                hypot(
+                                    (m.first - p.first + width / 2).toFloat() - e.x,
+                                    (m.second - p.second + height / 2).toFloat() - e.y,
+                                ) <= tapThreshold
+                            }
+                        if (hitM != null) {
+                            onMerchantPick?.invoke(hitM)
+                            return true
+                        }
+                    }
+                    if (layers.bottlenecks && onBottleneckPick != null && bottlenecks.isNotEmpty()) {
+                        val hitB =
+                            bottlenecks.minByOrNull { cell ->
+                                val m = world(cell.centerLat, cell.centerLon)
+                                hypot(
+                                    (m.first - p.first + width / 2).toFloat() - e.x,
+                                    (m.second - p.second + height / 2).toFloat() - e.y,
+                                )
+                            }?.takeIf { cell ->
+                                val m = world(cell.centerLat, cell.centerLon)
+                                hypot(
+                                    (m.first - p.first + width / 2).toFloat() - e.x,
+                                    (m.second - p.second + height / 2).toFloat() - e.y,
+                                ) <= tapThreshold * 1.25f
+                            }
+                        if (hitB != null) {
+                            onBottleneckPick?.invoke(hitB)
+                            return true
+                        }
+                    }
                     if (
                         onStopPick != null &&
                             layers.stops &&
@@ -913,6 +961,62 @@ class RouteMapView(c: Context) : View(c) {
             .forEach {
                 marker(it.latitude, it.longitude, Color.rgb(208, 128, 16))
             }
+        // v7.0: Recurring Bottleneck Heatmap Overlay
+        if (layers.bottlenecks && bottlenecks.isNotEmpty()) {
+            val d = resources.displayMetrics.density
+            bottlenecks.forEach { cell ->
+                val xy = screen(cell.centerLat, cell.centerLon)
+                paint.style = Paint.Style.FILL
+                paint.color =
+                    if (cell.isSevere) Color.argb(115, 220, 38, 38)
+                    else Color.argb(105, 245, 158, 11)
+                canvas.drawCircle(xy.first, xy.second, 18f * d, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 2f * d
+                paint.color =
+                    if (cell.isSevere) Color.rgb(185, 28, 28) else Color.rgb(217, 119, 6)
+                canvas.drawCircle(xy.first, xy.second, 18f * d, paint)
+            }
+            paint.style = Paint.Style.FILL
+        }
+        // v7.0: Geo-Merchant Pins Overlay
+        if (layers.merchants && merchantPins.isNotEmpty()) {
+            val d = resources.displayMetrics.density
+            merchantPins.forEach { pin ->
+                val xy = screen(pin.latitude, pin.longitude)
+                paint.color = Color.WHITE
+                canvas.drawCircle(xy.first, xy.second, 11f * d, paint)
+                paint.color =
+                    when (pin.category) {
+                        "FUEL" -> Color.rgb(22, 163, 74)
+                        "FOOD" -> Color.rgb(234, 88, 12)
+                        else -> Color.rgb(124, 58, 237)
+                    }
+                canvas.drawCircle(xy.first, xy.second, 8f * d, paint)
+                if (zoom >= 13) {
+                    paint.color = Color.rgb(30, 41, 59)
+                    paint.textSize = 10f * d
+                    canvas.drawText(
+                        pin.displayName.take(18),
+                        xy.first + 11f * d,
+                        xy.second + 4f * d,
+                        paint,
+                    )
+                }
+            }
+        }
+        // v7.0: Active Campus Parking Pin ("P")
+        if (layers.parking && parkingPin != null) {
+            val d = resources.displayMetrics.density
+            val p = screen(parkingPin!!.latitude, parkingPin!!.longitude)
+            paint.color = Color.WHITE
+            canvas.drawCircle(p.first, p.second, 14f * d, paint)
+            paint.color = Color.rgb(2, 132, 199)
+            canvas.drawCircle(p.first, p.second, 11f * d, paint)
+            paint.color = Color.WHITE
+            paint.textSize = 12f * d
+            canvas.drawText("P", p.first - 4f * d, p.second + 4.5f * d, paint)
+        }
         selected?.let { marker(it.first, it.second, Color.RED) }
         if (layers.accuracy)
             points.lastOrNull()?.let { last ->
@@ -1009,6 +1113,11 @@ fun RouteMap(
     onRouteStats: ((RouteDisplayStats) -> Unit)? = null,
     highlightedTime: Long? = null,
     highlightedRange: IntRange? = null,
+    bottlenecks: List<BottleneckCell> = emptyList(),
+    merchantPins: List<GeoMerchantPin> = emptyList(),
+    parkingPin: CampusParkingPin? = null,
+    onBottleneckPick: ((BottleneckCell) -> Unit)? = null,
+    onMerchantPick: ((GeoMerchantPin) -> Unit)? = null,
     onPick: ((Double, Double) -> Unit)? = null,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1031,7 +1140,10 @@ fun RouteMap(
                     v.measurement != measurement ||
                     v.display != display ||
                     v.highlightedTime != highlightedTime ||
-                    v.highlightedRange != highlightedRange
+                    v.highlightedRange != highlightedRange ||
+                    v.bottlenecks != bottlenecks ||
+                    v.merchantPins != merchantPins ||
+                    v.parkingPin != parkingPin
             v.points = points
             v.events = events
             v.places = places
@@ -1048,6 +1160,11 @@ fun RouteMap(
             v.onRouteStats = onRouteStats
             v.highlightedTime = highlightedTime
             v.highlightedRange = highlightedRange
+            v.bottlenecks = bottlenecks
+            v.merchantPins = merchantPins
+            v.parkingPin = parkingPin
+            v.onBottleneckPick = onBottleneckPick
+            v.onMerchantPick = onMerchantPick
             camera?.view = v
             v.online(preferences.onlineMaps)
             v.fit()

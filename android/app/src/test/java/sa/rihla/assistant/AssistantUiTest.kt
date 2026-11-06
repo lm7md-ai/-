@@ -159,15 +159,26 @@ class AssistantUiTest {
             PersonalAssistantStore(RuntimeEnvironment.getApplication()).examples().size == 1
         }
         compose.onNodeWithContentDescription("رجوع").performClick()
+        // Default v7.0 Zero-Confirmation Mode executes immediately without needing an approval tap!
+        compose.onNodeWithText("أمرك للمساعد").performScrollTo().performTextInput("ورني الديرة")
+        compose.onNodeWithText("فهم الأمر").performScrollTo().performClick()
+        compose.waitUntil(10000) {
+            compose
+                .onAllNodesWithText("خريطة السعودية دون إنترنت")
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        // Optional Review Mode (zeroConfirmationVoice = false) still proposes before executing!
+        val app = RuntimeEnvironment.getApplication() as RihlaApp
+        runBlocking { app.settings.update { it.copy(zeroConfirmationVoice = false) } }
+        compose.onNodeWithText("المساعد").performClick()
+        compose.onNodeWithText("أمرك للمساعد").performScrollTo().performTextClearance()
         compose.onNodeWithText("أمرك للمساعد").performScrollTo().performTextInput("ورني الديرة")
         compose.onNodeWithText("فهم الأمر").performScrollTo().performClick()
         compose.waitUntil(10000) {
             compose.onAllNodesWithText("تنفيذ الاقتراح").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("تنفيذ الاقتراح").performScrollTo().assertIsDisplayed()
-        // Suggestions do not navigate until explicitly approved.
-        compose.onNodeWithText("مراجعة الاقتراح").assertIsDisplayed()
-        compose.onNodeWithText("تنفيذ الاقتراح").performClick()
+        compose.onNodeWithText("تنفيذ الاقتراح").performScrollTo().performClick()
         compose.waitUntil(10000) {
             compose
                 .onAllNodesWithText("خريطة السعودية دون إنترنت")

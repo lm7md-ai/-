@@ -118,6 +118,11 @@ data class Expense(
     @ColumnInfo(defaultValue = "'MANUAL'") val source: String = "MANUAL",
     @ColumnInfo(defaultValue = "''") val merchant: String = "",
     val importKey: String? = null,
+    @ColumnInfo(defaultValue = "NULL") val latitude: Double? = null,
+    @ColumnInfo(defaultValue = "NULL") val longitude: Double? = null,
+    @ColumnInfo(defaultValue = "''") val placeLabel: String = "",
+    @ColumnInfo(defaultValue = "NULL") val receiptImageUri: String? = null,
+    @ColumnInfo(defaultValue = "NULL") val warrantyExpiryAt: Long? = null,
 )
 
 @Entity(
@@ -145,10 +150,49 @@ data class FuelFillUp(
     val odometerMeters: Double? = null,
 )
 
+@Entity(
+    tableName = "university_schedule",
+    indices = [Index("dayOfWeek")],
+)
+data class UniversityScheduleEntry(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val dayOfWeek: Int, // Sun=1 .. Thu=5
+    val courseTitle: String,
+    @ColumnInfo(defaultValue = "''") val buildingOrGate: String = "",
+    val startMinuteOfDay: Int,
+    val endMinuteOfDay: Int,
+    @ColumnInfo(defaultValue = "30") val reminderMinutesBefore: Int = 30,
+    @ColumnInfo(defaultValue = "1") val enabled: Boolean = true,
+)
+
+@Entity(
+    tableName = "campus_parking",
+    foreignKeys =
+        [
+            ForeignKey(
+                entity = Outing::class,
+                parentColumns = ["id"],
+                childColumns = ["outingId"],
+                onDelete = ForeignKey.SET_NULL,
+            )
+        ],
+    indices = [Index("outingId"), Index("savedAt")],
+)
+data class CampusParkingPin(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val outingId: Long? = null,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy: Double,
+    val savedAt: Long,
+    @ColumnInfo(defaultValue = "''") val note: String = "",
+    @ColumnInfo(defaultValue = "1") val active: Boolean = true,
+)
+
 @Dao
 interface JourneyDao {
     @Query("DELETE FROM places WHERE type=:type AND (type LIKE 'TEMP_HOME:%' OR type LIKE 'TEMP_REST:%')")
-    suspend fun deleteTemporaryPlace(type:String)
+    suspend fun deleteTemporaryPlace(type: String)
 
     @Query("DELETE FROM places WHERE type=:type AND type LIKE 'PIN:%'")
     suspend fun deletePin(type: String)
@@ -173,6 +217,9 @@ interface JourneyDao {
     @Query("SELECT * FROM recurring_expenses WHERE id=:id")
     suspend fun recurring(id: Long): RecurringExpense?
 
+    @Query("SELECT * FROM recurring_expenses ORDER BY dayOfMonth, id")
+    suspend fun recurringRecords(): List<RecurringExpense>
+
     @Insert suspend fun recurring(value: RecurringExpense)
 
     @Query("DELETE FROM recurring_expenses WHERE id=:id") suspend fun deleteRecurring(id: Long)
@@ -182,12 +229,18 @@ interface JourneyDao {
     @Query("SELECT * FROM trip_details WHERE outingId=:id")
     suspend fun details(id: Long): TripDetails?
 
+    @Query("SELECT * FROM trip_details")
+    suspend fun allDetails(): List<TripDetails>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun details(value: TripDetails)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun claimSms(receipt: ImportedSms): Long
 
     @Query("SELECT * FROM imported_sms WHERE receivedAt BETWEEN :start AND :end")
     suspend fun smsReceipts(start: Long, end: Long): List<ImportedSms>
+
+    @Query("SELECT * FROM imported_sms")
+    suspend fun allImportedSms(): List<ImportedSms>
 
     @Query("DELETE FROM imported_sms") suspend fun clearImportedSms()
 
@@ -218,8 +271,17 @@ interface JourneyDao {
     @Query("SELECT * FROM points WHERE outingId=:id ORDER BY recordedAt")
     fun points(id: Long): Flow<List<RoutePoint>>
 
+    @Query("SELECT * FROM points WHERE outingId IN (:outingIds) ORDER BY outingId, recordedAt")
+    suspend fun pointsForOutings(outingIds: List<Long>): List<RoutePoint>
+
+    @Query("SELECT * FROM points ORDER BY outingId, recordedAt")
+    suspend fun allPoints(): List<RoutePoint>
+
     @Query("SELECT * FROM events WHERE outingId=:id ORDER BY startedAt")
     fun events(id: Long): Flow<List<JourneyEvent>>
+
+    @Query("SELECT * FROM events ORDER BY outingId, startedAt")
+    suspend fun allEvents(): List<JourneyEvent>
 
     @Query("SELECT * FROM places") fun placesFlow(): Flow<List<SavedPlace>>
 
@@ -229,6 +291,23 @@ interface JourneyDao {
 
     @Query("SELECT * FROM expenses ORDER BY createdAt DESC") fun expenses(): Flow<List<Expense>>
 
+    @Query("SELECT * FROM expenses WHERE id=:id") suspend fun expenseById(id: Long): Expense?
+
+    @Query("SELECT * FROM expenses ORDER BY createdAt DESC LIMIT 1")
+    suspend fun latestExpense(): Expense?
+
+    @Query(
+        "SELECT * FROM expenses WHERE amountHalala=:amountHalala AND createdAt BETWEEN :start AND :end ORDER BY CASE WHEN source='MANUAL' THEN 0 ELSE 1 END, ABS(createdAt - :center) ASC"
+    )
+    suspend fun expensesInAmountWindow(
+        amountHalala: Long,
+        start: Long,
+        end: Long,
+        center: Long,
+    ): List<Expense>
+
+    @Update suspend fun updateExpense(e: Expense)
+
     @Query("SELECT COALESCE(SUM(distanceDelta),0) FROM points WHERE recordedAt<=:time")
     suspend fun trackedAt(time: Long): Double
 
@@ -236,6 +315,9 @@ interface JourneyDao {
     suspend fun lastFuelTime(time: Long): Long?
 
     @Query("SELECT * FROM fuel ORDER BY createdAt") suspend fun fuelRecords(): List<FuelFillUp>
+
+    @Query("SELECT * FROM fuel WHERE expenseId=:expenseId LIMIT 1")
+    suspend fun fuelForExpense(expenseId: Long): FuelFillUp?
 
     @Query("SELECT * FROM expenses") suspend fun expenseRecords(): List<Expense>
 
@@ -274,6 +356,53 @@ interface JourneyDao {
     @Query("DELETE FROM expenses") suspend fun clearExpenses()
 
     @Query("DELETE FROM places") suspend fun clearPlaces()
+
+    // v7.0: University Schedule DAO
+    @Query("SELECT * FROM university_schedule ORDER BY dayOfWeek, startMinuteOfDay, id")
+    fun scheduleFlow(): Flow<List<UniversityScheduleEntry>>
+
+    @Query("SELECT * FROM university_schedule ORDER BY dayOfWeek, startMinuteOfDay, id")
+    suspend fun scheduleRecords(): List<UniversityScheduleEntry>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSchedule(entry: UniversityScheduleEntry): Long
+
+    @Query("UPDATE university_schedule SET enabled=:enabled WHERE id=:id")
+    suspend fun toggleSchedule(id: Long, enabled: Boolean)
+
+    @Query("DELETE FROM university_schedule WHERE id=:id")
+    suspend fun deleteSchedule(id: Long)
+
+    @Query("DELETE FROM university_schedule")
+    suspend fun clearSchedule()
+
+    // v7.0: Campus Parking Pin DAO
+    @Query("SELECT * FROM campus_parking ORDER BY savedAt DESC")
+    fun parkingFlow(): Flow<List<CampusParkingPin>>
+
+    @Query("SELECT * FROM campus_parking WHERE active=1 ORDER BY savedAt DESC LIMIT 1")
+    fun activeParkingFlow(): Flow<CampusParkingPin?>
+
+    @Query("SELECT * FROM campus_parking WHERE active=1 ORDER BY savedAt DESC LIMIT 1")
+    suspend fun activeParking(): CampusParkingPin?
+
+    @Query("SELECT * FROM campus_parking ORDER BY savedAt DESC")
+    suspend fun parkingRecords(): List<CampusParkingPin>
+
+    @Query("UPDATE campus_parking SET active=0 WHERE active=1")
+    suspend fun deactivateAllParking()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertParking(pin: CampusParkingPin): Long
+
+    @Query("UPDATE campus_parking SET note=:note WHERE id=:id")
+    suspend fun updateParkingNote(id: Long, note: String)
+
+    @Query("UPDATE campus_parking SET active=0 WHERE id=:id")
+    suspend fun clearActiveParking(id: Long)
+
+    @Query("DELETE FROM campus_parking")
+    suspend fun clearAllParking()
 }
 
 @Database(
@@ -290,8 +419,10 @@ interface JourneyDao {
             TripDetails::class,
             MerchantRule::class,
             RecurringExpense::class,
+            UniversityScheduleEntry::class,
+            CampusParkingPin::class,
         ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class JourneyDatabase : RoomDatabase() {
@@ -372,6 +503,10 @@ data class MerchantRule(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val pattern: String,
     val category: String,
+    @ColumnInfo(defaultValue = "''") val customName: String = "",
+    @ColumnInfo(defaultValue = "NULL") val latitude: Double? = null,
+    @ColumnInfo(defaultValue = "NULL") val longitude: Double? = null,
+    @ColumnInfo(defaultValue = "''") val placeLabel: String = "",
 )
 
 @Entity(tableName = "recurring_expenses")
@@ -407,5 +542,26 @@ val MIGRATION_6_7 =
             db.execSQL("ALTER TABLE outings ADD COLUMN distanceLon REAL DEFAULT NULL")
             db.execSQL("ALTER TABLE outings ADD COLUMN distanceTime INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE outings ADD COLUMN distanceAccuracy REAL NOT NULL DEFAULT 0")
+        }
+    }
+
+/** v7.0 upgrade: Geo-Merchant memory, receipt & warranty columns, UQU schedule, and Campus Parking Pin. */
+val MIGRATION_7_8 =
+    object : androidx.room.migration.Migration(7, 8) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE expenses ADD COLUMN latitude REAL DEFAULT NULL")
+            db.execSQL("ALTER TABLE expenses ADD COLUMN longitude REAL DEFAULT NULL")
+            db.execSQL("ALTER TABLE expenses ADD COLUMN placeLabel TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE expenses ADD COLUMN receiptImageUri TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE expenses ADD COLUMN warrantyExpiryAt INTEGER DEFAULT NULL")
+            db.execSQL("ALTER TABLE merchant_rules ADD COLUMN customName TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE merchant_rules ADD COLUMN latitude REAL DEFAULT NULL")
+            db.execSQL("ALTER TABLE merchant_rules ADD COLUMN longitude REAL DEFAULT NULL")
+            db.execSQL("ALTER TABLE merchant_rules ADD COLUMN placeLabel TEXT NOT NULL DEFAULT ''")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `university_schedule` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `dayOfWeek` INTEGER NOT NULL, `courseTitle` TEXT NOT NULL, `buildingOrGate` TEXT NOT NULL DEFAULT '', `startMinuteOfDay` INTEGER NOT NULL, `endMinuteOfDay` INTEGER NOT NULL, `reminderMinutesBefore` INTEGER NOT NULL DEFAULT 30, `enabled` INTEGER NOT NULL DEFAULT 1)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_university_schedule_dayOfWeek` ON `university_schedule` (`dayOfWeek`)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `campus_parking` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `outingId` INTEGER, `latitude` REAL NOT NULL, `longitude` REAL NOT NULL, `accuracy` REAL NOT NULL, `savedAt` INTEGER NOT NULL, `note` TEXT NOT NULL DEFAULT '', `active` INTEGER NOT NULL DEFAULT 1, FOREIGN KEY(`outingId`) REFERENCES `outings`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_campus_parking_outingId` ON `campus_parking` (`outingId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_campus_parking_savedAt` ON `campus_parking` (`savedAt`)")
         }
     }

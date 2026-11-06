@@ -83,6 +83,9 @@ fun AssistantScreen(
     val results by vm.results.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
     val source by vm.source.collectAsStateWithLifecycle()
+    val zeroConfirm by vm.zeroConfirmEnabled.collectAsStateWithLifecycle()
+    val undoState by vm.undoState.collectAsStateWithLifecycle()
+    LaunchedEffect(audio) { vm.bindContext(audio) }
     var input by rememberSaveable { mutableStateOf("") }
     var voiceStatus by remember { mutableStateOf("") }
     var listening by remember { mutableStateOf(false) }
@@ -140,13 +143,62 @@ fun AssistantScreen(
     ) {
         item {
             Text(profile.name, style = MaterialTheme.typography.headlineSmall)
-            Text("نموذج أوامر خاص بالتطبيق يعمل فورًا على الهاتف. راجع الاقتراح ثم نفّذه.")
+            Text(
+                if (zeroConfirm)
+                    "وضع التنفيذ الفوري مفعّل (44+ أمر سعودي + مصاريف صوتية فورية مع زر تراجع)."
+                else
+                    "وضع المراجعة مفعّل: راجع الاقتراح ثم نفّذه."
+            )
+        }
+        if (undoState != null) {
+            item {
+                ElevatedCard(
+                    colors =
+                        CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            undoState!!.action.label,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Button(onClick = { vm.undoLastAction(audio) }) {
+                            Text("تراجع")
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { vm.readDailyBriefing() },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("☀️ موجز اليوم")
+                }
+                OutlinedButton(
+                    onClick = { vm.work { AssistantNavigation.requests.emit("cockpit") } },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("🚗 شاشة القيادة")
+                }
+            }
         }
         if (!voiceOnly) {
             item {
                 FeatureRow(
                     "نماذج الذكاء الاصطناعي",
-                    "النموذج المدمج، Qwen، وفصل الموسيقى",
+                    "النموذج المدمج (44 أمرًا)، Qwen، وفصل الموسيقى",
                     Icons.Default.Memory,
                 ) {
                     vm.work { AssistantNavigation.requests.emit("models") }
@@ -168,12 +220,24 @@ fun AssistantScreen(
                     Modifier.fillMaxWidth().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                if (voiceOnly) "الأوامر الصوتية" else "اكتب أو تحدث",
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                "التنفيذ الفوري بدون تأكيد (Zero-Confirmation)",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Switch(
+                            checked = zeroConfirm,
+                            onCheckedChange = { vm.toggleZeroConfirmation(it) },
+                        )
+                    }
                     Text(
-                        if (voiceOnly) "الأوامر الصوتية" else "اكتب أو تحدث",
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    Text(
-                        "اضغط الميكروفون لأمر واحد. لا يوجد استماع مستمر. التعرف على الجهاز متاح حسب خدمة الهاتف واللغة المثبتة.",
+                        "جرّب: «سجل قهوة بـ 18 ريال»، «عبيت بنزين بـ 85 ريال»، «وين وقفت سيارتي»، «قائمة على قد مشواري»، «موجز الصباح».",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Button(
@@ -237,10 +301,13 @@ fun AssistantScreen(
                         Modifier.fillMaxWidth().padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Text("مراجعة الاقتراح", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            if (reply!!.action == "executed") "تم التنفيذ فورًا ✓" else "رد المساعد",
+                            style = MaterialTheme.typography.titleLarge,
+                        )
                         Text(reply!!.reply)
                         Text(source, style = MaterialTheme.typography.labelSmall)
-                        if (reply!!.action != "none")
+                        if (reply!!.action != "none" && reply!!.action != "executed")
                             Button(
                                 onClick = {
                                     voice.close()

@@ -27,13 +27,14 @@ data class AssistantProfile(
     val name: String = "مساعد مشواري",
     val instructions: String = "",
     val notes: String = "",
-    val speak: Boolean = false,
+    val speak: Boolean = true,
     val networkVoice: Boolean = false,
 )
 
 object AppCommands {
     val all =
         listOf(
+            // Original 26 intents (preserved verbatim for 100% backward compatibility)
             AppIntent(
                 "tracking_health",
                 "فتح مركز التتبع الذكي",
@@ -246,6 +247,133 @@ object AppCommands {
                 "7.1",
                 listOf("صوت سبعة واحد", "وضع سبعة فاصلة واحد", "شغل 7.1"),
             ),
+            // v7.0 Personal Power-User Expansion (+18 new commands -> 44 total built-in commands!)
+            AppIntent(
+                "cockpit",
+                "وضع قيادة اللانسر Cockpit",
+                "navigate",
+                "cockpit",
+                listOf("وضع القيادة", "شاشة الكوكبيت", "عداد اللانسر", "لوحة القيادة الليلية"),
+            ),
+            AppIntent(
+                "daily_briefing",
+                "قراءة موجز اليوم الصوتي",
+                "daily_briefing",
+                "",
+                listOf("اقرأ موجز اليوم", "سمعني الموجز الصوتي", "موجز الصباح", "ملخص يومي صوتي"),
+            ),
+            AppIntent(
+                "where_is_my_car",
+                "إرشاد إلى موقف سيارتي",
+                "where_is_my_car",
+                "",
+                listOf("وين وقفت سيارتي", "ارشدني لسيارتي", "موقع موقف سيارتي", "بوصله موقف السياره"),
+            ),
+            AppIntent(
+                "save_parking",
+                "حفظ موقف سيارتي الآن",
+                "save_parking",
+                "",
+                listOf("احفظ موقف سيارتي", "ثبت موقف اللانسر", "سجل مكان الوقوف هنا"),
+            ),
+            AppIntent(
+                "smart_queue",
+                "تشغيل قائمة على قد مشواري",
+                "smart_queue",
+                "",
+                listOf("قائمة على قد مشواري", "رتب قائمة على وقت المشوار", "شغل قائمة ذكية للمشوار"),
+            ),
+            AppIntent(
+                "bookmark_here",
+                "حفظ علامة صوتية فورية",
+                "bookmark_here",
+                "",
+                listOf("احفظ علامة صوتية هنا", "ضع اشارة مرجعية بالمحاضرة", "علم هذه الدقيقة بالصوت"),
+            ),
+            AppIntent(
+                "next_lecture",
+                "موعد المحاضرة القادمة والانطلاق",
+                "summary",
+                "next_lecture",
+                listOf("متى محاضرتي الجاية", "موعد المحاضرة القادمة", "متى اطلع للجامعة اليوم"),
+            ),
+            AppIntent(
+                "uqu_schedule",
+                "فتح جدول محاضرات أم القرى",
+                "navigate",
+                "temporary_places",
+                listOf("جدول محاضرات ام القرى", "افتح جدول الكلاسات", "مواعيد محاضرات الجامعة"),
+            ),
+            AppIntent(
+                "remaining_balance",
+                "الرصيد الفعلي المتبقي من الحوالة",
+                "summary",
+                "remaining_balance",
+                listOf("كم باقي من الحوالة", "الرصيد الفعلي المتبقي", "كم بقي من رصيد الوالد"),
+            ),
+            AppIntent(
+                "university_day_cost",
+                "متوسط تكلفة يوم الجامعة",
+                "summary",
+                "university_day_cost",
+                listOf("كم تكلفة يوم الجامعة", "متوسط صرف يوم الدوام", "تكلفة دوام العابدية اليومي"),
+            ),
+            AppIntent(
+                "delete_last_expense",
+                "حذف آخر مصروف مسجل",
+                "delete_last_expense",
+                "",
+                listOf("احذف اخر مصروف", "الغ اخر عملية شراء", "امسح المصروف الاخير"),
+            ),
+            AppIntent(
+                "unified_backup",
+                "إنشاء نسخة احتياطية موحدة",
+                "unified_backup",
+                "",
+                listOf("اصنع نسخة احتياطية موحدة", "احفظ نسخة شاملة الان", "تصدير النسخة الموحدة"),
+            ),
+            AppIntent(
+                "daily_story",
+                "عرض قصة اليوم الزمنية",
+                "navigate",
+                "calendar",
+                listOf("اعرض قصة اليوم", "الخط الزمني ليومي", "تسلسل احداث اليوم"),
+            ),
+            AppIntent(
+                "bottleneck_map",
+                "خريطة الاختناقات المرورية",
+                "navigate",
+                "map",
+                listOf("خريطة الاختناقات المرورية", "اماكن الزحمة المتكررة", "بؤر الازدحام في طريقي"),
+            ),
+            AppIntent(
+                "transcript_search",
+                "فهرسة وبحث نص المحاضرات",
+                "navigate",
+                "studio",
+                listOf("فهرسة نص المحاضرة", "ابحث داخل كلام المحاضرات", "تحويل المحاضرة الى نص مكتوب"),
+            ),
+            AppIntent(
+                "adaptive_boost_toggle",
+                "تفعيل تعزيز الصوت مع السرعة",
+                "adaptive_boost",
+                "on",
+                listOf("فعل تعزيز الصوت مع السرعة", "تشغيل الصوت التكيفي بالخط", "ارفع وضوح المحاضرة مع السرعة"),
+            ),
+            AppIntent(
+                "rewind_15",
+                "إرجاع المحاضرة 15 ثانية",
+                "rewind_15",
+                "",
+                listOf("رجع خمسطعش ثانية", "ارجع بالمحاضرة خمسة عشر ثانية", "عيد اخر فقرة صوتية"),
+            ),
+            AppIntent(
+                "father_transfers_page",
+                "فتح أرشيف حوالات الوالد",
+                "navigate",
+                "father_transfers",
+                listOf("ارشيف حوالات الوالد", "سجل التحويلات الواردة", "صفحة حوالات ابوي"),
+            ),
         )
 
     fun normalized(text: String) =
@@ -317,7 +445,7 @@ class PersonalCommandModel(examples: List<CommandExample>) {
                             "ممكن",
                             "لي",
                             "ابي",
-                            "ابغى",
+                            "ابغي",
                             "اريد",
                             "please",
                         )
@@ -366,7 +494,7 @@ class PersonalAssistantStore(private val context: Context) {
             prefs.getString("name", "مساعد مشواري").orEmpty(),
             prefs.getString("instructions", "").orEmpty(),
             prefs.getString("notes", "").orEmpty(),
-            prefs.getBoolean("speak", false),
+            prefs.getBoolean("speak", true),
             prefs.getBoolean("network_voice", false),
         )
 
@@ -476,6 +604,6 @@ class PersonalAssistantStore(private val context: Context) {
                 CommandExample(row.getString("text"), row.getString("intent"))
             }
         train(rows)
-        save(profile) // Recompute weights: imported data can never add new executable actions.
+        save(profile)
     }
 }

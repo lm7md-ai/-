@@ -8,6 +8,8 @@ import sa.rihla.ui.RihlaRoot
 
 class MainActivity : ComponentActivity() {
     private val audioRequest = androidx.compose.runtime.mutableIntStateOf(0)
+    private val cockpitRequest = androidx.compose.runtime.mutableIntStateOf(0)
+
     override fun attachBaseContext(newBase: android.content.Context) {
         val locale = java.util.Locale.forLanguageTag("ar-SA")
         val config = android.content.res.Configuration(newBase.resources.configuration)
@@ -20,12 +22,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         enableEdgeToEdge()
-        if (intent.getBooleanExtra("open_audio", false)) audioRequest.intValue++
-        setContent { RihlaRoot(audioRequest = audioRequest.intValue) }
+        if (intent.getBooleanExtra("open_cockpit", false)) cockpitRequest.intValue++
+        else if (intent.getBooleanExtra("open_audio", false)) audioRequest.intValue++
+        setContent {
+            RihlaRoot(
+                audioRequest = audioRequest.intValue,
+                cockpitRequest = cockpitRequest.intValue,
+            )
+        }
     }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getBooleanExtra("open_audio", false)) audioRequest.intValue++
+        if (intent.getBooleanExtra("open_cockpit", false)) cockpitRequest.intValue++
+        else if (intent.getBooleanExtra("open_audio", false)) audioRequest.intValue++
     }
 }

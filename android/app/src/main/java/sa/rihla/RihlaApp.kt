@@ -2,9 +2,12 @@ package sa.rihla
 
 import android.app.Application
 import androidx.room.Room
+import kotlinx.coroutines.*
 import sa.rihla.data.*
 
 class RihlaApp : Application() {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         val jobs = getSharedPreferences("studio_jobs", MODE_PRIVATE)
@@ -25,13 +28,23 @@ class RihlaApp : Application() {
             .listFiles()
             ?.filter { it.extension == "part" }
             ?.forEach { it.delete() }
+        sa.rihla.tracking.MorningBriefingTrigger.handler = { appRef ->
+            val briefing = sa.rihla.assistant.DailyBriefingBuilder.buildBriefing(appRef)
+            sa.rihla.assistant.AppVoiceSpeaker.speak(appRef, briefing)
+        }
+        appScope.launch {
+            runCatching { UnifiedBackupManager(this@RihlaApp).runAutoBackupIfDue() }
+        }
     }
 
     val transfers by lazy { TransferStore(this) }
 
     val audioDatabase by lazy {
         Room.databaseBuilder(this, sa.rihla.audio.AudioDatabase::class.java, "audio_library.db")
-            .addMigrations(sa.rihla.audio.AudioDatabase.MIGRATION_1_2)
+            .addMigrations(
+                sa.rihla.audio.AudioDatabase.MIGRATION_1_2,
+                sa.rihla.audio.AudioDatabase.MIGRATION_2_3,
+            )
             .build()
     }
     val audio by lazy { sa.rihla.audio.AudioRepository(this, audioDatabase) }
@@ -44,6 +57,7 @@ class RihlaApp : Application() {
                 MIGRATION_4_5,
                 MIGRATION_5_6,
                 MIGRATION_6_7,
+                MIGRATION_7_8,
             )
             .build()
     }

@@ -177,7 +177,7 @@ class BackupTest {
     }
 
     @Test
-    fun malformedForeignKeysRollBackAndNonemptyTargetIsNeverOverwritten() = runBlocking {
+    fun malformedForeignKeysRollBackAndSmartMergePreservesExistingLedger() = runBlocking {
         val source = database()
         val target = database()
         try {
@@ -193,14 +193,18 @@ class BackupTest {
                 fail("Invalid reference accepted")
             } catch (_: Exception) {}
             assertTrue(target.dao().outings().isEmpty())
-            target.dao().insert(Outing(id = 5, startedAt = 500))
-            try {
-                LocalBackup(target).restore(LocalBackup(source).export())
-                fail("Existing ledger replaced")
-            } catch (error: Exception) {
-                assertTrue(error.message!!.contains("BACKUP_NOT_EMPTY"))
-            }
-            assertEquals(5L, target.dao().outings().single().id)
+            target.dao().insert(Outing(id = 5, startedAt = 500, endedAt = 800))
+            // v7.0 SMART_MERGE keeps existing id=5 AND merges source outing without wiping!
+            LocalBackup(target).restore(LocalBackup(source).export(), RestoreMode.SMART_MERGE)
+            assertEquals(2, target.dao().outings().size)
+            assertTrue(target.dao().outings().any { it.id == 5L })
+            // Re-running SMART_MERGE is idempotent (no duplicates!)
+            LocalBackup(target).restore(LocalBackup(source).export(), RestoreMode.SMART_MERGE)
+            assertEquals(2, target.dao().outings().size)
+            // FULL_OVERWRITE replaces cleanly with only the backup's single outing
+            LocalBackup(target).restore(LocalBackup(source).export(), RestoreMode.FULL_OVERWRITE)
+            assertEquals(1, target.dao().outings().size)
+            assertEquals(1L, target.dao().outings().single().id)
         } finally {
             source.close()
             target.close()

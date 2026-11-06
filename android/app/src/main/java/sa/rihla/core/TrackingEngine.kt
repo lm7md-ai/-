@@ -25,22 +25,53 @@ data class Area(
     val radius: Double,
     val polygon: List<Pair<Double, Double>> = emptyList(),
 ) {
-    fun contains(f: Fix): Boolean {
-        if (polygon.size < 3) return distance(lat, lon, f.lat, f.lon) + f.accuracy <= radius
+    fun containsPoint(ptLat: Double, ptLon: Double): Boolean {
+        if (polygon.size < 3) return distance(lat, lon, ptLat, ptLon) <= radius
         var inside = false
         var j = polygon.lastIndex
         for (i in polygon.indices) {
             val a = polygon[i]
             val b = polygon[j]
             if (
-                (a.second > f.lon) != (b.second > f.lon) &&
-                    f.lat <
-                        (b.first - a.first) * (f.lon - a.second) / (b.second - a.second) + a.first
+                (a.second > ptLon) != (b.second > ptLon) &&
+                    ptLat <
+                        (b.first - a.first) * (ptLon - a.second) / (b.second - a.second) + a.first
             )
                 inside = !inside
             j = i
         }
         return inside
+    }
+
+    fun contains(f: Fix): Boolean {
+        if (polygon.size < 3) return distance(lat, lon, f.lat, f.lon) + f.accuracy <= radius
+        return containsPoint(f.lat, f.lon)
+    }
+
+    /**
+     * Relaxed home arrival check for indoor / shaded parking (carport, ground floor) where
+     * GPS accuracy degrades to 40m..160m while stationary (speed ~ 0).
+     * Accepts when fix center is inside home boundary OR circles overlap reasonably at zero/low speed.
+     */
+    fun containsHomeRelaxed(f: Fix): Boolean {
+        if (f.accuracy !in 0.1..160.0) return false
+        if (containsPoint(f.lat, f.lon)) return true
+        val stationaryOrSlow = !f.hasSpeed || f.speed < 1.5
+        if (!stationaryOrSlow) return false
+        if (polygon.size < 3) {
+            val overlapMargin = min(f.accuracy * 0.5, 45.0)
+            return distance(lat, lon, f.lat, f.lon) <= radius + overlapMargin
+        }
+        return polygon.any { (pLat, pLon) -> distance(pLat, pLon, f.lat, f.lon) <= 35.0 }
+    }
+
+    /** Approximate distance in meters outside the area boundary (0.0 if inside). */
+    fun distanceOutsideBoundaryMeters(ptLat: Double, ptLon: Double): Double {
+        if (containsPoint(ptLat, ptLon)) return 0.0
+        if (polygon.size < 3) return (distance(lat, lon, ptLat, ptLon) - radius).coerceAtLeast(0.0)
+        val minVertex = polygon.minOf { (pLat, pLon) -> distance(pLat, pLon, ptLat, ptLon) }
+        val centerDist = (distance(lat, lon, ptLat, ptLon) - radius).coerceAtLeast(0.0)
+        return min(minVertex, centerDist)
     }
 }
 
@@ -49,6 +80,27 @@ fun distance(a: Double, b: Double, c: Double, d: Double): Double {
     val h = sin((c - a) * r / 2).pow(2) + cos(a * r) * cos(c * r) * sin((d - b) * r / 2).pow(2)
     return 6371000.0 * 2 * asin(sqrt(h.coerceIn(0.0, 1.0)))
 }
+
+fun bearingDegrees(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Float {
+    val phi1 = Math.toRadians(lat1)
+    val phi2 = Math.toRadians(lat2)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val y = sin(dLon) * cos(phi2)
+    val x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dLon)
+    return (((Math.toDegrees(atan2(y, x)) + 360.0) % 360.0)).toFloat()
+}
+
+fun arabicCompassDirection(bearingDeg: Float): String =
+    when (((bearingDeg + 22.5f) % 360f / 45f).toInt()) {
+        0 -> "شمال"
+        1 -> "شمال شرق"
+        2 -> "شرق"
+        3 -> "جنوب شرق"
+        4 -> "جنوب"
+        5 -> "جنوب غرب"
+        6 -> "غرب"
+        else -> "شمال غرب"
+    }
 
 data class EngineState(
     val phase: String = "DRIVING_DETECTED",
@@ -108,12 +160,19 @@ class TrackingEngine {
         university: Area?,
         allowHomeEnd: Boolean = true,
     ): Update {
+        val relaxedIndoorHomeFix =
+            allowHomeEnd &&
+                s.leftHome &&
+                home != null &&
+                f.accuracy in 60.0001..160.0 &&
+                (!f.hasSpeed || f.speed < 1.5) &&
+                home.containsHomeRelaxed(f)
         if (
             !f.lat.isFinite() ||
                 !f.lon.isFinite() ||
                 f.lat !in -90.0..90.0 ||
                 f.lon !in -180.0..180.0 ||
-                f.accuracy !in 0.1..60.0 ||
+                (f.accuracy !in 0.1..60.0 && !relaxedIndoorHomeFix) ||
                 !f.speed.isFinite() ||
                 f.speed !in 0.0..65.0 ||
                 (f.speedAccuracy != null && (!f.speedAccuracy.isFinite() || f.speedAccuracy < 0)) ||
@@ -124,7 +183,7 @@ class TrackingEngine {
             return Update(s, false)
         val dt = if (s.lastTime == 0L) 0L else f.time - s.lastTime
         val step = if (s.lastLat == null) 0.0 else distance(s.lastLat, s.lastLon!!, f.lat, f.lon)
-        if (dt > 0 && step / (dt / 1000.0) > 65.0) return Update(s, false)
+        if (!relaxedIndoorHomeFix && dt > 0 && step / (dt / 1000.0) > 65.0) return Update(s, false)
         val gap = dt > 90_000 || f.discontinuous
         val speedTrusted = f.hasSpeed && (f.speedAccuracy == null || f.speedAccuracy in 0.0..2.0)
         val anchorLat = s.distanceLat ?: s.lastLat
@@ -136,7 +195,8 @@ class TrackingEngine {
             else distance(anchorLat, anchorLon, f.lat, f.lon)
         val anchorDt = (f.time - anchorTime) / 1000.0
         val derivedMoving =
-            if (!speedTrusted)
+            if (relaxedIndoorHomeFix) false
+            else if (!speedTrusted)
                 anchorDt in 1.0..90.0 &&
                     anchorStep / anchorDt >= 2.5 &&
                     anchorStep > max(8.0, f.accuracy + anchorAccuracy)
@@ -144,13 +204,22 @@ class TrackingEngine {
                 dt in 8000..90000 &&
                     step / (dt / 1000.0) >= 5.0 &&
                     step > f.accuracy + s.lastAccuracy + 20
-        val movement = (speedTrusted && f.speed >= 1.0) || derivedMoving
+        val movement = !relaxedIndoorHomeFix && ((speedTrusted && f.speed >= 1.0) || derivedMoving)
         // The persisted anchor accumulates short steps instead of dropping each one.
         val significant = anchorStep > max(6.0, (f.accuracy + anchorAccuracy) * .5)
         val credit =
-            !gap && movement && significant && anchorTime > 0 && f.time - anchorTime <= 90_000
+            !relaxedIndoorHomeFix &&
+                !gap &&
+                movement &&
+                significant &&
+                anchorTime > 0 &&
+                f.time - anchorTime <= 90_000
         val holdUnknown =
-            !speedTrusted && !movement && s.stopStart == 0L && f.time - anchorTime <= 30_000
+            !relaxedIndoorHomeFix &&
+                !speedTrusted &&
+                !movement &&
+                s.stopStart == 0L &&
+                f.time - anchorTime <= 30_000
         val resetAnchor =
             anchorLat == null ||
                 gap ||
@@ -159,28 +228,32 @@ class TrackingEngine {
                 f.time - anchorTime > 90_000
         var n =
             s.copy(
-                lastLat = f.lat,
-                lastLon = f.lon,
+                lastLat = if (relaxedIndoorHomeFix && s.lastLat != null) s.lastLat else f.lat,
+                lastLon = if (relaxedIndoorHomeFix && s.lastLon != null) s.lastLon else f.lon,
                 lastTime = f.time,
                 lastAccuracy = f.accuracy,
                 meters = s.meters + if (credit) anchorStep else 0.0,
-                distanceLat = if (resetAnchor) f.lat else anchorLat,
-                distanceLon = if (resetAnchor) f.lon else anchorLon,
-                distanceTime = if (resetAnchor) f.time else anchorTime,
-                distanceAccuracy = if (resetAnchor) f.accuracy else anchorAccuracy,
-                gapMs = s.gapMs + if (gap && !(s.stopStart > 0 && !movement)) dt else 0L,
+                distanceLat = if (relaxedIndoorHomeFix) anchorLat else if (resetAnchor) f.lat else anchorLat,
+                distanceLon = if (relaxedIndoorHomeFix) anchorLon else if (resetAnchor) f.lon else anchorLon,
+                distanceTime = if (relaxedIndoorHomeFix) anchorTime else if (resetAnchor) f.time else anchorTime,
+                distanceAccuracy = if (relaxedIndoorHomeFix) anchorAccuracy else if (resetAnchor) f.accuracy else anchorAccuracy,
+                gapMs = s.gapMs + if (gap && !(s.stopStart > 0 && !movement) && !relaxedIndoorHomeFix) dt else 0L,
                 segmentStart = if (s.segmentStart == 0L) f.time else s.segmentStart,
             )
         val events = mutableListOf<Event>()
-        val atHome = home?.contains(f) == true
+        val strictAtHome = home?.contains(f) == true
         if (!s.originKnown)
             n =
                 n.copy(
                     originKnown = true,
-                    startedHome = atHome,
+                    startedHome = strictAtHome,
                     startedUniversity = university?.contains(f) == true,
                 )
-        if (home != null && distance(home.lat, home.lon, f.lat, f.lon) > home.radius + f.accuracy)
+        if (
+            !relaxedIndoorHomeFix &&
+                home != null &&
+                distance(home.lat, home.lon, f.lat, f.lon) > home.radius + min(f.accuracy, 40.0)
+        )
             n = n.copy(leftHome = true)
         if (movement) {
             if (s.stopStart > 0) {
@@ -197,15 +270,19 @@ class TrackingEngine {
                 )
         } else {
             if (s.stopStart == 0L && !gap) n = n.copy(drivingMs = s.drivingMs + dt)
-            val nearby = s.stillSince > 0 && distance(s.stillLat, s.stillLon, f.lat, f.lon) <= 50
-            val since = if (nearby) s.stillSince else f.time
+            val nearby =
+                relaxedIndoorHomeFix ||
+                    (s.stillSince > 0 && distance(s.stillLat, s.stillLon, f.lat, f.lon) <= 65)
+            val since = if (nearby && s.stillSince > 0) s.stillSince else f.time
             val stationaryCredit =
-                if (nearby) s.stillDrivingMs + (if (s.stopStart == 0L && !gap) dt else 0L) else 0L
+                if (nearby && s.stillSince > 0)
+                    s.stillDrivingMs + (if (s.stopStart == 0L && !gap) dt else 0L)
+                else 0L
             n =
                 n.copy(
                     stillSince = since,
-                    stillLat = if (nearby) s.stillLat else f.lat,
-                    stillLon = if (nearby) s.stillLon else f.lon,
+                    stillLat = if (nearby && s.stillSince > 0) s.stillLat else f.lat,
+                    stillLon = if (nearby && s.stillSince > 0) s.stillLon else f.lon,
                     stillDrivingMs = stationaryCredit,
                 )
             if (s.stopStart == 0L && f.time - since >= 180_000) {
@@ -213,14 +290,12 @@ class TrackingEngine {
                 n =
                     n.copy(
                         stopStart = since,
-                        // Roll back only time actually credited; a GPS gap must not erase previous
-                        // driving.
                         drivingMs = (n.drivingMs - stationaryCredit).coerceAtLeast(0),
                     )
             }
             n = n.copy(phase = if (n.stopStart > 0) "TRACKING_STOPPED" else "DRIVING_DETECTED")
         }
-        val inUniversity = university?.contains(f) == true
+        val inUniversity = !relaxedIndoorHomeFix && university?.contains(f) == true
         if (inUniversity) {
             n =
                 n.copy(
@@ -258,19 +333,65 @@ class TrackingEngine {
                     )
             }
         }
-        val endCandidate = allowHomeEnd && atHome && !movement && n.leftHome
+        val homeArrivalCandidate =
+            allowHomeEnd &&
+                !movement &&
+                n.leftHome &&
+                (strictAtHome || home?.containsHomeRelaxed(f) == true)
         n =
             n.copy(
                 homeSince =
-                    if (endCandidate) (if (s.homeSince == 0L || gap) f.time else s.homeSince) else 0
+                    if (homeArrivalCandidate) {
+                        if (s.homeSince > 0L) s.homeSince else f.time
+                    } else 0L
             )
-        if (endCandidate) n = n.copy(phase = "AT_HOME_PENDING_END")
+        if (homeArrivalCandidate) n = n.copy(phase = "AT_HOME_PENDING_END")
         return Update(
             n,
             true,
             events,
-            endCandidate && f.time - n.homeSince >= 300_000 && n.stopStart > 0,
+            homeArrivalCandidate && f.time - n.homeSince >= 300_000 && n.stopStart > 0,
         )
+    }
+
+    /**
+     * Independent watchdog check: allows auto-ending a trip when indoor GPS fixes stop arriving
+     * after entering AT_HOME_PENDING_END, or within 60s of Lancer Bluetooth ACL_DISCONNECTED near home.
+     */
+    fun shouldWatchdogAutoEnd(
+        s: EngineState,
+        now: Long,
+        home: Area?,
+        bluetoothDisconnectAt: Long = 0L,
+    ): Boolean {
+        if (s.phase == "ENDED" || home == null) return false
+        // 1. Fast Bluetooth disconnect auto-end within 60 seconds when within homeRadius + 60m
+        if (
+            bluetoothDisconnectAt > 0L &&
+                now - bluetoothDisconnectAt >= 60_000L &&
+                s.lastLat != null &&
+                s.lastLon != null &&
+                (s.leftHome || s.meters >= 100.0) &&
+                home.distanceOutsideBoundaryMeters(s.lastLat, s.lastLon) <= 60.0
+        ) {
+            return true
+        }
+        // 2. Complete AT_HOME_PENDING_END after 5 minutes even if indoor GPS ceased delivering fixes
+        if (s.phase == "AT_HOME_PENDING_END" && s.homeSince > 0L && now - s.homeSince >= 300_000L) {
+            return true
+        }
+        return false
+    }
+
+    /**
+     * True when the outing has been stationary > 5 min (outside home arrival) or confirmed at UQU,
+     * allowing RedMagic 11 Pro to drop into Stationary Deep Sleep Mode.
+     */
+    fun shouldEnterStationaryDeepSleep(s: EngineState, now: Long): Boolean {
+        if (s.phase == "ENDED" || s.phase == "AT_HOME_PENDING_END") return false
+        if (s.phase == "AT_UNIVERSITY" && s.visitConfirmed) return true
+        if (s.stopStart > 0L && now - s.stopStart >= 300_000L) return true
+        return false
     }
 
     fun end(s: EngineState, now: Long): Update {
@@ -279,20 +400,22 @@ class TrackingEngine {
         var n = s
         if (s.stopStart > 0) {
             events += Event("STOP", s.stopStart, now, s.stillLat, s.stillLon)
-            n = n.copy(stoppedMs = s.stoppedMs + now - s.stopStart)
-        } else if (s.segmentStart > 0) events += Event("DRIVE", s.segmentStart, s.lastTime)
+            n = n.copy(stoppedMs = s.stoppedMs + (now - s.stopStart).coerceAtLeast(0))
+        } else if (s.segmentStart > 0 && s.lastTime >= s.segmentStart) {
+            events += Event("DRIVE", s.segmentStart, s.lastTime)
+        }
         if (s.universityArrival > 0) {
             val end = if (s.universityExit > 0) s.universityExit else now
             events += Event("VISIT", s.universityArrival, end, confirmed = s.visitConfirmed)
             n =
                 n.copy(
                     universityMs =
-                        s.universityMs + if (s.visitConfirmed) end - s.universityArrival else 0,
+                        s.universityMs + if (s.visitConfirmed) (end - s.universityArrival).coerceAtLeast(0) else 0,
                     visits = s.visits + if (s.visitConfirmed) 1 else 0,
                 )
         }
         return Update(
-            n.copy(phase = "ENDED", stopStart = 0, universityArrival = 0, visitConfirmed = false),
+            n.copy(phase = "ENDED", stopStart = 0, homeSince = 0, universityArrival = 0, visitConfirmed = false),
             true,
             events,
         )
@@ -316,8 +439,6 @@ fun drivingEvidence(first: Fix, next: Fix): Boolean {
     if (dt !in 8000L..90000L) return false
     val moved = distance(first.lat, first.lon, next.lat, next.lon)
     val derivedSpeed = moved / (dt / 1000.0)
-    // Some providers supply position without a speed field. A stricter derived threshold
-    // admits driving while excluding typical walking and stationary accuracy drift.
     val driving =
         next.speed >= 3.0 ||
             (next.speed == 0.0 &&
@@ -329,12 +450,16 @@ fun drivingEvidence(first: Fix, next: Fix): Boolean {
 /** Rolling evidence window survives waiting at home or a red light after an automatic trigger. */
 class DrivingCandidate {
     private var first: Fix? = null
+    var startedWaitingAt: Long = 0L
+        private set
 
     fun reset() {
         first = null
+        startedWaitingAt = 0L
     }
 
     fun accept(f: Fix): Fix? {
+        if (startedWaitingAt == 0L) startedWaitingAt = f.time
         if (f.accuracy !in 0.1..40.0) return null
         val previous = first
         if (previous == null || f.time - previous.time > 90_000) {

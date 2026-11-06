@@ -155,11 +155,18 @@ fun FormField(key: String, value: String, onChange: (String) -> Unit, decimal: B
 }
 
 @Composable
-fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
+fun RihlaRoot(
+    vm: JourneyViewModel = viewModel(),
+    audioRequest: Int = 0,
+    cockpitRequest: Int = 0,
+) {
     val data by vm.state.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val audioVm: sa.rihla.audio.AudioViewModel = viewModel()
     val audioPlayback by sa.rihla.audio.AudioLive.state.collectAsStateWithLifecycle()
+    val undoState by sa.rihla.assistant.VoiceUndoBus.latest.collectAsStateWithLifecycle()
     if (!data.loaded) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -220,6 +227,9 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                     if (audioRequest > 0)
                         openPage(if (audioPlayback.id.isBlank()) "audio" else "player")
                 }
+                LaunchedEffect(cockpitRequest) {
+                    if (cockpitRequest > 0) openPage("cockpit")
+                }
                 LaunchedEffect(selected, data.outings) {
                     if (selected != null && data.outings.none { it.id == selected }) selected = null
                 }
@@ -229,7 +239,13 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                 var expense by rememberSaveable { mutableStateOf(false) }
                 var expenseOuting by rememberSaveable { mutableStateOf<Long?>(null) }
                 if (!data.settings.onboarded) Onboarding(vm, data)
-                else
+                else if (page == "cockpit" && selected == null) {
+                    CockpitScreen(
+                        vm = vm,
+                        audio = audioVm,
+                        onExit = ::goBack,
+                    )
+                } else
                     Scaffold(
                         topBar = {
                             Row(
@@ -264,9 +280,10 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                             page == "studio" -> "استوديو المحاضرات"
                                             page == "player" -> "المشغل"
                                             page == "father_transfers" -> "حوالات الوالد"
-                                            page == "temporary_places" -> "الأماكن المؤقتة والجامعة"
+                                            page == "temporary_places" -> "الأماكن المؤقتة وجدول الجامعة"
                                             page == "repeated_routes" -> "المسارات المتكررة"
                                             page == "tracking_health" -> "مركز التتبع الذكي"
+                                            page == "backup" -> "النسخ الاحتياطي الموحد"
                                             page == "settings" -> tr("more")
                                             else -> tr(page)
                                         },
@@ -289,6 +306,37 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                         bottomBar = {
                             if (page != "player")
                                 Column {
+                                    if (undoState != null && page !in setOf("assistant", "voice")) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                                            shape = RoundedCornerShape(12.dp),
+                                        ) {
+                                            Row(
+                                                Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                            ) {
+                                                Text(
+                                                    undoState!!.action.label,
+                                                    modifier = Modifier.weight(1f),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                )
+                                                TextButton(
+                                                    onClick = {
+                                                        scope.launch {
+                                                            sa.rihla.assistant.ZeroConfirmExecutor.undo(
+                                                                vm.app,
+                                                                audioVm,
+                                                            )
+                                                        }
+                                                    }
+                                                ) {
+                                                    Text("تراجع")
+                                                }
+                                            }
+                                        }
+                                    }
                                     if (audioPlayback.id.isNotBlank() && page != "player")
                                         sa.rihla.audio.AudioMiniPlayer(
                                             onOpen = { openPage("player") }
@@ -409,6 +457,13 @@ fun RihlaRoot(vm: JourneyViewModel = viewModel(), audioRequest: Int = 0) {
                                             ExpensesScreen(data, vm) {
                                                 expenseOuting = data.active?.id
                                                 expense = true
+                                            }
+                                        "backup" ->
+                                            Column(
+                                                Modifier.verticalScroll(rememberScrollState()),
+                                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                            ) {
+                                                DataTools(vm, data)
                                             }
                                         "settings" -> SettingsScreen(vm, data) { openPage(it) }
                                     }

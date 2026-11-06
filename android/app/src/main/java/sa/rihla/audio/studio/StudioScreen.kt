@@ -32,6 +32,9 @@ fun StudioScreen(
     val state by StudioTasks.state.collectAsStateWithLifecycle()
     val busy by StudioTasks.busy.collectAsStateWithLifecycle()
     val editing by vm.editing.collectAsStateWithLifecycle()
+    val transcriptProgress by vm.transcriptProgress.collectAsStateWithLifecycle()
+    val transcriptQuery by vm.transcriptQuery.collectAsStateWithLifecycle()
+    val filteredTranscripts by vm.filteredTranscripts.collectAsStateWithLifecycle()
     val plan by vm.plan.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
     val folders by vm.folders.collectAsStateWithLifecycle()
@@ -49,10 +52,15 @@ fun StudioScreen(
         }
     val picked =
         catalog.tracks.find { it.id == selected } ?: catalog.tracks.find { it.id == playback.id }
+    val importSrt =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            val target = picked
+            if (uri != null && target != null) vm.importTranscriptUri(target.id, uri)
+        }
     LaunchedEffect(picked?.id) {
         picked?.id?.let { id -> vm.app.audio.dao.tuning(id)?.let { scene = it.scene } }
     }
-    val locked = busy || editing
+    val locked = busy || editing || transcriptProgress != null
     val shown =
         catalog.tracks.filter {
             query.isBlank() ||
@@ -79,6 +87,7 @@ fun StudioScreen(
                         "organize" to "تنظيم",
                         "folders" to "المجلدات",
                         "separate" to "فصل الموسيقى",
+                        "transcript" to "فهرسة النص والبحث",
                     )
                     .chunked(2)
                     .forEach { pair ->
@@ -107,6 +116,7 @@ fun StudioScreen(
                                                 "lecture" -> Icons.Default.GraphicEq
                                                 "organize" -> Icons.Default.AutoFixHigh
                                                 "folders" -> Icons.Default.Folder
+                                                "transcript" -> Icons.Default.Subtitles
                                                 else -> Icons.Default.VoiceOverOff
                                             },
                                             null,
@@ -140,8 +150,15 @@ fun StudioScreen(
                     TextButton(onClick = { StudioTasks.cancel(vm.app) }) { Text("إلغاء المعالجة") }
                 }
             }
+            if (transcriptProgress != null) {
+                LinearProgressIndicator(
+                    progress = { (transcriptProgress ?: 0) / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("جارٍ فهرسة نشاط وفقرات المحاضرة محليًا (${transcriptProgress}٪)...")
+            }
             if (message.isNotBlank()) {
-                Text(message)
+                Text(message, color = MaterialTheme.colorScheme.primary)
                 TextButton(onClick = { vm.message.value = "" }) { Text("إخفاء") }
             }
         }
@@ -229,6 +246,109 @@ fun StudioScreen(
                 )
             }
             items(shown, key = { it.id }) { track ->
+                OutlinedCard(
+                    onClick = { selected = track.id },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text((if (picked?.id == track.id) "✓ " else "") + track.title)
+                        Text(track.artist, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        if (tab == "transcript") {
+            item {
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("فهرسة نص المحاضرات والبحث اللحظي", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "فهرس سياق العلامات المرجعية (±30 ثانية) بسرعة فائقة، أو افحص المحاضرة كاملة، أو استورد ملف تفريغ نصي (SRT / TXT) للقفز لأي دقيقة بلمسة واحدة.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text("المقطع المحدد: ${picked?.title ?: "اختر مقطعًا من القائمة أدناه"}")
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Button(
+                                onClick = { picked?.let { vm.indexBookmarkContexts(it.id) } },
+                                enabled = picked != null && !locked,
+                            ) {
+                                Text("فهرسة ±30ث حول العلامات")
+                            }
+                            OutlinedButton(
+                                onClick = { picked?.let { vm.indexFullLecture(it.id) } },
+                                enabled = picked != null && !locked,
+                            ) {
+                                Text("فهرسة المحاضرة كاملة")
+                            }
+                            OutlinedButton(
+                                onClick = { importSrt.launch(arrayOf("text/*", "application/x-subrip", "*/*")) },
+                                enabled = picked != null && !locked,
+                            ) {
+                                Text("استيراد SRT / نص")
+                            }
+                            if (picked != null) {
+                                TextButton(
+                                    onClick = { vm.clearTrackTranscripts(picked.id) },
+                                    enabled = !locked,
+                                ) {
+                                    Text("مسح فهرس المقطع")
+                                }
+                            }
+                        }
+                        OutlinedTextField(
+                            value = transcriptQuery,
+                            onValueChange = { vm.transcriptQuery.value = it },
+                            label = { Text("ابحث داخل نصوص جميع المحاضرات المفهرسة") },
+                            placeholder = { Text("اكتب كلمة أو موضوعًا للقفز للدقيقة مباشرة...") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+            if (filteredTranscripts.isNotEmpty()) {
+                items(filteredTranscripts, key = { it.id }) { seg ->
+                    val segTrack = catalog.tracks.find { it.id == seg.trackId }
+                    OutlinedCard(
+                        onClick = {
+                            if (segTrack != null) {
+                                audio.play(segTrack, listOf(segTrack), seg.startMs)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                Text(
+                                    "[${TranscriptEngine.formatTimestamp(seg.startMs)}] " +
+                                        (segTrack?.title ?: "محاضرة محفوظة"),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                if (seg.isBookmarkContext) {
+                                    Text("علامة ±30ث", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                            Text(seg.text, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+            item {
+                Text("اختر مقطعًا للفهرسة:", style = MaterialTheme.typography.titleSmall)
+                OutlinedTextField(
+                    query,
+                    { query = it },
+                    label = { Text("تصفية قائمة المقاطع") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            items(shown, key = { "tr_pick_${it.id}" }) { track ->
                 OutlinedCard(
                     onClick = { selected = track.id },
                     modifier = Modifier.fillMaxWidth(),
@@ -364,17 +484,3 @@ fun StudioScreen(
             dismissButton = { TextButton(onClick = { approvedMove = false }) { Text("رجوع") } },
         )
 }
-
-private fun actionLabel(action: String) =
-    when (action) {
-        "navigate" -> "فتح الصفحة"
-        "scene" -> "إعداد الصوت"
-        "search_audio" -> "بحث في المكتبة"
-        "play_audio" -> "تشغيل المقطع"
-        "favorite_audio" -> "إضافة للمفضلة"
-        "pause_audio" -> "إيقاف مؤقت"
-        "next_audio" -> "المقطع التالي"
-        "previous_audio" -> "المقطع السابق"
-        "organize" -> "فتح خطة التصنيف"
-        else -> action
-    }

@@ -38,6 +38,16 @@ fun FatherTransfersScreen() {
     val aliases = remember(revision) { store.aliases }
     val cutoff = remember(revision) { store.cutoff }
     val totals = remember(rows, aliases, cutoff) { transferTotals(rows, aliases, cutoff) }
+    val liveExpenses by app.repository.dao.expenses().collectAsState(emptyList())
+    val balanceSummary =
+        remember(rows, aliases, cutoff, liveExpenses) {
+            UniversityFinanceCalculator.computeRemainingTransferBalance(
+                transferRows = rows,
+                aliases = aliases,
+                cutoffMs = cutoff,
+                expenses = liveExpenses,
+            )
+        }
     val permission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             result ->
@@ -123,6 +133,24 @@ fun FatherTransfersScreen() {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TransferMetric("القديمة: قبل التفعيل", totals.old, Modifier.weight(1f))
                 TransferMetric("الجديدة: منذ التفعيل", totals.fresh, Modifier.weight(1f))
+            }
+            if (balanceSummary.configured) {
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("الرصيد الفعلي المتبقي (الحوالات − المصروفات)", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "${num(balanceSummary.remainingHalala / 100.0, 2)} ر.س",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        val daysHint =
+                            balanceSummary.estimatedDaysRemaining?.let { " · يكفي تقريبًا $it يومًا" }.orEmpty()
+                        Text(
+                            "المصروف منذ بداية الفترة: ${num(balanceSummary.totalExpensesHalala / 100.0, 2)} ر.س · معدل الصرف اليومي: ${num(balanceSummary.dailyBurnRateHalala / 100.0, 1)} ر.س$daysHint",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
             }
             if (cutoff > 0)
                 Text(

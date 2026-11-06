@@ -210,6 +210,7 @@ class AudioPlaybackService : MediaSessionService() {
     }
     private fun publish() {
         if (destroying) return
+        AutoStopBookmarkManager.observePlaybackState(player.isPlaying)
         val manager=getSystemService(android.media.AudioManager::class.java)
         AudioLive.state.value = AudioPlayback(
             player.currentMediaItem?.mediaId.orEmpty(), player.mediaMetadata.title?.toString().orEmpty(), player.isPlaying,

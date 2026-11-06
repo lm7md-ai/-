@@ -3,8 +3,11 @@ package sa.rihla.ui
 import android.app.ActivityManager
 import android.app.NotificationManager
 import android.content.Intent
+import android.location.GnssStatus
 import android.location.LocationManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
@@ -25,6 +28,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.update
 import sa.rihla.core.*
 import sa.rihla.data.*
 import sa.rihla.tracking.*
@@ -64,13 +68,25 @@ fun TrackingStatusCard(active: Boolean) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(Icons.Default.GpsFixed, null, tint = MaterialTheme.colorScheme.primary)
+            Icon(
+                if (live.deepSleep) Icons.Default.BatterySaver else Icons.Default.GpsFixed,
+                null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
             Column(Modifier.weight(1f)) {
-                Text("مركز التتبع الذكي", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    if (!active) "افحص الأذونات والإشارة قبل الانطلاق"
-                    else if (live.receivedAt == 0L) "بانتظار إشارة موقع؛ اضغط للتشخيص"
-                    else "آخر دقة: ${num(live.accuracy)} متر · ${live.provider}",
+                    if (live.deepSleep) "مركز التتبع الذكي · سكون موفر للطاقة 🔋"
+                    else "مركز التتبع الذكي",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    when {
+                        !active -> "افحص الأذونات والإشارة قبل الانطلاق"
+                        live.deepSleep ->
+                            "توقف طويل مؤكد؛ GPS منخفض الطاقة ويستيقظ فوراً مع البلوتوث أو الحركة"
+                        live.receivedAt == 0L -> "بانتظار إشارة موقع؛ اضغط للتشخيص"
+                        else -> "آخر دقة: ${num(live.accuracy)} متر · ${live.provider}"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -112,6 +128,7 @@ fun RouteQualityCard(points: List<RoutePoint>, outing: Outing, now: Long) {
 }
 
 @Composable
+@android.annotation.SuppressLint("MissingPermission")
 fun TrackingDiagnosticsScreen(vm: JourneyViewModel, data: ScreenData) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -121,20 +138,75 @@ fun TrackingDiagnosticsScreen(vm: JourneyViewModel, data: ScreenData) {
     var testing by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf("") }
     val owner = LocalLifecycleOwner.current
-    DisposableEffect(owner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) refresh++
+    val fine = refresh >= 0 && TrackingService.fineAllowed(context)
+
+    // Strictly bind GnssStatus.Callback ONLY while TrackingDiagnosticsScreen is visible (ON_START..ON_STOP)
+    DisposableEffect(owner, fine) {
+        val locationManager = context.getSystemService(LocationManager::class.java)
+        var gnssActive = false
+        val gnssCallback =
+            object : GnssStatus.Callback() {
+                override fun onSatelliteStatusChanged(status: GnssStatus) {
+                    val used = (0 until status.satelliteCount).filter { status.usedInFix(it) }
+                    val dualFreq =
+                        used.count {
+                            status.hasCarrierFrequencyHz(it) &&
+                                status.getCarrierFrequencyHz(it) in 1.16e9f..1.22e9f
+                        }
+                    LiveTrackingHealth.state.update {
+                        it.copy(
+                            satellites = status.satelliteCount,
+                            usedSatellites = used.size,
+                            averageCn0 =
+                                if (used.isEmpty()) 0.0
+                                else used.map { idx -> status.getCn0DbHz(idx).toDouble() }.average(),
+                            dualFrequency = dualFreq,
+                        )
+                    }
+                }
+            }
+        fun startGnss() {
+            if (!gnssActive && TrackingService.fineAllowed(context) && locationManager != null) {
+                gnssActive =
+                    runCatching {
+                        locationManager.registerGnssStatusCallback(
+                            gnssCallback,
+                            Handler(Looper.getMainLooper()),
+                        )
+                    }
+                        .getOrDefault(false)
+            }
         }
+        fun stopGnss() {
+            if (gnssActive) {
+                runCatching { locationManager?.unregisterGnssStatusCallback(gnssCallback) }
+                gnssActive = false
+            }
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    refresh++
+                    startGnss()
+                }
+                Lifecycle.Event.ON_STOP -> stopGnss()
+                else -> Unit
+            }
+        }
+        if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) startGnss()
         owner.lifecycle.addObserver(observer)
-        onDispose { owner.lifecycle.removeObserver(observer) }
+        onDispose {
+            owner.lifecycle.removeObserver(observer)
+            stopGnss()
+        }
     }
+
     LaunchedEffect(Unit) {
         while (isActive) {
             delay(5000)
             elapsed = SystemClock.elapsedRealtime()
         }
     }
-    val fine = refresh >= 0 && TrackingService.fineAllowed(context)
     val background = TrackingService.backgroundAllowed(context)
     val enabled = runCatching {
         if (Build.VERSION.SDK_INT >= 28)
@@ -216,6 +288,28 @@ fun TrackingDiagnosticsScreen(vm: JourneyViewModel, data: ScreenData) {
                 }
             }
         }
+        Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface) {
+            Row(
+                Modifier.fillMaxWidth().padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(Icons.Default.BatterySaver, null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f)) {
+                    Text("وضع السكون الذكي عند التوقف الطويل (RedMagic)", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (live.deepSleep) "نشط الآن · فحص كل 5 دقائق مع إيقاظ فوري 1s عند الحركة أو البلوتوث"
+                        else "ينقل GPS إلى وضع موفر للطاقة بعد 5 دقائق توقف أو داخل الجامعة",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = data.settings.stationaryDeepSleep,
+                    onCheckedChange = { vm.stationaryDeepSleep(it) },
+                )
+            }
+        }
         Text(
             "التسجيل التلقائي: ${if (data.settings.auto) "مفعل" else "غير مفعل"} · مزود Google: ${if (gms) "متاح" else "غير متاح؛ GPS المباشر للتسجيل، ومحفزات النشاط والبيت قد لا تعمل"}",
             style = MaterialTheme.typography.bodySmall,
@@ -246,18 +340,19 @@ fun TrackingDiagnosticsScreen(vm: JourneyViewModel, data: ScreenData) {
         SectionTitle("الإشارة والتسجيل الآن")
         Text(
             "الخدمة: " +
-                when (live.service) {
-                    "running" -> "تسجيل جارٍ"
-                    "checking_driving" -> "التحقق من القيادة"
-                    "permission" -> "إذن مفقود"
-                    "error" -> "توقفت بسبب خطأ"
-                    "blocked" -> "منع النظام بدء الخدمة"
-                    "starting" -> "جارٍ البدء"
+                when {
+                    live.deepSleep -> "سكون ذكي موفر للطاقة 🔋"
+                    live.service == "running" -> "تسجيل جارٍ"
+                    live.service == "checking_driving" -> "التحقق من القيادة"
+                    live.service == "permission" -> "إذن مفقود"
+                    live.service == "error" -> "توقفت بسبب خطأ"
+                    live.service == "blocked" -> "منع النظام بدء الخدمة"
+                    live.service == "starting" -> "جارٍ البدء"
                     else -> "غير مشغلة"
                 }
         )
         if (live.receivedAt > 0) {
-            val stale = live.updatedElapsed > 0 && elapsed - live.updatedElapsed > 60000
+            val stale = !live.deepSleep && live.updatedElapsed > 0 && elapsed - live.updatedElapsed > 60000
             Text(
                 "آخر إشارة: ${stamp(live.receivedAt, true)} · ${live.provider} · ±${num(live.accuracy)} متر"
             )
@@ -276,16 +371,16 @@ fun TrackingDiagnosticsScreen(vm: JourneyViewModel, data: ScreenData) {
         )
         if (live.requestedInterval > 0)
             Text(
-                "فاصل الطلب الحالي: ${live.requestedInterval / 1000} ثانية؛ قد يختلف وصول الإشارات الفعلي."
+                "فاصل الطلب الحالي: ${num(live.requestedInterval / 1000.0)} ثانية؛ قد يختلف وصول الإشارات الفعلي."
             )
         if (live.satellites > 0) {
             Text(
-                "GNSS: ${live.usedSatellites} مستخدم من ${live.satellites} · متوسط C/N₀: ${num(live.averageCn0)} dB-Hz"
+                "GNSS (أثناء فتح هذه الشاشة): ${live.usedSatellites} مستخدم من ${live.satellites} · متوسط C/N₀: ${num(live.averageCn0)} dB-Hz"
             )
             if (live.dualFrequency > 0) Text("إشارات L5/E5 مستخدمة: ${live.dualFrequency}")
         } else
             Text(
-                "بيانات الأقمار غير متاحة حاليًا من النظام؛ هذا لا يعني أن مزود الموقع لا يعمل.",
+                "مراقب الأقمار يعمل عند فتح هذه الشاشة فقط لتوفير بطارية RedMagic.",
                 style = MaterialTheme.typography.bodySmall,
             )
         Button(
@@ -329,7 +424,7 @@ fun TrackingDiagnosticsScreen(vm: JourneyViewModel, data: ScreenData) {
         TextButton(
             onClick = {
                 val text =
-                    "مشواري 6.0 / Android ${Build.VERSION.SDK_INT}\n${Build.MANUFACTURER} ${Build.MODEL}\nFine=$fine Background=$background Location=$enabled Activity=${Detection.available(context)} Notifications=$notifications BatteryExempt=$battery Restricted=$restricted Google=$gms\nService=${live.service} Provider=${live.provider} Accuracy=${live.accuracy} Interval=${live.requestedInterval}\nAccepted=${live.acceptedCount} Rejected=${live.rejectedCount} Reason=${live.reason}\nGNSS=${live.usedSatellites}/${live.satellites} Cn0=${live.averageCn0} L5=${live.dualFrequency}"
+                    "مشواري 7.0 / Android ${Build.VERSION.SDK_INT}\n${Build.MANUFACTURER} ${Build.MODEL}\nFine=$fine Background=$background Location=$enabled Activity=${Detection.available(context)} Notifications=$notifications BatteryExempt=$battery Restricted=$restricted Google=$gms DeepSleep=${live.deepSleep}\nService=${live.service} Provider=${live.provider} Accuracy=${live.accuracy} Interval=${live.requestedInterval}\nAccepted=${live.acceptedCount} Rejected=${live.rejectedCount} Reason=${live.reason}\nGNSS=${live.usedSatellites}/${live.satellites} Cn0=${live.averageCn0} L5=${live.dualFrequency}"
                 context.startActivity(
                     Intent.createChooser(
                         Intent(Intent.ACTION_SEND)
@@ -343,7 +438,7 @@ fun TrackingDiagnosticsScreen(vm: JourneyViewModel, data: ScreenData) {
             Text("مشاركة تقرير تشخيص دون إحداثيات")
         }
         Text(
-            "الأوامر القسرية لإيقاف التطبيق، سحب الأذونات، وبعض قيود الشركة المصنعة قد تمنع التلقائي. دمج حساسات الموقع يتم عبر مزود Android؛ لا يفتح التطبيق الميكروفون ولا يسجل حساسات إضافية في الخلفية. الدقة الأعلى قد تزيد استهلاك البطارية.",
+            "الأوامر القسرية لإيقاف التطبيق، سحب الأذونات، وبعض قيود الشركة المصنعة قد تمنع التلقائي. دمج حساسات الموقع يتم عبر مزود Android؛ لا يفتح التطبيق الميكروفون ولا يسجل حساسات إضافية في الخلفية.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

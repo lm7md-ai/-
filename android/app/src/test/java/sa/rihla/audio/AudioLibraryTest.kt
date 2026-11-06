@@ -80,7 +80,7 @@ class AudioLibraryTest {
     }
 
     @Test
-    fun backupRestoresAllRecordsAndRejectsOverwriteAndMalformedReferences() = runBlocking {
+    fun backupRestoresAllRecordsMergesIdempotentlyAndRejectsMalformedReferences() = runBlocking {
         val source = database()
         val target = database()
         val malformedTarget = database()
@@ -93,20 +93,35 @@ class AudioLibraryTest {
             val list = repo.createPlaylist("صوتيات")
             repo.addToPlaylist(list, t.id)
             repo.dao.bookmark(AudioBookmark(trackId = t.id, positionMs = 10000, label = "عودة"))
+            source.dao().insertTranscript(
+                AudioTranscript(
+                    trackId = t.id,
+                    startMs = 5000,
+                    endMs = 15000,
+                    text = "فقرة مفهرسة للاختبار",
+                    isBookmarkContext = true,
+                    createdAt = 1000,
+                )
+            )
             val text = AudioBackup(source).export()
             assertEquals(1, AudioBackup(target).restore(text))
             assertEquals(repo.dao.tracks().first(), target.dao().tracks().first())
             assertEquals(repo.dao.members().first(), target.dao().members().first())
             assertEquals(repo.dao.bookmarks().first(), target.dao().bookmarks().first())
-            assertThrows(IllegalArgumentException::class.java) {
-                runBlocking { AudioBackup(target).restore(text) }
-            }
+            assertEquals(1, target.dao().allTranscripts().size)
+            // v7.0 SMART_MERGE is idempotent on non-empty audio DB!
+            assertEquals(1, AudioBackup(target).restore(text, sa.rihla.data.RestoreMode.SMART_MERGE))
+            assertEquals(1, target.dao().tracks().first().size)
+            assertEquals(1, target.dao().bookmarks().first().size)
             val malformed =
                 JSONObject(text).apply {
                     getJSONArray("members").getJSONObject(0).put("track", "missing")
                 }
             assertThrows(Exception::class.java) {
-                runBlocking { AudioBackup(malformedTarget).restore(malformed.toString()) }
+                runBlocking {
+                    AudioBackup(malformedTarget)
+                        .restore(malformed.toString(), sa.rihla.data.RestoreMode.FULL_OVERWRITE)
+                }
             }
             assertTrue(malformedTarget.dao().tracks().first().isEmpty())
         } finally {
@@ -164,16 +179,16 @@ class AudioLibraryTest {
     }
 
     @Test
-    fun restoringAudioNeverOverwritesAnExistingEmptyVirtualFolder() = runBlocking {
+    fun smartMergePreservesExistingVirtualFolderWhileFullOverwriteReplaces() = runBlocking {
         val source = database()
         val target = database()
         try {
             target.dao().folder(AudioFolder("existing", "موضوعي", "مصدر"))
             val backup = AudioBackup(source).export()
-            assertThrows(IllegalArgumentException::class.java) {
-                runBlocking { AudioBackup(target).restore(backup) }
-            }
+            AudioBackup(target).restore(backup, sa.rihla.data.RestoreMode.SMART_MERGE)
             assertEquals("موضوعي", target.dao().folders().first().single().topic)
+            AudioBackup(target).restore(backup, sa.rihla.data.RestoreMode.FULL_OVERWRITE)
+            assertTrue(target.dao().folders().first().isEmpty())
         } finally {
             source.close()
             target.close()

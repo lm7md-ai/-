@@ -14,6 +14,7 @@ v4 = json.loads((schemas / '4.json').read_text())['database']
 v5 = json.loads((schemas / '5.json').read_text())['database']
 v6 = json.loads((schemas / '6.json').read_text())['database']
 v7 = json.loads((schemas / '7.json').read_text())['database']
+v8 = json.loads((schemas / '8.json').read_text())['database']
 db = sqlite3.connect(':memory:')
 db.execute('PRAGMA foreign_keys=ON')
 for entity in v1['entities']:
@@ -98,7 +99,7 @@ assert db.execute('SELECT odometerMeters FROM fuel').fetchone() == (None,)
 assert db.execute('SELECT amountHalala FROM expenses').fetchone() == (12345,)
 print('PASS: migration 5→6 preserves history and adds odometer, merchant rules and recurring schedules')
 
-for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_6_7'):]):
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_6_7'):source.index('val MIGRATION_7_8')]):
     db.execute(sql)
 for entity in v7['entities']:
     actual = {row[1]: (row[2], bool(row[3])) for row in db.execute(f'PRAGMA table_info(`{entity["tableName"]}`)')}
@@ -107,13 +108,53 @@ for entity in v7['entities']:
 assert db.execute('SELECT startedAt,distanceLat,distanceLon,distanceTime,distanceAccuracy FROM outings').fetchone() == (1234, None, None, 0, 0.0)
 print('PASS: migration 6→7 retains all rows and initializes distance anchors safely')
 
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', source[source.index('val MIGRATION_7_8'):]):
+    db.execute(sql)
+for entity in v8['entities']:
+    actual = {row[1]: (row[2], bool(row[3])) for row in db.execute(f'PRAGMA table_info(`{entity["tableName"]}`)')}
+    expected = {f['columnName']: (f['affinity'], f.get('notNull', False)) for f in entity['fields']}
+    assert actual == expected, f'{entity["tableName"]}: {actual} != {expected}'
+assert db.execute('SELECT amountHalala,latitude,longitude,placeLabel,receiptImageUri,warrantyExpiryAt FROM expenses').fetchone() == (12345, None, None, '', None, None)
+db.execute("INSERT INTO university_schedule (dayOfWeek,courseTitle,buildingOrGate,startMinuteOfDay,endMinuteOfDay,reminderMinutesBefore,enabled) VALUES (1,'نظم التشغيل','مبنى الحاسب',540,630,30,1)")
+db.execute("INSERT INTO campus_parking (outingId,latitude,longitude,accuracy,savedAt,note,active) VALUES (1,21.33,39.95,6.0,5000,'مواقف بوابة 3',1)")
+print('PASS: migration 7→8 retains all rows and adds UQU schedule, campus parking, geo-merchant & receipt columns')
+
 db.execute('DELETE FROM outings WHERE id=1')
 for table in ('points', 'events', 'active_slot', 'trip_details'):
     assert db.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
 assert db.execute('SELECT outingId,amountHalala FROM expenses').fetchone() == (None, 12345)
+assert db.execute('SELECT outingId,note FROM campus_parking').fetchone() == (None, 'مواقف بوابة 3')
 assert db.execute('SELECT COUNT(*) FROM fuel').fetchone()[0] == 1
 assert not db.execute('PRAGMA foreign_key_check').fetchall()
 print('PASS: outing cascade preserves spending and unlinks expenses')
 db.execute('DELETE FROM expenses WHERE id=1')
 assert db.execute('SELECT COUNT(*) FROM fuel').fetchone()[0] == 0
 print('PASS: expense deletion cascades its fuel record')
+
+audio_schemas = root / 'app/schemas/sa.rihla.audio.AudioDatabase'
+av1 = json.loads((audio_schemas / '1.json').read_text())['database']
+av2 = json.loads((audio_schemas / '2.json').read_text())['database']
+av3 = json.loads((audio_schemas / '3.json').read_text())['database']
+audio_source = (root / 'app/src/main/java/sa/rihla/audio/AudioDatabase.kt').read_text()
+adb = sqlite3.connect(':memory:')
+adb.execute('PRAGMA foreign_keys=ON')
+for entity in av1['entities']:
+    adb.execute(entity['createSql'].replace('${TABLE_NAME}', entity['tableName']))
+    for index in entity.get('indices', []):
+        adb.execute(index['createSql'].replace('${TABLE_NAME}', entity['tableName']))
+adb.execute("INSERT INTO audio_tracks VALUES('t1','content://a','محاضرة','محاضر','ألبوم',90000,1,42000,100,1,'')")
+adb.execute("INSERT INTO audio_bookmarks VALUES(1,'t1',12000,'علامة')")
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', audio_source[audio_source.index('val MIGRATION_1_2'):audio_source.index('val MIGRATION_2_3')]):
+    adb.execute(sql)
+for sql in re.findall(r'db.execSQL\(\s*"([^"\n]+)"\s*\)', audio_source[audio_source.index('val MIGRATION_2_3'):]):
+    adb.execute(sql)
+for entity in av3['entities']:
+    actual = {row[1]: (row[2], bool(row[3])) for row in adb.execute(f'PRAGMA table_info(`{entity["tableName"]}`)')}
+    expected = {f['columnName']: (f['affinity'], f.get('notNull', False)) for f in entity['fields']}
+    assert actual == expected, f'audio {entity["tableName"]}: {actual} != {expected}'
+adb.execute("INSERT INTO audio_transcripts (trackId,startMs,endMs,text,isBookmarkContext) VALUES ('t1',10000,40000,'نص المحاضرة التجريبي',1)")
+assert adb.execute("SELECT positionMs FROM audio_tracks WHERE id='t1'").fetchone() == (42000,)
+assert not adb.execute('PRAGMA foreign_key_check').fetchall()
+adb.execute("DELETE FROM audio_tracks WHERE id='t1'")
+assert adb.execute("SELECT COUNT(*) FROM audio_transcripts").fetchone()[0] == 0
+print('PASS: audio_library migration 1→2→3 preserves tracks/bookmarks and cascades transcripts')

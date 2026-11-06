@@ -43,6 +43,30 @@ fun Dashboard(
         }
     val month = metrics(data, bounds)
     val active = data.active
+    val app = context.applicationContext as sa.rihla.RihlaApp
+    val transferRev by app.transfers.changes.collectAsState()
+    val transferBalance =
+        remember(transferRev, data.expenses, data.now) {
+            UniversityFinanceCalculator.computeRemainingTransferBalance(
+                transferRows = app.transfers.rows(),
+                aliases = app.transfers.aliases,
+                cutoffMs = app.transfers.cutoff,
+                expenses = data.expenses,
+                nowMs = data.now,
+            )
+        }
+    val nextLecture =
+        remember(data.schedule, data.outings, data.now) {
+            UniversityDepartureAdvisor.nextLectureAdvice(
+                schedule = data.schedule,
+                outings = data.outings,
+                nowMs = data.now,
+            )
+        }
+    val warrantyAlerts =
+        remember(data.expenses, data.now) {
+            ReceiptStore.expiringWarranties(data.expenses, data.now)
+        }
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
@@ -89,7 +113,10 @@ fun Dashboard(
             }
         }
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DashboardShortcut("قيادة اللانسر", Icons.Default.Speed, Modifier.weight(1f)) {
+                    sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("cockpit")
+                }
                 DashboardShortcut("الخريطة", Icons.Default.Map, Modifier.weight(1f)) {
                     sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("map")
                 }
@@ -102,6 +129,112 @@ fun Dashboard(
                     Modifier.weight(1f),
                 ) {
                     sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit("expenses")
+                }
+            }
+        }
+        item {
+            // v7.0: UQU Next Lecture & Smart Departure Card
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("🎓 جدول أم القرى والانطلاق الذكي", style = MaterialTheme.typography.titleMedium)
+                        TextButton(
+                            onClick = {
+                                sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit(
+                                    "temporary_places"
+                                )
+                            }
+                        ) {
+                            Text("إدارة الجدول")
+                        }
+                    }
+                    if (nextLecture == null) {
+                        Text(
+                            "أضف محاضراتك الأسبوعية (الأحد–الخميس) ليحسب مشواري وقت الانطلاق الأمثل من متوسط زمن طريقك.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    } else {
+                        Text(
+                            "${nextLecture.dayLabelArabic}: ${nextLecture.entry.courseTitle} · ${nextLecture.lectureStartFormatted}",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        if (nextLecture.entry.buildingOrGate.isNotBlank()) {
+                            Text("الموقع: ${nextLecture.entry.buildingOrGate}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        val depNote =
+                            if (nextLecture.isToday && (nextLecture.minutesUntilDeparture ?: 1) <= 0)
+                                "انطلق الآن! (متوسط المشوار ${nextLecture.estimatedTravelMinutes} د + هامش أمان ${nextLecture.bufferMinutes} د)"
+                            else
+                                "الانطلاق المقترح: ${nextLecture.recommendedDepartureFormatted} (متوسط الطريق ${nextLecture.estimatedTravelMinutes} د)"
+                        Text(depNote, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+        if (transferBalance.configured) {
+            item {
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text("💸 الرصيد الفعلي المتبقي", style = MaterialTheme.typography.titleMedium)
+                            TextButton(
+                                onClick = {
+                                    sa.rihla.audio.studio.AssistantNavigation.requests.tryEmit(
+                                        "father_transfers"
+                                    )
+                                }
+                            ) {
+                                Text("التفاصيل")
+                            }
+                        }
+                        Text(
+                            "${num(transferBalance.remainingHalala / 100.0, 2)} ر.س",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        val daysStr =
+                            transferBalance.estimatedDaysRemaining?.let { " · يكفي نحو $it يومًا" }.orEmpty()
+                        Text(
+                            "معدل الصرف اليومي: ${num(transferBalance.dailyBurnRateHalala / 100.0, 1)} ر.س$daysStr",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+        if (warrantyAlerts.isNotEmpty()) {
+            item {
+                Card(
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("🧾 تنبيهات ضمان الفواتير (${warrantyAlerts.size})", style = MaterialTheme.typography.titleSmall)
+                        warrantyAlerts.take(3).forEach { alert ->
+                            val label = alert.expense.merchant.ifBlank { "مشتريات" }
+                            Text(
+                                if (alert.expired) "• انتهى ضمان $label مؤخرًا"
+                                else "• ينتهي ضمان $label خلال ${alert.daysRemaining} يوم",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             }
         }
