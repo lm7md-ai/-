@@ -40,6 +40,8 @@ class SmsExpenseImporter(private val db: JourneyDatabase) {
         fun clearProcessCachesForTests() {
             caches.clear()
         }
+
+        fun clearRecentFingerprintsForTest() = clearProcessCachesForTests()
     }
 
     suspend fun import(packageName: String, body: String, receivedAt: Long): Boolean {

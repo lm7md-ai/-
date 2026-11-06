@@ -100,7 +100,6 @@ class AudioLibraryTest {
                     endMs = 15000,
                     text = "فقرة مفهرسة للاختبار",
                     isBookmarkContext = true,
-                    createdAt = 1000,
                 )
             )
             val text = AudioBackup(source).export()

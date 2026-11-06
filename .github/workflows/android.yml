@@ -97,7 +97,13 @@ jobs:
         if: always()
         run: |
           set +e
-          ./gradlew :app:assembleClassicDebug :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' > /tmp/build.log 2>&1
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          df -h
+          ./gradlew :app:assembleClassicDebug --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' --stacktrace > /tmp/build.log 2>&1 && \
+          ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' --stacktrace >> /tmp/build.log 2>&1
           rc=$?
           cat /tmp/build.log
           if [ $rc -ne 0 ]; then
