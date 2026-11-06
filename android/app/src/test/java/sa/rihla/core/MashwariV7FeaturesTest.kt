@@ -227,7 +227,7 @@ class MashwariV7FeaturesTest {
     }
 
     @Test
-    fun receiptVaultUnifiedZipBackupSmartMergeAndRollingPruneWorkEndToEnd() = runBlocking {
+    fun receiptVaultUnifiedZipBackupSmartMergeAndRollingPruneWorkEndToEnd(): Unit = runBlocking {
         val app = RuntimeEnvironment.getApplication() as RihlaApp
         app.repository.clear()
         app.audio.dao.clearTracks()
@@ -302,10 +302,11 @@ class MashwariV7FeaturesTest {
         assertEquals("mashwari-auto-2026-11-04.zip", remaining.first())
         assertEquals("mashwari-auto-2026-11-10.zip", remaining.last())
         tmpDir.deleteRecursively()
+        Unit
     }
 
     @Test
-    fun speedAdaptiveProcessorSmartQueueAutoStopBookmarkAndZeroConfirmVoiceUndoWork() =
+    fun speedAdaptiveProcessorSmartQueueAutoStopBookmarkAndZeroConfirmVoiceUndoWork(): Unit =
         runBlocking {
             val app = RuntimeEnvironment.getApplication() as RihlaApp
             app.repository.clear()

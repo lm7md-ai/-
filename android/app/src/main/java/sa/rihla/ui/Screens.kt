@@ -164,7 +164,6 @@ fun RihlaRoot(
     val error by vm.error.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val audioVm: sa.rihla.audio.AudioViewModel = viewModel()
     val audioPlayback by sa.rihla.audio.AudioLive.state.collectAsStateWithLifecycle()
     val undoState by sa.rihla.assistant.VoiceUndoBus.latest.collectAsStateWithLifecycle()
     if (!data.loaded) {
@@ -240,9 +239,10 @@ fun RihlaRoot(
                 var expenseOuting by rememberSaveable { mutableStateOf<Long?>(null) }
                 if (!data.settings.onboarded) Onboarding(vm, data)
                 else if (page == "cockpit" && selected == null) {
+                    val cockpitAudioVm: sa.rihla.audio.AudioViewModel = viewModel()
                     CockpitScreen(
                         vm = vm,
-                        audio = audioVm,
+                        audio = cockpitAudioVm,
                         onExit = ::goBack,
                     )
                 } else
@@ -327,7 +327,7 @@ fun RihlaRoot(
                                                         scope.launch {
                                                             sa.rihla.assistant.ZeroConfirmExecutor.undo(
                                                                 vm.app,
-                                                                audioVm,
+                                                                null,
                                                             )
                                                         }
                                                     }

@@ -24,14 +24,19 @@ class AudioViewModel(application: Application) : AndroidViewModel(application) {
     val connected = MutableStateFlow(false)
     val busy = MutableStateFlow(false)
     val message = MutableStateFlow<String?>(null)
-    private val future = MediaController.Builder(app, SessionToken(app, ComponentName(app, AudioPlaybackService::class.java))).buildAsync()
+    private val future = runCatching {
+        MediaController.Builder(app, SessionToken(app, ComponentName(app, AudioPlaybackService::class.java))).buildAsync()
+    }.getOrNull()
     private var controller: MediaController? = null
     val prefs = app.getSharedPreferences("audio_player", Context.MODE_PRIVATE)
     init {
-        future.addListener({
-            try { controller = future.get(); connected.value = true }
-            catch (_: Exception) { message.value = "تعذر الاتصال بالمشغل؛ أعد فتح المكتبة" }
-        }, ContextCompat.getMainExecutor(app))
+        val pending = future
+        if (pending != null) {
+            pending.addListener({
+                try { controller = pending.get(); connected.value = true }
+                catch (_: Exception) { message.value = "تعذر الاتصال بالمشغل؛ أعد فتح المكتبة" }
+            }, ContextCompat.getMainExecutor(app))
+        }
     }
     private fun work(block: suspend () -> Unit) {
         viewModelScope.launch {

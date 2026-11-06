@@ -268,7 +268,7 @@ class StudioTest {
         }
         val db =
             Room.databaseBuilder(context, AudioDatabase::class.java, name)
-                .addMigrations(AudioDatabase.MIGRATION_1_2)
+                .addMigrations(AudioDatabase.MIGRATION_1_2, AudioDatabase.MIGRATION_2_3)
                 .build()
         try {
             val old = db.dao().track("a")!!

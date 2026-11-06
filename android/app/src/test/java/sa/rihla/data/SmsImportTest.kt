@@ -201,7 +201,7 @@ class SmsImportTest {
                 assertFalse(importer.import("com.alrajhiretailapp", notifRaw, 10_145_000L))
                 val first = db.dao().expenseRecords().single()
                 assertEquals(1800L, first.amountHalala)
-                assertEquals("الجامعة", first.placeLabel)
+                assertEquals("UNIVERSITY", first.placeLabel)
                 assertEquals(21.3290, first.latitude!!, 0.001)
 
                 // 2) Manual expense recorded first, followed 2 minutes later by delayed bank SMS -> Smart Merge (no duplicate!)

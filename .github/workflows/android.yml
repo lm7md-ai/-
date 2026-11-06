@@ -35,7 +35,7 @@ jobs:
         run: sdkmanager 'platforms;android-37.2' 'build-tools;37.0.0' 'platform-tools'
       - name: Generate Room schemas via KSP & inspect identityHash
         run: |
-          ./gradlew :app:kspClassicDebugKotlin --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8'
+          ./gradlew :app:kspClassicDebugKotlin --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
           python3 - <<'PY'
           import json
           j8 = json.load(open("app/schemas/sa.rihla.data.JourneyDatabase/8.json"))["database"]["identityHash"]
@@ -48,7 +48,7 @@ jobs:
       - name: Unit tests, both editions
         run: |
           set +e
-          ./gradlew :app:testClassicDebugUnitTest :app:testNextDebugUnitTest --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' > /tmp/unit.log 2>&1
+          ./gradlew :app:testClassicDebugUnitTest :app:testNextDebugUnitTest --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' > /tmp/unit.log 2>&1
           rc=$?
           cat /tmp/unit.log
           if [ $rc -ne 0 ]; then
@@ -76,7 +76,7 @@ jobs:
         if: always()
         run: |
           set +e
-          ./gradlew :app:lintClassicRelease :app:lintNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' > /tmp/lint.log 2>&1
+          ./gradlew :app:lintClassicRelease :app:lintNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' > /tmp/lint.log 2>&1
           rc=$?
           cat /tmp/lint.log
           if [ $rc -ne 0 ]; then
@@ -102,8 +102,8 @@ jobs:
             keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
           df -h
-          ./gradlew :app:assembleClassicDebug --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' --stacktrace > /tmp/build.log 2>&1 && \
-          ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8' --stacktrace >> /tmp/build.log 2>&1
+          ./gradlew :app:assembleClassicDebug --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' --stacktrace > /tmp/build.log 2>&1 && \
+          ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' --stacktrace >> /tmp/build.log 2>&1
           rc=$?
           cat /tmp/build.log
           if [ $rc -ne 0 ]; then
