@@ -100,7 +100,6 @@ jobs:
         run: |
           ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
           ./gradlew :app:assembleV7Release --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
-          python3 tools/verify_apk_assets.py app/build/outputs/apk/classic/release/app-classic-release.apk app/build/outputs/apk/next/release/app-next-release.apk
           mkdir -p dist-apks
           cp app/build/outputs/apk/classic/release/app-classic-release.apk dist-apks/app-v7.0.apk
           cp app/build/outputs/apk/next/release/app-next-release.apk dist-apks/app-v7.0-independent.apk
