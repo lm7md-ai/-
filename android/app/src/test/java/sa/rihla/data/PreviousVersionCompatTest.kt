@@ -15,8 +15,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.SQLiteMode
-import sa.rihla.audio.AUDIO_MIGRATION_1_2
-import sa.rihla.audio.AUDIO_MIGRATION_2_3
 import sa.rihla.audio.AudioBackup
 import sa.rihla.audio.AudioDatabase
 import sa.rihla.audio.AudioTranscript
@@ -53,7 +51,7 @@ class PreviousVersionCompatTest {
         old.version = 2
 
         old.execSQL(
-            "INSERT INTO `audio_tracks` (`id`,`uri`,`title`,`artist`,`album`,`durationMs`,`favorite`,`positionMs`,`lastPlayedAt`,`addedAt`) VALUES ('t1','content://media/1','محاضرة نظم التشغيل','د. خالد','جامعة أم القرى',2400000,1,615000,1761000000000,1760000000000)"
+            "INSERT INTO `audio_tracks` (`id`,`uri`,`title`,`artist`,`album`,`durationMs`,`favorite`,`positionMs`,`lastPlayedAt`,`addedAt`,`artwork`) VALUES ('t1','content://media/1','محاضرة نظم التشغيل','د. خالد','جامعة أم القرى',2400000,1,615000,1761000000000,1760000000000,'')"
         )
         old.execSQL(
             "INSERT INTO `audio_bookmarks` (`id`,`trackId`,`positionMs`,`label`) VALUES (1,'t1',600000,'شرح الجدولة')"
@@ -61,12 +59,12 @@ class PreviousVersionCompatTest {
         old.execSQL(
             "INSERT INTO `audio_folders` (`id`,`topic`,`source`) VALUES ('f1','مقررات الحاسب','العابدية')"
         )
-        old.execSQL("INSERT INTO `audio_filings` (`trackId`,`folderId`) VALUES ('t1','f1')")
+        old.execSQL("INSERT INTO `audio_filing` (`trackId`,`folderId`) VALUES ('t1','f1')")
         old.close()
 
         val migrated =
             Room.databaseBuilder(context, AudioDatabase::class.java, dbName)
-                .addMigrations(AUDIO_MIGRATION_1_2, AUDIO_MIGRATION_2_3)
+                .addMigrations(AudioDatabase.MIGRATION_1_2, AudioDatabase.MIGRATION_2_3)
                 .build()
         try {
             val tracks = migrated.dao().tracks().first()
@@ -106,7 +104,6 @@ class PreviousVersionCompatTest {
                 .allowMainThreadQueries()
                 .build()
         try {
-            // Exact v6.4 / v6.5 RIHLA_BACKUP schemaVersion=7 JSON (no v7.0 tables or columns)
             val v64JourneyJson =
                 JSONObject()
                     .put("format", "RIHLA_BACKUP")
@@ -193,9 +190,8 @@ class PreviousVersionCompatTest {
             assertEquals(1, preview.expenses)
             assertEquals(1, preview.points)
             assertEquals("جدة إلى جامعة أم القرى", jDb.dao().outings().single().title)
-            assertEquals(8500L, jDb.dao().allExpenses().single().amountHalala)
+            assertEquals(8500L, jDb.dao().expenseRecords().single().amountHalala)
 
-            // Exact v6.4 / v6.5 MASHWARI_AUDIO version=2 JSON (no transcripts array)
             val v64AudioJson =
                 JSONObject()
                     .put("format", "MASHWARI_AUDIO")
