@@ -2,10 +2,10 @@
 
 [Complete Arabic v7.0 feature & engineering report](docs/REPORT_7_0.md) · [v7.0 upgrade guide](docs/VERSION_7_0.md).
 
-- **Final full suite (`Android verification` run `#42267002310` on `arena/8f15c94a-repo`)**:
-  - `classic` (`sa.rihla`): **43 test suites, 197 Android unit & Robolectric Compose UI tests passed** (`0` failures, `0` errors, `0` skipped).
-  - `next` (`sa.rihla.next`): **43 test suites, 197 Android unit & Robolectric Compose UI tests passed** (`0` failures, `0` errors, `0` skipped).
-  - **Total Android tests executed**: **394 passed, 0 failed**.
+- **Final full suite (`Android verification` run `#42322692326` on `arena/8f15c94a-repo`)**:
+  - `classic` (`sa.rihla`): **44 test suites, 199 Android unit & Robolectric Compose UI tests passed** (`0` failures, `0` errors, `0` skipped), including `UpgradeTest` (`v1→v8`) and `PreviousVersionCompatTest` (`v6.4/v6.5` legacy JSON backup restore & `AudioDatabase v2→v3`).
+  - `next` (`sa.rihla.next`): **44 test suites, 199 Android unit & Robolectric Compose UI tests passed** (`0` failures, `0` errors, `0` skipped).
+  - **Total Android tests executed**: **398 passed, 0 failed**.
   - **Python schema, offline map & release tool checks**: `verify_schema.py` (**11/11 SQLite schema & migration checks passed** through `JourneyDatabase` v8 and `AudioDatabase` v3), `verify_country_map.py` (passed, SHA-256 `fc47bcdafc88c41b9223666099fd327cf5386ceba5b9837695a831fbc659e7dd`), `verify_offline_map.py` (passed, 20,321 PNG tiles, SHA-256 `4b74d0df4675c58b9791c14f383815890f789a67b78dcdf2efb4b10917c430f9`), and `unittest` (`13/13` tool tests passed).
 - **Room KSP schema verification**:
   - `JourneyDatabase` migrated cleanly across all historical versions `1 → 2 → 3 → 4 → 5 → 6 → 7 → 8` (`identityHash = bdffa49cb0719423a8b4579d8bcf65c7`), adding `university_schedule`, `campus_parking_pins`, geo-merchant coordinates, and receipt/warranty columns without altering historical rows.
