@@ -18,6 +18,7 @@ import org.robolectric.annotation.SQLiteMode
 import sa.rihla.audio.AudioBackup
 import sa.rihla.audio.AudioDatabase
 import sa.rihla.audio.AudioTranscript
+import sa.rihla.core.EngineState
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = Application::class)
@@ -110,32 +111,7 @@ class PreviousVersionCompatTest {
                             automatic = true,
                             automaticEnd = true,
                             classification = "UNIVERSITY",
-                            phase = "ENDED",
-                            lastLat = 21.3289,
-                            lastLon = 39.9482,
-                            lastTime = 1761104200000L,
-                            lastAccuracy = 8.0,
-                            meters = 74500.0,
-                            drivingMs = 3600000L,
-                            stoppedMs = 600000L,
-                            segmentStart = 1761100000000L,
-                            stillSince = 0L,
-                            stillLat = 0.0,
-                            stillLon = 0.0,
-                            stopStart = 0L,
-                            homeSince = 0L,
-                            universityArrival = 1761103600000L,
-                            universityExit = 0L,
-                            visitConfirmed = true,
-                            startedHome = true,
-                            originKnown = true,
-                            leftHome = true,
-                            universityCounted = true,
-                            homeToUniversityMs = 3600000L,
-                            universityMs = 600000L,
-                            visits = 1,
-                            gapMs = 0L,
-                            startedUniversity = false,
+                            state = EngineState(meters = 74500.0, lastTime = 1761104200000L),
                         )
                     )
             sourceDb
@@ -162,7 +138,6 @@ class PreviousVersionCompatTest {
                         outingId = outingId,
                         category = "FUEL",
                         amountHalala = 8500L,
-                        note = "محطة ساسكو",
                         createdAt = 1761101000000L,
                         source = "SMS_NOTIFICATION",
                         merchant = "SASCO",
@@ -171,7 +146,6 @@ class PreviousVersionCompatTest {
                 )
             sourceDb.dao().rule(MerchantRule(pattern = "SASCO", category = "FUEL"))
 
-            // Export and strip all v7.0-only tables & columns so this is an authentic v6.4/v6.5 schemaVersion=7 JSON
             val exportedV8 = JSONObject(LocalBackup(sourceDb).export())
             exportedV8.put("schemaVersion", 7)
             val tables = exportedV8.getJSONObject("tables")
@@ -196,22 +170,19 @@ class PreviousVersionCompatTest {
             }
             val v64JourneyJson = exportedV8.toString()
 
-            // 1. Restore into a brand-new empty v7.0 installation
             val previewEmpty = LocalBackup(emptyTargetDb).restore(v64JourneyJson, RestoreMode.SMART_MERGE)
             assertEquals(1, previewEmpty.outings)
             assertEquals(1, previewEmpty.expenses)
             assertEquals(1, previewEmpty.points)
-            assertEquals(74500.0, emptyTargetDb.dao().outings().single().meters, 0.01)
+            assertEquals(74500.0, emptyTargetDb.dao().outings().single().state.meters, 0.01)
             assertEquals(8500L, emptyTargetDb.dao().expenseRecords().single().amountHalala)
             assertEquals("جدة إلى جامعة أم القرى", emptyTargetDb.dao().details(outingId)?.title)
 
-            // 2. Restore into an already-populated v7.0 installation (SMART_MERGE idempotence)
             LocalBackup(mergeTargetDb).restore(v64JourneyJson, RestoreMode.FULL_OVERWRITE)
             LocalBackup(mergeTargetDb).restore(v64JourneyJson, RestoreMode.SMART_MERGE)
             assertEquals(1, mergeTargetDb.dao().outings().size)
             assertEquals(1, mergeTargetDb.dao().expenseRecords().size)
 
-            // 3. Restore authentic v6.4/v6.5 MASHWARI_AUDIO version=2 JSON
             val v64AudioJson =
                 JSONObject()
                     .put("format", "MASHWARI_AUDIO")
