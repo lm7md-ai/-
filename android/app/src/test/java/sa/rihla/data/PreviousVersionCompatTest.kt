@@ -93,105 +93,125 @@ class PreviousVersionCompatTest {
     }
 
     @Test
-    fun v64AndV65LegacyJsonBackupsRestoreCleanlyIntoV70(): Unit = runBlocking {
+    fun v64AndV65LegacyJsonBackupsRestoreCleanlyIntoEmptyAndPopulatedV70(): Unit = runBlocking {
         val context = RuntimeEnvironment.getApplication()
-        val jDb =
-            Room.inMemoryDatabaseBuilder(context, JourneyDatabase::class.java)
-                .allowMainThreadQueries()
-                .build()
-        val aDb =
-            Room.inMemoryDatabaseBuilder(context, AudioDatabase::class.java)
-                .allowMainThreadQueries()
-                .build()
+        val sourceDb = Room.inMemoryDatabaseBuilder(context, JourneyDatabase::class.java).build()
+        val emptyTargetDb = Room.inMemoryDatabaseBuilder(context, JourneyDatabase::class.java).build()
+        val mergeTargetDb = Room.inMemoryDatabaseBuilder(context, JourneyDatabase::class.java).build()
+        val aDb = Room.inMemoryDatabaseBuilder(context, AudioDatabase::class.java).build()
         try {
-            val v64JourneyJson =
-                JSONObject()
-                    .put("format", "RIHLA_BACKUP")
-                    .put("formatVersion", 1)
-                    .put("schemaVersion", 7)
-                    .put("exportedAt", 1761200000000L)
-                    .put(
-                        "tables",
-                        JSONObject()
-                            .put(
-                                "outings",
-                                JSONArray()
-                                    .put(
-                                        JSONObject()
-                                            .put("id", 10L)
-                                            .put("title", "جدة إلى جامعة أم القرى")
-                                            .put("startedAt", 1761100000000L)
-                                            .put("endedAt", 1761104200000L)
-                                            .put("distanceMeters", 74500.0)
-                                            .put("phase", "ENDED")
-                                            .put("stopCount", 1)
-                                            .put("movingMs", 3600000L)
-                                            .put("stoppedMs", 600000L)
-                                            .put("maxSpeedMps", 31.5)
-                                            .put("lastLat", 21.3289)
-                                            .put("lastLon", 39.9482)
-                                            .put("lastTime", 1761104200000L)
-                                            .put("homeHoldStart", 0L)
-                                    ),
-                            )
-                            .put(
-                                "points",
-                                JSONArray()
-                                    .put(
-                                        JSONObject()
-                                            .put("id", 1L)
-                                            .put("outingId", 10L)
-                                            .put("latitude", 21.5433)
-                                            .put("longitude", 39.1728)
-                                            .put("accuracy", 6.0)
-                                            .put("speedMps", 22.0)
-                                            .put("recordedAt", 1761100060000L)
-                                            .put("breakBefore", 0)
-                                    ),
-                            )
-                            .put("events", JSONArray())
-                            .put("places", JSONArray())
-                            .put(
-                                "expenses",
-                                JSONArray()
-                                    .put(
-                                        JSONObject()
-                                            .put("id", 5L)
-                                            .put("outingId", 10L)
-                                            .put("category", "FUEL")
-                                            .put("amountHalala", 8500L)
-                                            .put("note", "محطة ساسكو")
-                                            .put("createdAt", 1761101000000L)
-                                            .put("source", "SMS_NOTIFICATION")
-                                            .put("merchant", "SASCO")
-                                            .put("importKey", "sms:v64:1")
-                                    ),
-                            )
-                            .put("fuel", JSONArray())
-                            .put("active_slot", JSONArray())
-                            .put("imported_sms", JSONArray())
-                            .put("trip_details", JSONArray())
-                            .put(
-                                "merchant_rules",
-                                JSONArray()
-                                    .put(
-                                        JSONObject()
-                                            .put("id", 1L)
-                                            .put("pattern", "SASCO")
-                                            .put("category", "FUEL")
-                                    ),
-                            )
-                            .put("recurring_expenses", JSONArray()),
+            val outingId =
+                sourceDb
+                    .dao()
+                    .insert(
+                        Outing(
+                            startedAt = 1761100000000L,
+                            endedAt = 1761104200000L,
+                            automatic = true,
+                            automaticEnd = true,
+                            classification = "UNIVERSITY",
+                            phase = "ENDED",
+                            lastLat = 21.3289,
+                            lastLon = 39.9482,
+                            lastTime = 1761104200000L,
+                            lastAccuracy = 8.0,
+                            meters = 74500.0,
+                            drivingMs = 3600000L,
+                            stoppedMs = 600000L,
+                            segmentStart = 1761100000000L,
+                            stillSince = 0L,
+                            stillLat = 0.0,
+                            stillLon = 0.0,
+                            stopStart = 0L,
+                            homeSince = 0L,
+                            universityArrival = 1761103600000L,
+                            universityExit = 0L,
+                            visitConfirmed = true,
+                            startedHome = true,
+                            originKnown = true,
+                            leftHome = true,
+                            universityCounted = true,
+                            homeToUniversityMs = 3600000L,
+                            universityMs = 600000L,
+                            visits = 1,
+                            gapMs = 0L,
+                            startedUniversity = false,
+                        )
                     )
-                    .toString()
+            sourceDb
+                .dao()
+                .point(
+                    RoutePoint(
+                        outingId = outingId,
+                        latitude = 21.5433,
+                        longitude = 39.1728,
+                        accuracy = 6.0,
+                        speed = 22.0,
+                        altitude = 15.0,
+                        bearing = 130.0,
+                        recordedAt = 1761100060000L,
+                        breakBefore = false,
+                        distanceDelta = 120.0,
+                    )
+                )
+            sourceDb.dao().details(TripDetails(outingId, "جدة إلى جامعة أم القرى", "", true))
+            sourceDb
+                .dao()
+                .importExpense(
+                    Expense(
+                        outingId = outingId,
+                        category = "FUEL",
+                        amountHalala = 8500L,
+                        note = "محطة ساسكو",
+                        createdAt = 1761101000000L,
+                        source = "SMS_NOTIFICATION",
+                        merchant = "SASCO",
+                        importKey = "sms:v64:1",
+                    )
+                )
+            sourceDb.dao().rule(MerchantRule(pattern = "SASCO", category = "FUEL"))
 
-            val preview = LocalBackup(jDb).restore(v64JourneyJson, RestoreMode.SMART_MERGE)
-            assertEquals(1, preview.outings)
-            assertEquals(1, preview.expenses)
-            assertEquals(1, preview.points)
-            assertEquals("جدة إلى جامعة أم القرى", jDb.dao().outings().single().title)
-            assertEquals(8500L, jDb.dao().expenseRecords().single().amountHalala)
+            // Export and strip all v7.0-only tables & columns so this is an authentic v6.4/v6.5 schemaVersion=7 JSON
+            val exportedV8 = JSONObject(LocalBackup(sourceDb).export())
+            exportedV8.put("schemaVersion", 7)
+            val tables = exportedV8.getJSONObject("tables")
+            tables.remove("university_schedule")
+            tables.remove("campus_parking")
+            val exps = tables.getJSONArray("expenses")
+            for (i in 0 until exps.length()) {
+                val e = exps.getJSONObject(i)
+                e.remove("latitude")
+                e.remove("longitude")
+                e.remove("placeLabel")
+                e.remove("receiptImageUri")
+                e.remove("warrantyExpiryAt")
+            }
+            val rules = tables.getJSONArray("merchant_rules")
+            for (i in 0 until rules.length()) {
+                val r = rules.getJSONObject(i)
+                r.remove("customName")
+                r.remove("latitude")
+                r.remove("longitude")
+                r.remove("placeLabel")
+            }
+            val v64JourneyJson = exportedV8.toString()
 
+            // 1. Restore into a brand-new empty v7.0 installation
+            val previewEmpty = LocalBackup(emptyTargetDb).restore(v64JourneyJson, RestoreMode.SMART_MERGE)
+            assertEquals(1, previewEmpty.outings)
+            assertEquals(1, previewEmpty.expenses)
+            assertEquals(1, previewEmpty.points)
+            assertEquals(74500.0, emptyTargetDb.dao().outings().single().meters, 0.01)
+            assertEquals(8500L, emptyTargetDb.dao().expenseRecords().single().amountHalala)
+            assertEquals("جدة إلى جامعة أم القرى", emptyTargetDb.dao().details(outingId)?.title)
+
+            // 2. Restore into an already-populated v7.0 installation (SMART_MERGE idempotence)
+            LocalBackup(mergeTargetDb).restore(v64JourneyJson, RestoreMode.FULL_OVERWRITE)
+            LocalBackup(mergeTargetDb).restore(v64JourneyJson, RestoreMode.SMART_MERGE)
+            assertEquals(1, mergeTargetDb.dao().outings().size)
+            assertEquals(1, mergeTargetDb.dao().expenseRecords().size)
+
+            // 3. Restore authentic v6.4/v6.5 MASHWARI_AUDIO version=2 JSON
             val v64AudioJson =
                 JSONObject()
                     .put("format", "MASHWARI_AUDIO")
@@ -225,7 +245,9 @@ class PreviousVersionCompatTest {
             assertEquals(1, restoredTracks)
             assertEquals("مراجعة الخوارزميات", aDb.dao().tracks().first().single().title)
         } finally {
-            jDb.close()
+            sourceDb.close()
+            emptyTargetDb.close()
+            mergeTargetDb.close()
             aDb.close()
         }
     }

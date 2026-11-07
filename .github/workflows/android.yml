@@ -68,7 +68,31 @@ jobs:
           python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Unit & previous-version upgrade tests, both editions
         run: |
-          ./gradlew :app:testClassicDebugUnitTest :app:testNextDebugUnitTest --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+          set +e
+          ./gradlew :app:testClassicDebugUnitTest :app:testNextDebugUnitTest --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' > /tmp/unit.log 2>&1
+          rc=$?
+          cat /tmp/unit.log
+          if [ $rc -ne 0 ]; then
+            python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          lines = open("/tmp/unit.log", errors="replace").read().splitlines()
+          errs = [l for l in lines if l.startswith("e: ") or "FAILED" in l or "Exception" in l or "What went wrong" in l]
+          xml_fails = []
+          for p in sorted(glob.glob("app/build/test-results/**/*.xml", recursive=True)):
+              try:
+                  root = ET.parse(p).getroot()
+                  for tc in root.findall(".//testcase"):
+                      for f in list(tc.findall("failure")) + list(tc.findall("error")):
+                          txt = (f.text or f.attrib.get("message", ""))[:900]
+                          xml_fails.append(f"{tc.attrib.get('classname')}.{tc.attrib.get('name')}: {txt}")
+              except Exception as ex:
+                  xml_fails.append(f"XML parse {p}: {ex}")
+          report = "\n".join((errs[:80] + ["--- XML FAILURES ---"] + xml_fails[:30]))[:9500]
+          enc = report.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+          print(f"::error title=UNIT_TEST_DIAGNOSTICS::{enc}")
+          PY
+            exit $rc
+          fi
       - name: Release lint, both editions
         run: |
           ./gradlew :app:lintClassicRelease :app:lintNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
