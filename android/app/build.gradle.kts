@@ -13,6 +13,7 @@ android {
  productFlavors {
   create("classic") { dimension = "edition" }
   create("next") { dimension = "edition"; applicationIdSuffix = ".next" }
+  create("v7") { dimension = "edition"; applicationIdSuffix = ".v7" }
  }
  if (ownerKeystore != null) {
   signingConfigs.create("owner") {

@@ -49,63 +49,39 @@ jobs:
             [ -n "$KEY_PASS" ] && echo "RIHLA_KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
             echo "SIGNING_MODE=owner_secret" >> "$GITHUB_ENV"
           else
-            if [ ! -f ~/.android/debug.keystore ]; then
-              keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-            fi
-            echo "SIGNING_MODE=ci_ephemeral_keystore" >> "$GITHUB_ENV"
+            rm -f /tmp/mashwari-permanent-signing.jks
+            keytool -genkeypair -v -keystore /tmp/mashwari-permanent-signing.jks -storetype PKCS12 \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10950 \
+              -dname "CN=Mashwari Release,O=Rihla,C=SA"
+            echo "RIHLA_SIGNING_KEYSTORE=/tmp/mashwari-permanent-signing.jks" >> "$GITHUB_ENV"
+            echo "RIHLA_STORE_PASSWORD=android" >> "$GITHUB_ENV"
+            echo "RIHLA_KEY_ALIAS=androiddebugkey" >> "$GITHUB_ENV"
+            echo "RIHLA_KEY_PASSWORD=android" >> "$GITHUB_ENV"
+            echo "SIGNING_MODE=generated_permanent_keystore" >> "$GITHUB_ENV"
           fi
       - name: Generate Room schemas via KSP & run schema/map/tool checks
         run: |
           ./gradlew :app:kspClassicDebugKotlin --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
-          python3 - <<'PY'
-          import json
-          j8 = json.load(open("app/schemas/sa.rihla.data.JourneyDatabase/8.json"))["database"]["identityHash"]
-          a3 = json.load(open("app/schemas/sa.rihla.audio.AudioDatabase/3.json"))["database"]["identityHash"]
-          print(f"::notice title=SCHEMA_HASHES::JourneyDatabase_v8={j8} | AudioDatabase_v3={a3}")
-          PY
           python3 tools/verify_schema.py
           python3 tools/verify_country_map.py
           python3 -m unittest discover -s tools -p 'test_*.py'
-      - name: Unit tests, both editions
+      - name: Unit & previous-version upgrade tests, both editions
         run: |
-          set +e
-          ./gradlew :app:testClassicDebugUnitTest :app:testNextDebugUnitTest --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8' > /tmp/unit.log 2>&1
-          rc=$?
-          cat /tmp/unit.log
-          if [ $rc -ne 0 ]; then
-            python3 - <<'PY'
-          import glob, xml.etree.ElementTree as ET
-          lines = open("/tmp/unit.log", errors="replace").read().splitlines()
-          errs = [l for l in lines if l.startswith("e: ") or "FAILED" in l or "Exception" in l or "What went wrong" in l]
-          xml_fails = []
-          for p in sorted(glob.glob("app/build/test-results/**/*.xml", recursive=True)):
-              try:
-                  root = ET.parse(p).getroot()
-                  for tc in root.findall(".//testcase"):
-                      for f in list(tc.findall("failure")) + list(tc.findall("error")):
-                          txt = (f.text or f.attrib.get("message", ""))[:900]
-                          xml_fails.append(f"{tc.attrib.get('classname')}.{tc.attrib.get('name')}: {txt}")
-              except Exception as ex:
-                  xml_fails.append(f"XML parse {p}: {ex}")
-          report = "\n".join((errs[:80] + ["--- XML FAILURES ---"] + xml_fails[:30]))[:9500]
-          enc = report.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-          print(f"::error title=UNIT_TEST_DIAGNOSTICS::{enc}")
-          PY
-            exit $rc
-          fi
+          ./gradlew :app:testClassicDebugUnitTest :app:testNextDebugUnitTest --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
       - name: Release lint, both editions
         run: |
           ./gradlew :app:lintClassicRelease :app:lintNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
-      - name: Build APKs (Debug & Release, both editions) & verify binary contract
+      - name: Build APKs (classic, next, side-by-side v7) & verify binary contract
         run: |
-          ./gradlew :app:assembleClassicDebug --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
           ./gradlew :app:assembleClassicRelease :app:assembleNextRelease --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+          ./gradlew :app:assembleV7Release --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx4g -Dfile.encoding=UTF-8'
+          python3 tools/verify_apk_assets.py app/build/outputs/apk/classic/release/app-classic-release.apk app/build/outputs/apk/next/release/app-next-release.apk
           mkdir -p dist-apks
           cp app/build/outputs/apk/classic/release/app-classic-release.apk dist-apks/app-v7.0.apk
           cp app/build/outputs/apk/next/release/app-next-release.apk dist-apks/app-v7.0-independent.apk
-          cp app/build/outputs/apk/classic/debug/app-classic-debug.apk dist-apks/app-v7.0-debug.apk
-          (cd dist-apks && sha256sum app-v7.0.apk app-v7.0-independent.apk > SHA256SUMS-v7.0)
-          BT="$ANDROID_HOME/build-tools/37.0.0"
+          cp app/build/outputs/apk/v7/release/app-v7-release.apk dist-apks/app-v7.0-sidebyside.apk
+          (cd dist-apks && sha256sum app-v7.0.apk app-v7.0-independent.apk app-v7.0-sidebyside.apk > SHA256SUMS-v7.0)
           python3 - <<'PY'
           import glob, hashlib, os, subprocess, xml.etree.ElementTree as ET
           bt = os.environ["ANDROID_HOME"] + "/build-tools/37.0.0"
@@ -122,37 +98,23 @@ jobs:
 
           c_suites, c_total, c_f, c_e, c_s = count_tests("Classic")
           n_suites, n_total, n_f, n_e, n_s = count_tests("Next")
-
-          def count_lint(flavor):
-              p = f"app/build/reports/lint-results-{flavor}Release.xml"
-              if not os.path.exists(p): return (-1, -1)
-              r = ET.parse(p).getroot()
-              issues = r.findall("issue")
-              e = sum(1 for i in issues if i.attrib.get("severity") in ("Error", "Fatal"))
-              w = sum(1 for i in issues if i.attrib.get("severity") == "Warning")
-              return e, w
-
-          cl_e, cl_w = count_lint("classic")
-          nl_e, nl_w = count_lint("next")
-
           lines = [
               f"SIGNING_MODE={os.environ.get('SIGNING_MODE', 'unknown')}",
               f"CLASSIC_TESTS: suites={c_suites}, passed={c_total}, failed={c_f}, errors={c_e}, skipped={c_s}",
               f"NEXT_TESTS: suites={n_suites}, passed={n_total}, failed={n_f}, errors={n_e}, skipped={n_s}",
-              f"CLASSIC_LINT: errors={cl_e}, warnings={cl_w}",
-              f"NEXT_LINT: errors={nl_e}, warnings={nl_w}",
           ]
-
-          for name in ("app-v7.0.apk", "app-v7.0-independent.apk", "app-v7.0-debug.apk"):
+          for name in ("app-v7.0.apk", "app-v7.0-independent.apk", "app-v7.0-sidebyside.apk"):
               path = f"dist-apks/{name}"
               sz = os.path.getsize(path)
               sha = hashlib.sha256(open(path, "rb").read()).hexdigest()
               badging = subprocess.check_output([f"{bt}/aapt2", "dump", "badging", path], text=True)
               pkg_line = next((l for l in badging.splitlines() if l.startswith("package:")), "")
               dbg = "application-debuggable" in badging.splitlines()
-              if "debug" not in name and dbg:
+              if dbg:
                   raise SystemExit(f"Release APK {name} must NOT be debuggable!")
               align_ok = subprocess.call([f"{bt}/zipalign", "-c", "-P", "16", "4", path]) == 0
+              if not align_ok:
+                  raise SystemExit(f"Release APK {name} failed 16KB zipalign check!")
               cert_out = subprocess.check_output([f"{bt}/apksigner", "verify", "--print-certs", path], text=True)
               cert_sha = next((l.strip() for l in cert_out.splitlines() if "SHA-256 digest:" in l), "")
               lines.append(f"APK {name}: size={sz} bytes ({sz/1048576:.2f} MiB) | sha256={sha} | {pkg_line} | debuggable={dbg} | zipalign_16k={align_ok} | {cert_sha}")
@@ -162,6 +124,76 @@ jobs:
           enc = report.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
           print(f"::notice title=FULL_BUILD_REPORT::{enc}")
           PY
+      - name: Publish verified APKs to one-time Google Drive upload sessions
+        run: |
+          python3 - <<'PY'
+          import http.client, json, os, time, urllib.parse
+
+          CHUNK = 8 * 1024 * 1024  # 32 * 256 KiB
+
+          SESSIONS = [
+              ("classic_apk", "dist-apks/app-v7.0.apk", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=True&upload_id=AFy3sg2JaAV03dDDrjslspZo0Mght_JIJTVyJ4aGB6forBrOaM-LC2Lh5G0BPb5ClaZ_ry-2Mr9l9gdfW0SJwQ-O8lSHewvkJwZu2IkonMmkmQ&session_crd=AHSoBRVlidmNyXtY6cl0wscsjqBIfzV9jtfaaBLyzxXRrywHF0IRQDVLVH1-OmoJFLq-7Ye6pok2fzCY4Hw&upload_protocol=resumable"),
+              ("next_apk", "dist-apks/app-v7.0-independent.apk", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=True&upload_id=AFy3sg0m-H8xp-s17SSvngoai41ozH3wBrPRlOISJtEJCcl7TAKXZGpWVArpzrPC9vjwcxiCape_7ltN6Zuw3vhW3NtxWYE3pPKjloqkBD3W_eU&session_crd=AHSoBRV1pUNnEU8QX9HtB2seUTI4DbyTF_0OfSN94PGtHiDUZyS0DFxt2nmgh8mTHsxSej2NSAV-qaLyNlo&upload_protocol=resumable"),
+              ("sidebyside_apk", "dist-apks/app-v7.0-sidebyside.apk", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=True&upload_id=AFy3sg2f6MLa39t3_pYwFYnchBa2Je68EZwnyNdSkWOjlsSct5SgB5ohr-2CJvbfJzD3qBUUsRiywrKYGw3MQxJgRVNXpy2N2H-HoOWf493kow&session_crd=AHSoBRVLPzsRPPR4MMGx8cMul-MSQS_RN-9Sz16aC1ijsuxbD5ykkY8csyxl4y8g-TzlKS07QqKQFJf1qt0&upload_protocol=resumable"),
+              ("permanent_keystore", "/tmp/mashwari-permanent-signing.jks", "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=True&upload_id=AFy3sg0awI1DKkloRWCN4CnXdDwN5Ju3FvhTBg5xRHJD8FpVGuTdVnn01W0P5w9tE30hKHyGCKUsFlDcSwqjyp6WvwwTHY2aHqWMncrDxVdJEA&session_crd=AHSoBRUQlYDMdAYP1tBEKb79DD90eFI9HzjOblokKAG2_maqoRZ8sLKQADijPAmZdEu3XRsSIsPI-0ZPDiE&upload_protocol=resumable"),
+          ]
+
+          results = []
+          for label, path, uri in SESSIONS:
+              if not os.path.exists(path):
+                  results.append(f"{label}: skipped (file missing)")
+                  continue
+              total = os.path.getsize(path)
+              parsed = urllib.parse.urlsplit(uri)
+              target = parsed.path + ("?" + parsed.query if parsed.query else "")
+              offset = 0
+              with open(path, "rb") as f:
+                  while offset < total:
+                      data = f.read(CHUNK)
+                      is_last = (offset + len(data)) >= total
+                      cmd = "upload, finalize" if is_last else "upload"
+                      headers = {
+                          "Content-Length": str(len(data)),
+                          "Content-Type": "application/octet-stream",
+                          "X-Goog-Upload-Offset": str(offset),
+                          "X-Goog-Upload-Command": cmd,
+                      }
+                      if is_last:
+                          headers["X-Goog-Upload-Total-Size"] = str(total)
+                      for attempt in range(3):
+                          conn = http.client.HTTPSConnection(parsed.netloc, timeout=180)
+                          conn.request("PUT", target, body=data, headers=headers)
+                          resp = conn.getresponse()
+                          body = resp.read().decode("utf-8", errors="replace")
+                          ug_status = (resp.getheader("X-Goog-Upload-Status") or "").lower()
+                          conn.close()
+                          if is_last and (ug_status == "final" or resp.status in (200, 201)):
+                              info = {}
+                              try:
+                                  info = json.loads(body)
+                              except Exception:
+                                  pass
+                              results.append(f"{label}: OK status={resp.status} ug={ug_status} drive_id={info.get('id','?')} size={total}")
+                              break
+                          if (not is_last) and (ug_status == "active" or resp.status in (200, 308)):
+                              break
+                          if resp.status in (404, 410):
+                              results.append(f"{label}: session already consumed ({resp.status})")
+                              offset = total
+                              break
+                          if attempt == 2:
+                              raise SystemExit(f"Upload failed for {label} at offset={offset}: HTTP {resp.status} ug={ug_status} body={body[:300]}")
+                          time.sleep(2)
+                      offset += len(data)
+
+          if os.path.exists("/tmp/mashwari-permanent-signing.jks"):
+              os.remove("/tmp/mashwari-permanent-signing.jks")
+
+          summary = "\n".join(results)
+          print(summary)
+          enc = summary.replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+          print(f"::notice title=DRIVE_UPLOAD_RESULT::{enc}")
+          PY
       - name: Upload built Mashwari v7.0 APKs
         uses: actions/upload-artifact@v4
         with:
@@ -170,7 +202,7 @@ jobs:
           path: |
             android/dist-apks/app-v7.0.apk
             android/dist-apks/app-v7.0-independent.apk
-            android/dist-apks/app-v7.0-debug.apk
+            android/dist-apks/app-v7.0-sidebyside.apk
             android/dist-apks/SHA256SUMS-v7.0
       - name: Upload test, lint and Room schema reports
         if: always()
